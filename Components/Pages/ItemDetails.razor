@@ -1,0 +1,109 @@
+@page "/items/{ItemId:int}"
+@using System.Net.Http.Json
+@using Markdig
+@inject HttpClient Http
+@inject NavigationManager Nav
+
+<PageTitle>Item Statblock</PageTitle>
+
+@if (item is null)
+{
+    <MudText>Loading...</MudText>
+}
+else
+{
+    <MudContainer MaxWidth="MaxWidth.Medium">
+        <MudPaper Class="pa-4 statblock" Outlined="true">
+            <MudText Typo="Typo.h4" Class="statblock-title">@item.Name</MudText>
+            <MudDivider Class="my-2" />
+
+            <MudText Typo="Typo.body2" Class="mb-1"><b>Type:</b> @typeName</MudText>
+            <MudText Typo="Typo.body2" Class="mb-1"><b>Rarity:</b> @rarityName</MudText>
+            <MudText Typo="Typo.body2" Class="mb-1"><b>Cost:</b> @FormatCost(item.CostAmount, item.CostCurrency, item.CurrencyDefinitionId)</MudText>
+            <MudText Typo="Typo.body2" Class="mb-1"><b>Weight:</b> @item.Weight lb</MudText>
+            <MudText Typo="Typo.body2" Class="mb-1"><b>Quantity:</b> @item.Quantity</MudText>
+            <MudText Typo="Typo.body2" Class="mb-1"><b>Attunement:</b> @GetAttunementText()</MudText>
+            <MudText Typo="Typo.body2" Class="mb-3"><b>Source:</b> @item.SourceType</MudText>
+
+            @if (!string.IsNullOrWhiteSpace(item.Description))
+            {
+                <MudText Typo="Typo.subtitle2" Class="mt-2"><b>Description</b></MudText>
+                <MudText Typo="Typo.body2">@item.Description</MudText>
+            }
+
+            <MudText Typo="Typo.subtitle2" Class="mt-3"><b>Effect</b></MudText>
+            <MudPaper Class="pa-3 md-preview" Outlined="true">
+                <div>@((MarkupString)RenderMarkdown(item.Effect))</div>
+            </MudPaper>
+
+            <MudStack Row="true" Spacing="2" Class="mt-4">
+                <MudButton Href="@($"/items/{item.ItemId}/edit")" Color="Color.Primary" Variant="Variant.Filled">Edit</MudButton>
+                <MudButton Href="/items" Variant="Variant.Text">Back</MudButton>
+            </MudStack>
+        </MudPaper>
+    </MudContainer>
+}
+
+<style>
+    .statblock { border-left: 6px solid #8b5a2b; background: #fffdf8; }
+    .statblock-title { font-variant: small-caps; letter-spacing: .04em; }
+    .md-preview ul { list-style: disc; margin: 0.5rem 0 0.5rem 1.25rem; padding-left: 1rem; }
+    .md-preview ol { list-style: decimal; margin: 0.5rem 0 0.5rem 1.25rem; padding-left: 1rem; }
+    .md-preview li { margin: 0.2rem 0; }
+    .md-preview p { margin: 0.4rem 0; }
+</style>
+
+@code {
+    [Parameter] public int ItemId { get; set; }
+    private ItemDto? item;
+    private string typeName = "(none)";
+    private string rarityName = "(none)";
+    private List<CurrencyDto> currencies = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        item = await Http.GetFromJsonAsync<ItemDto>(Nav.ToAbsoluteUri($"/api/items/{ItemId}"));
+        if (item is null) return;
+
+        currencies = await Http.GetFromJsonAsync<List<CurrencyDto>>(Nav.ToAbsoluteUri($"/api/currencies?gameSystemId={item.GameSystemId}")) ?? new();
+
+        if (item.ItemTypeDefinitionId.HasValue)
+        {
+            var t = await Http.GetFromJsonAsync<List<ItemTypeDto>>(Nav.ToAbsoluteUri($"/api/item-types?gameSystemId={item.GameSystemId}"));
+            typeName = t?.FirstOrDefault(x => x.ItemTypeDefinitionId == item.ItemTypeDefinitionId)?.Name ?? $"#{item.ItemTypeDefinitionId}";
+        }
+
+        if (item.RarityDefinitionId.HasValue)
+        {
+            var r = await Http.GetFromJsonAsync<List<RarityDto>>(Nav.ToAbsoluteUri($"/api/rarities?gameSystemId={item.GameSystemId}"));
+            rarityName = r?.FirstOrDefault(x => x.RarityDefinitionId == item.RarityDefinitionId)?.Name ?? $"#{item.RarityDefinitionId}";
+        }
+    }
+
+
+
+    private string GetAttunementText()
+    {
+        if (item is null || !item.RequiresAttunement) return "No";
+        return string.IsNullOrWhiteSpace(item.AttunementRequirement)
+            ? "Yes"
+            : $"Yes ({item.AttunementRequirement})";
+    }
+
+    private string RenderMarkdown(string? text)
+        => string.IsNullOrWhiteSpace(text) ? "<em>No effect text</em>" : Markdown.ToHtml(text);
+
+    private string FormatCost(decimal? amount, string? currency, int? currencyDefinitionId)
+    {
+        if (!amount.HasValue) return string.Empty;
+        var code = !string.IsNullOrWhiteSpace(currency)
+            ? currency
+            : (currencyDefinitionId.HasValue ? currencies.FirstOrDefault(c => c.CurrencyDefinitionId == currencyDefinitionId.Value)?.Code : null);
+        return string.IsNullOrWhiteSpace(code) ? amount.Value.ToString() : $"{amount.Value} {code}";
+    }
+
+    private sealed record ItemDto(int ItemId, int GameSystemId, string Name, string Slug, string? Alias, int? ItemTypeDefinitionId, int? RarityDefinitionId, string? Description, decimal? CostAmount, int? CurrencyDefinitionId, string? CostCurrency, decimal? Weight, int Quantity, string? Tags, string? Effect, bool RequiresAttunement, string? AttunementRequirement, SourceType SourceType);
+    private sealed record ItemTypeDto(int ItemTypeDefinitionId, int GameSystemId, string Name, string Slug, string? Description);
+    private sealed record RarityDto(int RarityDefinitionId, int GameSystemId, string Name, string Slug);
+    private sealed record CurrencyDto(int CurrencyDefinitionId, int GameSystemId, string Name, string Code);
+}

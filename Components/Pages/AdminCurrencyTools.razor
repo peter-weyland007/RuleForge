@@ -1,0 +1,46 @@
+@page "/admin/currency-tools"
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<PageTitle>Admin Currency Tools</PageTitle>
+
+<MudStack Spacing="3">
+    <MudText Typo="Typo.h4">Admin · Currency Migration</MudText>
+
+    <MudPaper Class="pa-4" Outlined="true">
+        <MudStack Row="true" Spacing="2">
+            <MudButton Variant="Variant.Outlined" OnClick="LoadPreview">Preview Currency Values</MudButton>
+            <MudButton Color="Color.Warning" Variant="Variant.Filled" OnClick="Normalize">Normalize To Uppercase</MudButton>
+        </MudStack>
+
+        @if (rows.Count > 0)
+        {
+            <MudTable Items="rows" Dense="true" Hover="true" Class="mt-3">
+                <HeaderContent><MudTh>Currency</MudTh><MudTh>Count</MudTh></HeaderContent>
+                <RowTemplate><MudTd>@context.currency</MudTd><MudTd>@context.count</MudTd></RowTemplate>
+            </MudTable>
+        }
+    </MudPaper>
+</MudStack>
+
+@code {
+    private List<Row> rows = new();
+
+    protected override async Task OnInitializedAsync() => await LoadPreview();
+
+    private async Task LoadPreview()
+    {
+        rows = await Http.GetFromJsonAsync<List<Row>>(Nav.ToAbsoluteUri("/api/admin/currency-migration/preview")) ?? new();
+    }
+
+    private async Task Normalize()
+    {
+        var res = await Http.PostAsync(Nav.ToAbsoluteUri("/api/admin/currency-migration/normalize"), null);
+        Snackbar.Add(res.IsSuccessStatusCode ? "Currency normalization complete." : "Normalization failed.", res.IsSuccessStatusCode ? Severity.Success : Severity.Error);
+        if (res.IsSuccessStatusCode) await LoadPreview();
+    }
+
+    private sealed record Row(string currency, int count);
+}

@@ -1,0 +1,95 @@
+@page "/game-systems/new"
+@page "/game-systems/{GameSystemId:int}/edit"
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject NavigationManager Nav
+
+<PageTitle>Game System Form</PageTitle>
+
+<MudStack Spacing="3">
+    <MudText Typo="Typo.h4">@(_isEdit ? "Edit Game System" : "Create Game System")</MudText>
+
+    <MudPaper Class="pa-4" Outlined="true">
+        <MudGrid>
+            <MudItem xs="12" md="4">
+                <MudTextField @bind-Value="model.Name" Label="Name" Variant="Variant.Outlined" Required="true" />
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudTextField @bind-Value="model.Alias" Label="Alias (optional)" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudSelect T="SourceType" @bind-Value="model.SourceType" Label="Source" Variant="Variant.Outlined">
+                    <MudSelectItem Value="SourceType.Official">Official</MudSelectItem>
+                    <MudSelectItem Value="SourceType.ThirdParty">Third Party</MudSelectItem>
+                    <MudSelectItem Value="SourceType.Homebrew">Homebrew</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="model.Description" Label="Description" Variant="Variant.Outlined" Lines="3" />
+            </MudItem>
+                        <MudItem xs="12">
+                <MudStack Row="true" Spacing="2">
+                    <MudButtonGroup Variant="Variant.Filled" Color="Color.Primary">
+                        <MudButton OnClick="Save">Save</MudButton>
+                        <MudButton Href="/game-systems" Color="Color.Secondary">Cancel</MudButton>
+                    </MudButtonGroup>
+                </MudStack>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+</MudStack>
+
+@code {
+    [Parameter] public int? GameSystemId { get; set; }
+
+    private bool _isEdit => GameSystemId.HasValue;
+    private FormModel model = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!_isEdit)
+            return;
+
+        var dto = await Http.GetFromJsonAsync<GameSystemDto>(Nav.ToAbsoluteUri($"/api/game-systems/{GameSystemId.Value}"));
+        if (dto is null)
+        {
+            Nav.NavigateTo("/game-systems");
+            return;
+        }
+
+        model = new FormModel
+        {
+            Name = dto.Name,
+            Alias = dto.Alias,
+            Description = dto.Description,
+            SourceType = dto.SourceType
+        };
+    }
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(model.Name))
+            return;
+
+        var req = new UpsertGameSystemRequest(model.Name, model.Description, model.SourceType, model.Alias);
+
+        HttpResponseMessage res;
+        if (_isEdit)
+            res = await Http.PutAsJsonAsync(Nav.ToAbsoluteUri($"/api/game-systems/{GameSystemId!.Value}"), req);
+        else
+            res = await Http.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/game-systems"), req);
+
+        if (res.IsSuccessStatusCode)
+            Nav.NavigateTo("/game-systems");
+    }
+
+    private sealed class FormModel
+    {
+        public string Name { get; set; } = string.Empty;
+        public string? Alias { get; set; }
+        public string? Description { get; set; }
+        public SourceType SourceType { get; set; } = SourceType.Official;
+    }
+
+    private sealed record GameSystemDto(int GameSystemId, string Name, string Slug, string? Alias, string? Description, SourceType SourceType);
+}

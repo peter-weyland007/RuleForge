@@ -1,0 +1,42 @@
+@page "/admin/operations"
+
+<PageTitle>Admin Operations</PageTitle>
+
+<MudStack Spacing="3">
+    <MudText Typo="Typo.h4">Admin · Operations</MudText>
+    <MudText Typo="Typo.body2">Maintenance and platform tools.</MudText>
+
+    <MudGrid>
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Outlined="true">
+                <MudText Typo="Typo.h6">Data Tools</MudText>
+                <MudText Typo="Typo.body2" Class="mb-3">Merge systems and repair orphaned records.</MudText>
+                <MudButton Href="/admin/data-tools" Variant="Variant.Filled" Color="Color.Primary">Open</MudButton>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Outlined="true">
+                <MudText Typo="Typo.h6">Purge Deleted</MudText>
+                <MudText Typo="Typo.body2" Class="mb-3">Hard-delete soft-deleted records.</MudText>
+                <MudButton Href="/admin/purge" Variant="Variant.Filled" Color="Color.Primary">Open</MudButton>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Outlined="true">
+                <MudText Typo="Typo.h6">Swagger</MudText>
+                <MudText Typo="Typo.body2" Class="mb-3">Inspect and test API endpoints.</MudText>
+                <MudButton Href="/swagger-view" Variant="Variant.Filled" Color="Color.Primary">Open</MudButton>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Outlined="true">
+                <MudText Typo="Typo.h6">Currency Tools</MudText>
+                <MudText Typo="Typo.body2" Class="mb-3">Migration/normalization helpers for currency data.</MudText>
+                <MudButton Href="/admin/currency-tools" Variant="Variant.Filled" Color="Color.Primary">Open</MudButton>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+</MudStack>

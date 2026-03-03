@@ -1,0 +1,103 @@
+@page "/items"
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject NavigationManager Nav
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Items</PageTitle>
+
+<MudStack Spacing="3">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+        <MudText Typo="Typo.h4">Items</MudText>
+        <MudButton Href="/items/new" StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled">Create</MudButton>
+    </MudStack>
+
+    <MudPaper Class="pa-4" Outlined="true">
+        <MudSelect T="int" Value="selectedSystemId" ValueChanged="OnSystemChanged" Label="Game System" Variant="Variant.Outlined">
+            @foreach (var s in systems)
+            {
+                <MudSelectItem Value="@s.GameSystemId">@s.Name</MudSelectItem>
+            }
+        </MudSelect>
+    </MudPaper>
+
+    <MudTable Items="items" Dense="true" Hover="true">
+        <HeaderContent>
+            <MudTh>Name</MudTh><MudTh>Type</MudTh><MudTh>Rarity</MudTh><MudTh>Cost</MudTh><MudTh>Weight (lb)</MudTh><MudTh>Qty</MudTh><MudTh>Tags</MudTh><MudTh>Source</MudTh><MudTh></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd><MudLink Href="@($"/items/{context.ItemId}")">@context.Name</MudLink></MudTd>
+            <MudTd>@GetTypeName(context.ItemTypeDefinitionId)</MudTd>
+            <MudTd>@GetRarityName(context.RarityDefinitionId)</MudTd>
+            <MudTd>@FormatCost(context.CostAmount, context.CostCurrency, context.CurrencyDefinitionId)</MudTd>
+            <MudTd>@context.Weight</MudTd>
+            <MudTd>@context.Quantity</MudTd>
+            <MudTd>@FormatTags(context.TagNames, context.Tags)</MudTd>
+            <MudTd>@context.SourceType</MudTd>
+            <MudTd><MudIconButton Href="@($"/items/{context.ItemId}/edit")" Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" /><MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(()=>ConfirmDelete(context.ItemId, context.Name))" /></MudTd>
+        </RowTemplate>
+    </MudTable>
+</MudStack>
+
+@code {
+    private List<GameSystemDto> systems = new();
+    private List<ItemTypeDto> types = new();
+    private List<RarityDto> rarities = new();
+    private List<CurrencyDto> currencies = new();
+    private List<ItemDto> items = new();
+    private int selectedSystemId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        systems = await Http.GetFromJsonAsync<List<GameSystemDto>>(Nav.ToAbsoluteUri("/api/game-systems")) ?? new();
+        selectedSystemId = systems.FirstOrDefault()?.GameSystemId ?? 0;
+        await LoadForSystem();
+    }
+
+    private async Task OnSystemChanged(int id)
+    {
+        selectedSystemId = id;
+        await LoadForSystem();
+    }
+
+    private async Task LoadForSystem()
+    {
+        if (selectedSystemId <= 0) return;
+        types = await Http.GetFromJsonAsync<List<ItemTypeDto>>(Nav.ToAbsoluteUri($"/api/item-types?gameSystemId={selectedSystemId}")) ?? new();
+        rarities = await Http.GetFromJsonAsync<List<RarityDto>>(Nav.ToAbsoluteUri($"/api/rarities?gameSystemId={selectedSystemId}")) ?? new();
+        currencies = await Http.GetFromJsonAsync<List<CurrencyDto>>(Nav.ToAbsoluteUri($"/api/currencies?gameSystemId={selectedSystemId}")) ?? new();
+        items = await Http.GetFromJsonAsync<List<ItemDto>>(Nav.ToAbsoluteUri($"/api/items?gameSystemId={selectedSystemId}")) ?? new();
+    }
+
+    private async Task ConfirmDelete(int id, string name)
+    {
+        var confirmed = await DialogService.ShowMessageBox("Delete Item", (MarkupString)$"Are you sure you want to delete <b>{name}</b>?", yesText: "Delete", cancelText: "Cancel");
+        if (confirmed == true) await DeleteItem(id);
+    }
+
+    private async Task DeleteItem(int id)
+    {
+        var res = await Http.DeleteAsync(Nav.ToAbsoluteUri($"/api/items/{id}"));
+        if (res.IsSuccessStatusCode) { Snackbar.Add("Item deleted.", Severity.Success); await LoadForSystem(); }
+        else { Snackbar.Add("Delete failed.", Severity.Error); }
+    }
+
+    private string GetTypeName(int? id) => id.HasValue ? (types.FirstOrDefault(t => t.ItemTypeDefinitionId == id.Value)?.Name ?? $"#{id}") : "(none)";
+    private string GetRarityName(int? id) => id.HasValue ? (rarities.FirstOrDefault(r => r.RarityDefinitionId == id.Value)?.Name ?? $"#{id}") : "(none)";
+    private string FormatCost(decimal? amount, string? currency, int? currencyDefinitionId)
+    {
+        if (!amount.HasValue) return string.Empty;
+        var code = !string.IsNullOrWhiteSpace(currency)
+            ? currency
+            : (currencyDefinitionId.HasValue ? currencies.FirstOrDefault(c => c.CurrencyDefinitionId == currencyDefinitionId.Value)?.Code : null);
+        return string.IsNullOrWhiteSpace(code) ? amount.Value.ToString() : $"{amount.Value} {code}";
+    }
+    private string FormatTags(List<string>? tagNames, string? legacyTags) => (tagNames is { Count: > 0 }) ? string.Join(", ", tagNames) : string.Empty;
+
+    private sealed record GameSystemDto(int GameSystemId, string Name);
+    private sealed record ItemTypeDto(int ItemTypeDefinitionId, int GameSystemId, string Name, string Slug, string? Description);
+    private sealed record RarityDto(int RarityDefinitionId, int GameSystemId, string Name, string Slug);
+    private sealed record CurrencyDto(int CurrencyDefinitionId, int GameSystemId, string Name, string Code);
+    private sealed record ItemDto(int ItemId, int GameSystemId, string Name, string Slug, int? ItemTypeDefinitionId, int? RarityDefinitionId, decimal? CostAmount, int? CurrencyDefinitionId, string? CostCurrency, decimal? Weight, int Quantity, string? Tags, List<int>? TagDefinitionIds, List<string>? TagNames, SourceType SourceType);
+}

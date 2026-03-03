@@ -1,0 +1,42 @@
+@page "/admin/currencies"
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject NavigationManager Nav
+
+<PageTitle>Admin Currencies</PageTitle>
+
+<MudStack Spacing="3">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+        <MudText Typo="Typo.h4">Admin · Currencies</MudText>
+        <MudButton Href="/admin/currencies/new" StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled">Create</MudButton>
+    </MudStack>
+
+    <MudPaper Class="pa-4" Outlined="true">
+        <MudSelect T="int" Value="selectedSystemId" ValueChanged="OnSystemChanged" Label="Game System" Variant="Variant.Outlined">
+            @foreach (var s in systems){<MudSelectItem Value="@s.GameSystemId">@s.Name</MudSelectItem>}
+        </MudSelect>
+    </MudPaper>
+
+    <MudTable Items="rows" Dense="true" Hover="true">
+        <HeaderContent><MudTh>Code</MudTh><MudTh>Name</MudTh><MudTh>Symbol</MudTh><MudTh></MudTh></HeaderContent>
+        <RowTemplate><MudTd>@context.Code</MudTd><MudTd>@context.Name</MudTd><MudTd>@context.Symbol</MudTd><MudTd><MudIconButton Href="@($"/admin/currencies/{context.CurrencyDefinitionId}/edit")" Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" /></MudTd></RowTemplate>
+    </MudTable>
+</MudStack>
+
+@code {
+    private List<GameSystemDto> systems = new();
+    private List<CurrencyDto> rows = new();
+    private int selectedSystemId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        systems = await Http.GetFromJsonAsync<List<GameSystemDto>>(Nav.ToAbsoluteUri("/api/game-systems")) ?? new();
+        selectedSystemId = systems.FirstOrDefault()?.GameSystemId ?? 0;
+        await Load();
+    }
+    private async Task OnSystemChanged(int id){ selectedSystemId=id; await Load(); }
+    private async Task Load(){ if(selectedSystemId<=0)return; rows = await Http.GetFromJsonAsync<List<CurrencyDto>>(Nav.ToAbsoluteUri($"/api/admin/currencies?gameSystemId={selectedSystemId}")) ?? new(); }
+
+    private sealed record GameSystemDto(int GameSystemId, string Name);
+    private sealed record CurrencyDto(int CurrencyDefinitionId,int GameSystemId,string Name,string Code,string? Symbol);
+}

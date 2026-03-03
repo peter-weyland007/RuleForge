@@ -1,0 +1,103 @@
+@page "/admin/data-tools"
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<PageTitle>Admin Data Tools</PageTitle>
+
+<MudStack Spacing="3">
+    <MudText Typo="Typo.h4">Admin · Data Tools</MudText>
+
+    <MudPaper Class="pa-4" Outlined="true">
+        <MudText Typo="Typo.h6">Merge Game Systems</MudText>
+        <MudGrid>
+            <MudItem xs="12" md="4"><MudSelect T="int" @bind-Value="fromId" Label="From (old)">@foreach (var s in systems){<MudSelectItem Value="@s.GameSystemId">@s.Name (#@s.GameSystemId)</MudSelectItem>}</MudSelect></MudItem>
+            <MudItem xs="12" md="4"><MudSelect T="int" @bind-Value="toId" Label="To (new)">@foreach (var s in systems){<MudSelectItem Value="@s.GameSystemId">@s.Name (#@s.GameSystemId)</MudSelectItem>}</MudSelect></MudItem>
+            <MudItem xs="12" md="4"><MudButton Color="Color.Warning" OnClick="Merge">Merge & Soft Delete Source</MudButton></MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <MudPaper Class="pa-4" Outlined="true">
+        <MudText Typo="Typo.h6">Orphan Repair</MudText>
+        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+            <MudButton Variant="Variant.Outlined" OnClick="LoadOrphans">Scan Orphans</MudButton>
+            <MudSelect T="int" @bind-Value="orphanTargetSystemId" Label="Reassign Target System" Variant="Variant.Outlined" Style="min-width:280px">
+                @foreach (var s in systems)
+                {
+                    <MudSelectItem Value="@s.GameSystemId">@s.Name (#@s.GameSystemId)</MudSelectItem>
+                }
+            </MudSelect>
+        </MudStack>
+
+        @if (orphans is not null)
+        {
+            <MudText Class="mt-2">Found @orphans.total orphan records</MudText>
+            <MudTable Items="orphans.rows" Dense="true" Hover="true" Class="mt-2">
+                <HeaderContent>
+                    <MudTh>Kind</MudTh><MudTh>Name</MudTh><MudTh>Source System</MudTh><MudTh>Soft-Deleted At</MudTh><MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.kind</MudTd>
+                    <MudTd>@context.name (#@context.id)</MudTd>
+                    <MudTd>@context.sourceGameSystemName (@context.sourceGameSystemId)</MudTd>
+                    <MudTd>@context.sourceGameSystemDeletedUtc</MudTd>
+                    <MudTd>
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary" OnClick="@(()=>ReassignOne(context.kind, context.id))">Reassign</MudButton>
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(()=>DeleteOne(context.kind, context.id))">Delete</MudButton>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    </MudPaper>
+</MudStack>
+
+@code {
+    private List<GameSystemDto> systems = new();
+    private int fromId;
+    private int toId;
+    private int orphanTargetSystemId;
+    private OrphanResult? orphans;
+
+    protected override async Task OnInitializedAsync()
+    {
+        systems = await Http.GetFromJsonAsync<List<GameSystemDto>>(Nav.ToAbsoluteUri("/api/game-systems")) ?? new();
+        fromId = systems.FirstOrDefault()?.GameSystemId ?? 0;
+        toId = systems.Skip(1).FirstOrDefault()?.GameSystemId ?? fromId;
+        orphanTargetSystemId = systems.FirstOrDefault()?.GameSystemId ?? 0;
+    }
+
+    private async Task Merge()
+    {
+        if (fromId <= 0 || toId <= 0 || fromId == toId) return;
+        var res = await Http.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/admin/game-systems/merge"), new MergeReq(fromId, toId));
+        Snackbar.Add(res.IsSuccessStatusCode ? "Merge complete." : "Merge failed.", res.IsSuccessStatusCode ? Severity.Success : Severity.Error);
+        if (res.IsSuccessStatusCode)
+            systems = await Http.GetFromJsonAsync<List<GameSystemDto>>(Nav.ToAbsoluteUri("/api/game-systems")) ?? new();
+    }
+
+    private async Task LoadOrphans()
+    {
+        orphans = await Http.GetFromJsonAsync<OrphanResult>(Nav.ToAbsoluteUri("/api/admin/orphans"));
+    }
+
+    private async Task ReassignOne(string kind, int id)
+    {
+        var res = await Http.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/admin/orphans/reassign-one"), new ReassignOneReq(kind, id, orphanTargetSystemId));
+        Snackbar.Add(res.IsSuccessStatusCode ? "Reassigned." : "Reassign failed.", res.IsSuccessStatusCode ? Severity.Success : Severity.Error);
+        if (res.IsSuccessStatusCode) await LoadOrphans();
+    }
+
+    private async Task DeleteOne(string kind, int id)
+    {
+        var res = await Http.DeleteAsync(Nav.ToAbsoluteUri($"/api/admin/orphans/{kind}/{id}"));
+        Snackbar.Add(res.IsSuccessStatusCode ? "Deleted orphan." : "Delete failed.", res.IsSuccessStatusCode ? Severity.Success : Severity.Error);
+        if (res.IsSuccessStatusCode) await LoadOrphans();
+    }
+
+    private sealed record GameSystemDto(int GameSystemId, string Name);
+    private sealed record MergeReq(int FromGameSystemId, int ToGameSystemId);
+    private sealed record ReassignOneReq(string Kind, int Id, int ToGameSystemId);
+    private sealed record OrphanRow(string kind, int id, string name, int sourceGameSystemId, string? sourceGameSystemName, DateTime? sourceGameSystemDeletedUtc);
+    private sealed record OrphanResult(int total, List<OrphanRow> rows);
+}

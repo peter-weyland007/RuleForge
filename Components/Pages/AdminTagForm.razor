@@ -1,0 +1,71 @@
+@page "/admin/tags/new"
+@page "/admin/tags/{TagDefinitionId:int}/edit"
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject NavigationManager Nav
+
+<PageTitle>Admin Tag Form</PageTitle>
+
+<MudStack Spacing="3">
+    <MudText Typo="Typo.h4">@(_isEdit ? "Edit Tag" : "Create Tag")</MudText>
+
+    <MudPaper Class="pa-4" Outlined="true">
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <MudSelect T="int" @bind-Value="model.GameSystemId" Label="Game System" Variant="Variant.Outlined">
+                    @foreach (var s in systems)
+                    {
+                        <MudSelectItem Value="@s.GameSystemId">@s.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="6"><MudTextField @bind-Value="model.Name" Label="Name" Variant="Variant.Outlined" Required="true" /></MudItem>
+            <MudItem xs="12">
+                <MudStack Row="true" Spacing="2">
+                    <MudButtonGroup Variant="Variant.Filled" Color="Color.Primary">
+                        <MudButton OnClick="Save">Save</MudButton>
+                        <MudButton Href="/admin/tags" Color="Color.Secondary">Cancel</MudButton>
+                    </MudButtonGroup>
+                </MudStack>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+</MudStack>
+
+@code {
+    [Parameter] public int? TagDefinitionId { get; set; }
+    private bool _isEdit => TagDefinitionId.HasValue;
+
+    private List<GameSystemDto> systems = new();
+    private FormModel model = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        systems = await Http.GetFromJsonAsync<List<GameSystemDto>>(Nav.ToAbsoluteUri("/api/game-systems")) ?? new();
+        model.GameSystemId = systems.FirstOrDefault()?.GameSystemId ?? 0;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!_isEdit) return;
+        var dto = await Http.GetFromJsonAsync<TagDto>(Nav.ToAbsoluteUri($"/api/admin/tags/{TagDefinitionId!.Value}"));
+        if (dto is null) { Nav.NavigateTo("/admin/tags"); return; }
+        model = new FormModel { GameSystemId = dto.GameSystemId, Name = dto.Name };
+    }
+
+    private async Task Save()
+    {
+        if (model.GameSystemId <= 0 || string.IsNullOrWhiteSpace(model.Name)) return;
+        var req = new UpsertTagRequest(model.GameSystemId, model.Name);
+        var res = _isEdit
+            ? await Http.PutAsJsonAsync(Nav.ToAbsoluteUri($"/api/admin/tags/{TagDefinitionId!.Value}"), req)
+            : await Http.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/admin/tags"), req);
+
+        if (res.IsSuccessStatusCode)
+            Nav.NavigateTo("/admin/tags");
+    }
+
+    private sealed class FormModel { public int GameSystemId { get; set; } public string Name { get; set; } = string.Empty; }
+    private sealed record GameSystemDto(int GameSystemId, string Name);
+    private sealed record TagDto(int TagDefinitionId, int GameSystemId, string Name, string Slug);
+}

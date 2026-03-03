@@ -1,0 +1,202 @@
+@page "/items/new"
+@page "/items/{ItemId:int}/edit"
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject NavigationManager Nav
+
+<PageTitle>Item Form</PageTitle>
+
+<MudStack Spacing="3">
+    <MudText Typo="Typo.h4">@(_isEdit ? "Edit Item" : "Create Item")</MudText>
+
+    <MudPaper Class="pa-4" Outlined="true">
+        <MudGrid>
+            <MudItem xs="12" md="3">
+                <MudSelect T="int" Value="model.GameSystemId" ValueChanged="OnSystemChanged" Label="Game System" Variant="Variant.Outlined">
+                    @foreach (var s in systems)
+                    {
+                        <MudSelectItem Value="@s.GameSystemId">@s.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="3"><MudTextField @bind-Value="model.Name" Label="Name" Variant="Variant.Outlined" Required="true" /></MudItem>
+            <MudItem xs="12" md="2">
+                <MudSelect T="int?" @bind-Value="model.ItemTypeDefinitionId" Label="Type" Variant="Variant.Outlined">
+                    <MudSelectItem Value="@((int?)null)">(none)</MudSelectItem>
+                    @foreach (var t in types)
+                    {
+                        <MudSelectItem Value="@((int?)t.ItemTypeDefinitionId)">@t.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudSelect T="int?" @bind-Value="model.RarityDefinitionId" Label="Rarity" Variant="Variant.Outlined">
+                    <MudSelectItem Value="@((int?)null)">(none)</MudSelectItem>
+                    @foreach (var r in rarities)
+                    {
+                        <MudSelectItem Value="@((int?)r.RarityDefinitionId)">@r.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="2"><MudSelect T="SourceType" @bind-Value="model.SourceType" Label="Source" Variant="Variant.Outlined"><MudSelectItem Value="SourceType.Official">Official</MudSelectItem><MudSelectItem Value="SourceType.ThirdParty">Third Party</MudSelectItem><MudSelectItem Value="SourceType.Homebrew">Homebrew</MudSelectItem></MudSelect></MudItem>
+
+            <MudItem xs="12" md="4"><MudTextField @bind-Value="model.Description" Label="Description" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" md="2"><MudNumericField T="decimal?" @bind-Value="model.CostAmount" Label="Cost" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" md="2"><MudSelect T="int?" @bind-Value="model.CurrencyDefinitionId" Label="Currency" Variant="Variant.Outlined"><MudSelectItem Value="@((int?)null)">(none)</MudSelectItem>@foreach (var c in currencies) { <MudSelectItem Value="@((int?)c.CurrencyDefinitionId)">@c.Code</MudSelectItem> }</MudSelect></MudItem>
+            <MudItem xs="12" md="2"><MudNumericField T="decimal?" @bind-Value="model.Weight" Label="Weight (lb)" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" md="2"><MudNumericField T="int" @bind-Value="model.Quantity" Label="Qty" Variant="Variant.Outlined" Min="1" /></MudItem>
+            <MudItem xs="12" md="6"><MudSelect T="int" MultiSelection="true" SelectedValues="model.TagDefinitionIds" SelectedValuesChanged="OnTagsChanged" Label="Tags" Variant="Variant.Outlined">@foreach (var t in tags){<MudSelectItem Value="@t.TagDefinitionId">@t.Name</MudSelectItem>}</MudSelect></MudItem>
+            <MudItem xs="12" md="3"><MudTextField @bind-Value="model.Alias" Label="Alias (optional)" Variant="Variant.Outlined" /></MudItem>
+
+            <MudItem xs="12" md="3"><MudCheckBox @bind-Value="model.RequiresAttunement" Label="Requires Attunement" /></MudItem>
+            <MudItem xs="12" md="9"><MudTextField @bind-Value="model.AttunementRequirement" Label="Attunement Requirement" Variant="Variant.Outlined" Disabled="@(!model.RequiresAttunement)" /></MudItem>
+
+                        <MudItem xs="12">
+                <MarkdownEditor Value="@model.Effect" ValueChanged="@( (string? v) => model.Effect = v )" Label="Effect (Markdown)" Rows="10" ShowPreview="true" />
+            </MudItem>
+
+<MudItem xs="12">
+                <MudStack Row="true" Spacing="2">
+                    <MudButtonGroup Variant="Variant.Filled" Color="Color.Primary">
+                        <MudButton OnClick="Save">Save</MudButton>
+                        <MudButton Href="/items" Color="Color.Secondary">Cancel</MudButton>
+                    </MudButtonGroup>
+                </MudStack>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+</MudStack>
+
+@code {
+    [Parameter] public int? ItemId { get; set; }
+    private bool _isEdit => ItemId.HasValue;
+
+    private List<GameSystemDto> systems = new();
+    private List<ItemTypeDto> types = new();
+    private List<RarityDto> rarities = new();
+    private List<CurrencyDto> currencies = new();
+    private List<TagDto> tags = new();
+    private FormModel model = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        systems = await Http.GetFromJsonAsync<List<GameSystemDto>>(Nav.ToAbsoluteUri("/api/game-systems")) ?? new();
+        model.GameSystemId = systems.FirstOrDefault()?.GameSystemId ?? 0;
+        await LoadLookups();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!_isEdit) return;
+        var dto = await Http.GetFromJsonAsync<ItemDto>(Nav.ToAbsoluteUri($"/api/items/{ItemId!.Value}"));
+        if (dto is null) { Nav.NavigateTo("/items"); return; }
+
+        model = new FormModel
+        {
+            GameSystemId = dto.GameSystemId,
+            Name = dto.Name,
+            ItemTypeDefinitionId = dto.ItemTypeDefinitionId,
+            RarityDefinitionId = dto.RarityDefinitionId,
+            Description = dto.Description,
+            CostAmount = dto.CostAmount,
+            CurrencyDefinitionId = dto.CurrencyDefinitionId,
+            CostCurrency = dto.CostCurrency,
+            Weight = dto.Weight,
+            Quantity = dto.Quantity,
+            Tags = dto.Tags,
+            TagDefinitionIds = dto.TagDefinitionIds?.ToList() ?? new List<int>(),
+            SourceType = dto.SourceType,
+            Alias = dto.Alias,
+            Effect = dto.Effect,
+            RequiresAttunement = dto.RequiresAttunement,
+            AttunementRequirement = dto.AttunementRequirement
+        };
+
+        await LoadLookups();
+    }
+
+    private async Task OnSystemChanged(int id)
+    {
+        model.GameSystemId = id;
+        model.ItemTypeDefinitionId = null;
+        model.RarityDefinitionId = null;
+        model.CurrencyDefinitionId = null;
+        model.TagDefinitionIds = new List<int>();
+        await LoadLookups();
+    }
+
+    private async Task LoadLookups()
+    {
+        if (model.GameSystemId <= 0) return;
+        types = await Http.GetFromJsonAsync<List<ItemTypeDto>>(Nav.ToAbsoluteUri($"/api/item-types?gameSystemId={model.GameSystemId}")) ?? new();
+        rarities = await Http.GetFromJsonAsync<List<RarityDto>>(Nav.ToAbsoluteUri($"/api/rarities?gameSystemId={model.GameSystemId}")) ?? new();
+        currencies = await Http.GetFromJsonAsync<List<CurrencyDto>>(Nav.ToAbsoluteUri($"/api/currencies?gameSystemId={model.GameSystemId}")) ?? new();
+        tags = await Http.GetFromJsonAsync<List<TagDto>>(Nav.ToAbsoluteUri($"/api/tags?gameSystemId={model.GameSystemId}")) ?? new();
+    }
+
+    private Task OnTagsChanged(IEnumerable<int> values)
+    {
+        model.TagDefinitionIds = values?.ToList() ?? new List<int>();
+        return Task.CompletedTask;
+    }
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(model.Name) || model.GameSystemId <= 0) return;
+
+        var req = new CreateItemRequest(
+            model.GameSystemId,
+            model.Name,
+            model.ItemTypeDefinitionId,
+            model.RarityDefinitionId,
+            model.Description,
+            model.CostAmount,
+            model.CurrencyDefinitionId,
+            model.CostCurrency,
+            model.Weight,
+            model.Quantity,
+            model.Tags,
+            model.Effect,
+            model.RequiresAttunement,
+            model.AttunementRequirement,
+            model.TagDefinitionIds,
+            model.SourceType,
+            model.Alias
+        );
+
+        HttpResponseMessage res = _isEdit
+            ? await Http.PutAsJsonAsync(Nav.ToAbsoluteUri($"/api/items/{ItemId!.Value}"), req)
+            : await Http.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/items"), req);
+
+        if (res.IsSuccessStatusCode)
+            Nav.NavigateTo("/items");
+    }
+
+    private sealed class FormModel
+    {
+        public int GameSystemId { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public int? ItemTypeDefinitionId { get; set; }
+        public int? RarityDefinitionId { get; set; }
+        public string? Description { get; set; }
+        public decimal? CostAmount { get; set; }
+        public int? CurrencyDefinitionId { get; set; }
+        public string? CostCurrency { get; set; }
+        public decimal? Weight { get; set; }
+        public int Quantity { get; set; } = 1;
+        public string? Tags { get; set; }
+        public string? Effect { get; set; }
+        public bool RequiresAttunement { get; set; }
+        public string? AttunementRequirement { get; set; }
+        public List<int> TagDefinitionIds { get; set; } = new();
+        public SourceType SourceType { get; set; } = SourceType.Official;
+        public string? Alias { get; set; }
+    }
+
+    private sealed record GameSystemDto(int GameSystemId, string Name);
+    private sealed record ItemTypeDto(int ItemTypeDefinitionId, int GameSystemId, string Name, string Slug, string? Description);
+    private sealed record RarityDto(int RarityDefinitionId, int GameSystemId, string Name, string Slug);
+    private sealed record CurrencyDto(int CurrencyDefinitionId, int GameSystemId, string Name, string Code);
+    private sealed record TagDto(int TagDefinitionId, int GameSystemId, string Name, string Slug);
+    private sealed record ItemDto(int ItemId, int GameSystemId, string Name, string Slug, string? Alias, int? ItemTypeDefinitionId, int? RarityDefinitionId, string? Description, decimal? CostAmount, int? CurrencyDefinitionId, string? CostCurrency, decimal? Weight, int Quantity, string? Tags, string? Effect, bool RequiresAttunement, string? AttunementRequirement, List<int>? TagDefinitionIds, List<string>? TagNames, SourceType SourceType);
+}

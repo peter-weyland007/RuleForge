@@ -1,0 +1,9 @@
+<Project>
+  <PropertyGroup>
+    <MSBuildProjectExtensionsPath>/tmp/ruleforge_msbuild/</MSBuildProjectExtensionsPath>
+    <BaseIntermediateOutputPath>/tmp/ruleforge_obj/</BaseIntermediateOutputPath>
+    <IntermediateOutputPath>/tmp/ruleforge_obj/$(Configuration)/</IntermediateOutputPath>
+    <BaseOutputPath>/tmp/ruleforge_bin/</BaseOutputPath>
+    <OutputPath>/tmp/ruleforge_bin/$(Configuration)/$(TargetFramework)/</OutputPath>
+  </PropertyGroup>
+</Project>

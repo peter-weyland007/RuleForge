@@ -1,0 +1,91 @@
+@page "/admin/currencies/new"
+@page "/admin/currencies/{CurrencyDefinitionId:int}/edit"
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject NavigationManager Nav
+
+<PageTitle>Admin Currency Form</PageTitle>
+
+<MudStack Spacing="3">
+    <MudText Typo="Typo.h4">@(_isEdit ? "Edit Currency" : "Create Currency")</MudText>
+
+    <MudPaper Class="pa-4" Outlined="true">
+        <MudGrid>
+            <MudItem xs="12" md="3">
+                <MudSelect T="int" @bind-Value="model.GameSystemId" Label="Game System" Variant="Variant.Outlined">
+                    @foreach (var s in systems)
+                    {
+                        <MudSelectItem Value="@s.GameSystemId">@s.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="3"><MudTextField @bind-Value="model.Code" Label="Code" Variant="Variant.Outlined" Required="true" /></MudItem>
+            <MudItem xs="12" md="3"><MudTextField @bind-Value="model.Name" Label="Name" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" md="3"><MudTextField @bind-Value="model.Symbol" Label="Symbol" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12"><MudTextField @bind-Value="model.Description" Label="Description" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12">
+                <MudStack Row="true" Spacing="2">
+                    <MudButtonGroup Variant="Variant.Filled" Color="Color.Primary">
+                        <MudButton OnClick="Save">Save</MudButton>
+                        <MudButton Href="/admin/currencies" Color="Color.Secondary">Cancel</MudButton>
+                    </MudButtonGroup>
+                </MudStack>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+</MudStack>
+
+@code {
+    [Parameter] public int? CurrencyDefinitionId { get; set; }
+    private bool _isEdit => CurrencyDefinitionId.HasValue;
+
+    private List<GameSystemDto> systems = new();
+    private FormModel model = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        systems = await Http.GetFromJsonAsync<List<GameSystemDto>>(Nav.ToAbsoluteUri("/api/game-systems")) ?? new();
+        model.GameSystemId = systems.FirstOrDefault()?.GameSystemId ?? 0;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!_isEdit) return;
+        var dto = await Http.GetFromJsonAsync<CurrencyDto>(Nav.ToAbsoluteUri($"/api/admin/currencies/{CurrencyDefinitionId!.Value}"));
+        if (dto is null) { Nav.NavigateTo("/admin/currencies"); return; }
+
+        model = new FormModel
+        {
+            GameSystemId = dto.GameSystemId,
+            Code = dto.Code,
+            Name = dto.Name,
+            Symbol = dto.Symbol,
+            Description = dto.Description
+        };
+    }
+
+    private async Task Save()
+    {
+        if (model.GameSystemId <= 0 || string.IsNullOrWhiteSpace(model.Code)) return;
+
+        var req = new UpsertCurrencyRequest(model.GameSystemId, model.Code, model.Name, model.Symbol, model.Description);
+        var res = _isEdit
+            ? await Http.PutAsJsonAsync(Nav.ToAbsoluteUri($"/api/admin/currencies/{CurrencyDefinitionId!.Value}"), req)
+            : await Http.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/admin/currencies"), req);
+
+        if (res.IsSuccessStatusCode)
+            Nav.NavigateTo("/admin/currencies");
+    }
+
+    private sealed class FormModel
+    {
+        public int GameSystemId { get; set; }
+        public string Code { get; set; } = string.Empty;
+        public string? Name { get; set; }
+        public string? Symbol { get; set; }
+        public string? Description { get; set; }
+    }
+
+    private sealed record GameSystemDto(int GameSystemId, string Name);
+    private sealed record CurrencyDto(int CurrencyDefinitionId, int GameSystemId, string Name, string Code, string? Symbol, string? Description);
+}

@@ -1,0 +1,64 @@
+@page "/admin/item-types"
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject NavigationManager Nav
+
+<PageTitle>Admin Item Types</PageTitle>
+
+<MudStack Spacing="3">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+        <MudText Typo="Typo.h4">Admin · Item Types</MudText>
+        <MudButton Href="/admin/item-types/new" StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled">Create</MudButton>
+    </MudStack>
+
+    <MudPaper Class="pa-4" Outlined="true">
+        <MudSelect T="int" Value="selectedSystemId" ValueChanged="OnSystemChanged" Label="Game System" Variant="Variant.Outlined">
+            @foreach (var gs in systems)
+            {
+                <MudSelectItem Value="@gs.GameSystemId">@gs.Name</MudSelectItem>
+            }
+        </MudSelect>
+    </MudPaper>
+
+    <MudTable Items="rows" Dense="true" Hover="true">
+        <HeaderContent>
+            <MudTh>Name</MudTh><MudTh>Slug</MudTh><MudTh></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            
+            <MudTd>@context.Name</MudTd>
+            <MudTd>@context.Slug</MudTd>
+            <MudTd>
+                <MudIconButton Href="@($"/admin/item-types/{context.ItemTypeDefinitionId}/edit")" Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" />
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+</MudStack>
+
+@code {
+    private List<GameSystemDto> systems = new();
+    private List<ItemTypeDto> rows = new();
+    private int selectedSystemId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        systems = await Http.GetFromJsonAsync<List<GameSystemDto>>(Nav.ToAbsoluteUri("/api/game-systems")) ?? new();
+        selectedSystemId = systems.FirstOrDefault()?.GameSystemId ?? 0;
+        await Load();
+    }
+
+    private async Task OnSystemChanged(int id)
+    {
+        selectedSystemId = id;
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        if (selectedSystemId <= 0) { rows = new(); return; }
+        rows = await Http.GetFromJsonAsync<List<ItemTypeDto>>(Nav.ToAbsoluteUri($"/api/admin/item-types?gameSystemId={selectedSystemId}")) ?? new();
+    }
+
+    private sealed record GameSystemDto(int GameSystemId, string Name);
+    private sealed record ItemTypeDto(int ItemTypeDefinitionId, int GameSystemId, string Name, string Slug, string? Description);
+}

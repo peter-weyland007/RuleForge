@@ -1,0 +1,93 @@
+@using Markdig
+@inject IJSRuntime JS
+
+<MudStack Spacing="1">
+    @if (!string.IsNullOrWhiteSpace(Label))
+    {
+        <MudText Typo="Typo.subtitle2">@Label</MudText>
+    }
+
+    <MudPaper Class="pa-2" Outlined="true">
+        <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
+            <MudIconButton Icon="@Icons.Material.Filled.FormatBold" Size="Size.Small" Color="Color.Primary" OnClick='@(()=>Insert("**bold**"))' AriaLabel="Bold" />
+            <MudIconButton Icon="@Icons.Material.Filled.FormatItalic" Size="Size.Small" Color="Color.Primary" OnClick='@(()=>Insert("*italic*"))' AriaLabel="Italic" />
+            <MudIconButton Icon="@Icons.Material.Filled.Code" Size="Size.Small" Color="Color.Primary" OnClick='@(()=>Insert("`code`"))' AriaLabel="Code" />
+            <MudIconButton Icon="@Icons.Material.Filled.DataObject" Size="Size.Small" Color="Color.Primary" OnClick='@(()=>Insert("\n```\ncode\n```"))' AriaLabel="Code block" />
+            <MudIconButton Icon="@Icons.Material.Filled.Title" Size="Size.Small" Color="Color.Primary" OnClick='@(()=>Insert("\n## Heading"))' AriaLabel="Heading" />
+            <MudIconButton Icon="@Icons.Material.Filled.FormatListBulleted" Size="Size.Small" Color="Color.Primary" OnClick='@(()=>Insert("\n- item"))' AriaLabel="List" />
+            <MudIconButton Icon="@Icons.Material.Filled.FormatQuote" Size="Size.Small" Color="Color.Primary" OnClick='@(()=>Insert("\n> quote"))' AriaLabel="Quote" />
+            <MudIconButton Icon="@Icons.Material.Filled.Link" Size="Size.Small" Color="Color.Primary" OnClick='@(()=>Insert("\n[link](https://)"))' AriaLabel="Link" />
+            @if (ShowPreview)
+            {
+                <MudSpacer />
+                <MudSwitch T="bool" @bind-Value="PreviewOn" Label="Preview" Color="Color.Primary" />
+                <MudSwitch T="bool" @bind-Value="SplitView" Label="Split" Color="Color.Secondary" Disabled="@(!PreviewOn)" />
+            }
+        </MudStack>
+    </MudPaper>
+
+    @if (ShowPreview && PreviewOn && SplitView)
+    {
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <div id="@_hostId">
+                    <MudTextField Value="@Value" ValueChanged="@( (string? v) => OnValueChanged(v) )" Label="" Variant="Variant.Outlined" Lines="@Rows" />
+                </div>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-3 md-preview" Outlined="true">
+                    <div>@((MarkupString)RenderMarkdown(Value))</div>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    }
+    else
+    {
+        <div id="@_hostId">
+            <MudTextField Value="@Value" ValueChanged="@( (string? v) => OnValueChanged(v) )" Label="" Variant="Variant.Outlined" Lines="@Rows" />
+        </div>
+
+        @if (ShowPreview && PreviewOn)
+        {
+            <MudPaper Class="pa-3 md-preview" Outlined="true">
+                <div>@((MarkupString)RenderMarkdown(Value))</div>
+            </MudPaper>
+        }
+    }
+</MudStack>
+
+@code {
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+    [Parameter] public string Label { get; set; } = "Markdown";
+    [Parameter] public int Rows { get; set; } = 10;
+    [Parameter] public bool ShowPreview { get; set; } = true;
+
+    private bool PreviewOn { get; set; } = true;
+    private bool SplitView { get; set; } = true;
+    private readonly string _hostId = $"md-editor-{Guid.NewGuid():N}";
+
+    private async Task Insert(string snippet)
+    {
+        var next = await JS.InvokeAsync<string>("markdownEditor.insertAtCursor", _hostId, snippet, Value ?? string.Empty);
+        Value = next;
+        await ValueChanged.InvokeAsync(Value);
+    }
+
+    private async Task OnValueChanged(string? value)
+    {
+        Value = value;
+        await ValueChanged.InvokeAsync(Value);
+    }
+
+    private string RenderMarkdown(string? text)
+        => string.IsNullOrWhiteSpace(text) ? "<em>No content</em>" : Markdown.ToHtml(text);
+}
+
+
+<style>
+.md-preview ul { list-style: disc; margin: 0.5rem 0 0.5rem 1.25rem; padding-left: 1rem; }
+.md-preview ol { list-style: decimal; margin: 0.5rem 0 0.5rem 1.25rem; padding-left: 1rem; }
+.md-preview li { margin: 0.2rem 0; }
+.md-preview p { margin: 0.4rem 0; }
+</style>

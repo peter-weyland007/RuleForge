@@ -1,0 +1,80 @@
+@page "/admin/purge"
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject NavigationManager Nav
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Admin Purge</PageTitle>
+
+<MudStack Spacing="3">
+    <MudText Typo="Typo.h4">Admin · Purge Soft Deleted</MudText>
+
+    <MudPaper Class="pa-2" Outlined="true">
+        <MudTable Items="rows" Hover="true" Dense="true" Loading="loading">
+            <HeaderContent>
+                
+                <MudTh>Name</MudTh>
+                <MudTh>Slug</MudTh>
+                <MudTh>Deleted At (UTC)</MudTh>
+                <MudTh></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                
+                <MudTd>@context.Name</MudTd>
+                <MudTd>@context.Slug</MudTd>
+                <MudTd>@context.DateDeletedUtc</MudTd>
+                <MudTd>
+                    <MudButton Color="Color.Error" Variant="Variant.Outlined" OnClick="@(()=>ConfirmPurge(context.GameSystemId, context.Name))">
+                        Purge
+                    </MudButton>
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText Class="pa-4">No soft-deleted game systems.</MudText>
+            </NoRecordsContent>
+        </MudTable>
+    </MudPaper>
+</MudStack>
+
+@code {
+    private bool loading;
+    private List<DeletedGameSystemDto> rows = new();
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        loading = true;
+        rows = await Http.GetFromJsonAsync<List<DeletedGameSystemDto>>(Nav.ToAbsoluteUri("/api/admin/game-systems/deleted")) ?? new();
+        loading = false;
+    }
+
+    private async Task ConfirmPurge(int id, string name)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Purge Deleted Game System",
+            (MarkupString)$"This permanently removes <b>{name}</b>. Continue?",
+            yesText: "Purge",
+            cancelText: "Cancel");
+
+        if (confirmed == true)
+            await Purge(id);
+    }
+
+    private async Task Purge(int id)
+    {
+        var res = await Http.DeleteAsync(Nav.ToAbsoluteUri($"/api/admin/game-systems/{id}/purge"));
+        if (res.IsSuccessStatusCode)
+        {
+            Snackbar.Add("Purged permanently.", Severity.Success);
+            await Load();
+        }
+        else
+        {
+            Snackbar.Add("Purge failed.", Severity.Error);
+        }
+    }
+
+    private sealed record DeletedGameSystemDto(int GameSystemId, string Name, string Slug, DateTime? DateDeletedUtc);
+}

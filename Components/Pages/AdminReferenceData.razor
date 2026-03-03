@@ -1,0 +1,42 @@
+@page "/admin/reference-data"
+
+<PageTitle>Admin Reference Data</PageTitle>
+
+<MudStack Spacing="3">
+    <MudText Typo="Typo.h4">Admin · Reference Data</MudText>
+    <MudText Typo="Typo.body2">Manage shared definitions used by models.</MudText>
+
+    <MudGrid>
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Outlined="true">
+                <MudText Typo="Typo.h6">Item Types</MudText>
+                <MudText Typo="Typo.body2" Class="mb-3">System-scoped item type definitions.</MudText>
+                <MudButton Href="/admin/item-types" Variant="Variant.Filled" Color="Color.Primary">Open</MudButton>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Outlined="true">
+                <MudText Typo="Typo.h6">Rarities</MudText>
+                <MudText Typo="Typo.body2" Class="mb-3">System-scoped rarity definitions.</MudText>
+                <MudButton Href="/admin/rarities" Variant="Variant.Filled" Color="Color.Primary">Open</MudButton>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Outlined="true">
+                <MudText Typo="Typo.h6">Currencies</MudText>
+                <MudText Typo="Typo.body2" Class="mb-3">System-scoped currency definitions.</MudText>
+                <MudButton Href="/admin/currencies" Variant="Variant.Filled" Color="Color.Primary">Open</MudButton>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Outlined="true">
+                <MudText Typo="Typo.h6">Tags</MudText>
+                <MudText Typo="Typo.body2" Class="mb-3">System-scoped tag definitions for items.</MudText>
+                <MudButton Href="/admin/tags" Variant="Variant.Filled" Color="Color.Primary">Open</MudButton>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+</MudStack>
