@@ -113,6 +113,16 @@ using (var scope = app.Services.CreateScope())
             Effect TEXT NULL,
             RequiresAttunement INTEGER NOT NULL DEFAULT 0,
             AttunementRequirement TEXT NULL,
+            DamageDice TEXT NULL,
+            DamageType TEXT NULL,
+            VersatileDamageDice TEXT NULL,
+            ArmorClass INTEGER NULL,
+            StrengthRequirement INTEGER NULL,
+            StealthDisadvantage INTEGER NOT NULL DEFAULT 0,
+            RangeNormal INTEGER NULL,
+            RangeLong INTEGER NULL,
+            SourceBook TEXT NULL,
+            SourcePage INTEGER NULL,
             SourceType INTEGER NOT NULL,
             DateCreatedUtc TEXT NOT NULL,
             DateModifiedUtc TEXT NOT NULL,
@@ -148,6 +158,16 @@ using (var scope = app.Services.CreateScope())
     try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Items ADD COLUMN Effect TEXT NULL;"); } catch (SqliteException) { }
     try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Items ADD COLUMN RequiresAttunement INTEGER NOT NULL DEFAULT 0;"); } catch (SqliteException) { }
     try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Items ADD COLUMN AttunementRequirement TEXT NULL;"); } catch (SqliteException) { }
+    try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Items ADD COLUMN DamageDice TEXT NULL;"); } catch (SqliteException) { }
+    try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Items ADD COLUMN DamageType TEXT NULL;"); } catch (SqliteException) { }
+    try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Items ADD COLUMN VersatileDamageDice TEXT NULL;"); } catch (SqliteException) { }
+    try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Items ADD COLUMN ArmorClass INTEGER NULL;"); } catch (SqliteException) { }
+    try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Items ADD COLUMN StrengthRequirement INTEGER NULL;"); } catch (SqliteException) { }
+    try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Items ADD COLUMN StealthDisadvantage INTEGER NOT NULL DEFAULT 0;"); } catch (SqliteException) { }
+    try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Items ADD COLUMN RangeNormal INTEGER NULL;"); } catch (SqliteException) { }
+    try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Items ADD COLUMN RangeLong INTEGER NULL;"); } catch (SqliteException) { }
+    try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Items ADD COLUMN SourceBook TEXT NULL;"); } catch (SqliteException) { }
+    try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Items ADD COLUMN SourcePage INTEGER NULL;"); } catch (SqliteException) { }
 
     await db.Database.ExecuteSqlRawAsync("""
         CREATE TABLE IF NOT EXISTS CurrencyDefinitions (
@@ -533,6 +553,16 @@ api.MapGet("/items/{itemId:int}", async (int itemId, AppDbContext db) =>
         row.Effect,
         row.RequiresAttunement,
         row.AttunementRequirement,
+        row.DamageDice,
+        row.DamageType,
+        row.VersatileDamageDice,
+        row.ArmorClass,
+        row.StrengthRequirement,
+        row.StealthDisadvantage,
+        row.RangeNormal,
+        row.RangeLong,
+        row.SourceBook,
+        row.SourcePage,
         row.SourceType,
         row.DateCreatedUtc,
         row.DateModifiedUtc,
@@ -552,7 +582,9 @@ api.MapGet("/items", async (int gameSystemId, AppDbContext db) =>
 
     var outRows = items.Select(i => new {
         i.ItemId,i.GameSystemId,i.Name,i.Slug,i.Alias,i.ItemTypeDefinitionId,i.RarityDefinitionId,i.Description,
-        i.CostAmount,i.CurrencyDefinitionId,i.CostCurrency,i.Weight,i.Quantity,i.Tags,i.SourceType,i.DateCreatedUtc,i.DateModifiedUtc,i.DateDeletedUtc,
+        i.CostAmount,i.CurrencyDefinitionId,i.CostCurrency,i.Weight,i.Quantity,i.Tags,
+        i.DamageDice,i.DamageType,i.VersatileDamageDice,i.ArmorClass,i.StrengthRequirement,i.StealthDisadvantage,i.RangeNormal,i.RangeLong,i.SourceBook,i.SourcePage,
+        i.SourceType,i.DateCreatedUtc,i.DateModifiedUtc,i.DateDeletedUtc,
         TagDefinitionIds = tagLinks.Where(l=>l.ItemId==i.ItemId).Select(l=>l.TagDefinitionId).ToList(),
         TagNames = tags.Where(t=>tagLinks.Any(l=>l.ItemId==i.ItemId && l.TagDefinitionId==t.TagDefinitionId)).Select(t=>t.Name).ToList()
     }).ToList();
@@ -604,6 +636,16 @@ api.MapPost("/items", async (CreateItemRequest req, AppDbContext db) =>
         Effect = string.IsNullOrWhiteSpace(req.Effect) ? null : req.Effect.Trim(),
         RequiresAttunement = req.RequiresAttunement,
         AttunementRequirement = string.IsNullOrWhiteSpace(req.AttunementRequirement) ? null : req.AttunementRequirement.Trim(),
+        DamageDice = string.IsNullOrWhiteSpace(req.DamageDice) ? null : req.DamageDice.Trim(),
+        DamageType = string.IsNullOrWhiteSpace(req.DamageType) ? null : req.DamageType.Trim(),
+        VersatileDamageDice = string.IsNullOrWhiteSpace(req.VersatileDamageDice) ? null : req.VersatileDamageDice.Trim(),
+        ArmorClass = req.ArmorClass,
+        StrengthRequirement = req.StrengthRequirement,
+        StealthDisadvantage = req.StealthDisadvantage,
+        RangeNormal = req.RangeNormal,
+        RangeLong = req.RangeLong,
+        SourceBook = string.IsNullOrWhiteSpace(req.SourceBook) ? null : req.SourceBook.Trim(),
+        SourcePage = req.SourcePage,
         SourceType = req.SourceType,
         DateCreatedUtc = now,
         DateModifiedUtc = now
@@ -665,6 +707,16 @@ api.MapPut("/items/{itemId:int}", async (int itemId, CreateItemRequest req, AppD
     row.Effect = string.IsNullOrWhiteSpace(req.Effect) ? null : req.Effect.Trim();
     row.RequiresAttunement = req.RequiresAttunement;
     row.AttunementRequirement = string.IsNullOrWhiteSpace(req.AttunementRequirement) ? null : req.AttunementRequirement.Trim();
+    row.DamageDice = string.IsNullOrWhiteSpace(req.DamageDice) ? null : req.DamageDice.Trim();
+    row.DamageType = string.IsNullOrWhiteSpace(req.DamageType) ? null : req.DamageType.Trim();
+    row.VersatileDamageDice = string.IsNullOrWhiteSpace(req.VersatileDamageDice) ? null : req.VersatileDamageDice.Trim();
+    row.ArmorClass = req.ArmorClass;
+    row.StrengthRequirement = req.StrengthRequirement;
+    row.StealthDisadvantage = req.StealthDisadvantage;
+    row.RangeNormal = req.RangeNormal;
+    row.RangeLong = req.RangeLong;
+    row.SourceBook = string.IsNullOrWhiteSpace(req.SourceBook) ? null : req.SourceBook.Trim();
+    row.SourcePage = req.SourcePage;
     row.SourceType = req.SourceType;
     row.DateModifiedUtc = DateTime.UtcNow;
 
@@ -1624,6 +1676,16 @@ public sealed class SeedItem
     public string? Effect { get; set; }
     public bool RequiresAttunement { get; set; }
     public string? AttunementRequirement { get; set; }
+    public string? DamageDice { get; set; }
+    public string? DamageType { get; set; }
+    public string? VersatileDamageDice { get; set; }
+    public int? ArmorClass { get; set; }
+    public int? StrengthRequirement { get; set; }
+    public bool StealthDisadvantage { get; set; }
+    public int? RangeNormal { get; set; }
+    public int? RangeLong { get; set; }
+    public string? SourceBook { get; set; }
+    public int? SourcePage { get; set; }
     public SourceType SourceType { get; set; } = SourceType.Official;
 }
 
@@ -1682,6 +1744,16 @@ public sealed class Item
     public string? Effect { get; set; }
     public bool RequiresAttunement { get; set; }
     public string? AttunementRequirement { get; set; }
+    public string? DamageDice { get; set; }
+    public string? DamageType { get; set; }
+    public string? VersatileDamageDice { get; set; }
+    public int? ArmorClass { get; set; }
+    public int? StrengthRequirement { get; set; }
+    public bool StealthDisadvantage { get; set; }
+    public int? RangeNormal { get; set; }
+    public int? RangeLong { get; set; }
+    public string? SourceBook { get; set; }
+    public int? SourcePage { get; set; }
     public SourceType SourceType { get; set; } = SourceType.Official;
     public DateTime DateCreatedUtc { get; set; }
     public DateTime DateModifiedUtc { get; set; }
@@ -1689,7 +1761,7 @@ public sealed class Item
 }
 
 public sealed record CreateItemTypeRequest(int GameSystemId, string Name, string? Description);
-public sealed record CreateItemRequest(int GameSystemId, string Name, int? ItemTypeDefinitionId, int? RarityDefinitionId, string? Description, decimal? CostAmount = null, int? CurrencyDefinitionId = null, string? CostCurrency = null, decimal? Weight = null, int Quantity = 1, string? Tags = null, string? Effect = null, bool RequiresAttunement = false, string? AttunementRequirement = null, List<int>? TagDefinitionIds = null, SourceType SourceType = SourceType.Official, string? Alias = null);
+public sealed record CreateItemRequest(int GameSystemId, string Name, int? ItemTypeDefinitionId, int? RarityDefinitionId, string? Description, decimal? CostAmount = null, int? CurrencyDefinitionId = null, string? CostCurrency = null, decimal? Weight = null, int Quantity = 1, string? Tags = null, string? Effect = null, bool RequiresAttunement = false, string? AttunementRequirement = null, string? DamageDice = null, string? DamageType = null, string? VersatileDamageDice = null, int? ArmorClass = null, int? StrengthRequirement = null, bool StealthDisadvantage = false, int? RangeNormal = null, int? RangeLong = null, string? SourceBook = null, int? SourcePage = null, List<int>? TagDefinitionIds = null, SourceType SourceType = SourceType.Official, string? Alias = null);
 
 public sealed record UpsertItemTypeRequest(int GameSystemId, string Name, string? Description);
 

@@ -45,6 +45,19 @@
             <MudItem xs="12" md="2"><MudSelect T="int?" @bind-Value="model.CurrencyDefinitionId" Label="Currency" Variant="Variant.Outlined"><MudSelectItem Value="@((int?)null)">(none)</MudSelectItem>@foreach (var c in currencies) { <MudSelectItem Value="@((int?)c.CurrencyDefinitionId)">@c.Code</MudSelectItem> }</MudSelect></MudItem>
             <MudItem xs="12" md="2"><MudNumericField T="decimal?" @bind-Value="model.Weight" Label="Weight (lb)" Variant="Variant.Outlined" /></MudItem>
             <MudItem xs="12" md="2"><MudNumericField T="int" @bind-Value="model.Quantity" Label="Qty" Variant="Variant.Outlined" Min="1" /></MudItem>
+
+            <MudItem xs="12" md="3"><MudTextField @bind-Value="model.DamageDice" Label="Damage Dice" Variant="Variant.Outlined" Placeholder="e.g., 1d8" /></MudItem>
+            <MudItem xs="12" md="3"><MudTextField @bind-Value="model.DamageType" Label="Damage Type" Variant="Variant.Outlined" Placeholder="e.g., Slashing" /></MudItem>
+            <MudItem xs="12" md="3"><MudTextField @bind-Value="model.VersatileDamageDice" Label="Versatile Dice" Variant="Variant.Outlined" Placeholder="e.g., 1d10" /></MudItem>
+            <MudItem xs="12" md="3"><MudNumericField T="int?" @bind-Value="model.ArmorClass" Label="Armor Class" Variant="Variant.Outlined" Min="0" /></MudItem>
+
+            <MudItem xs="12" md="3"><MudNumericField T="int?" @bind-Value="model.StrengthRequirement" Label="STR Requirement" Variant="Variant.Outlined" Min="0" /></MudItem>
+            <MudItem xs="12" md="3"><MudCheckBox @bind-Value="model.StealthDisadvantage" Label="Stealth Disadvantage" /></MudItem>
+            <MudItem xs="12" md="3"><MudNumericField T="int?" @bind-Value="model.RangeNormal" Label="Range (Normal)" Variant="Variant.Outlined" Min="0" /></MudItem>
+            <MudItem xs="12" md="3"><MudNumericField T="int?" @bind-Value="model.RangeLong" Label="Range (Long)" Variant="Variant.Outlined" Min="0" /></MudItem>
+
+            <MudItem xs="12" md="4"><MudTextField @bind-Value="model.SourceBook" Label="Source Book" Variant="Variant.Outlined" Placeholder="e.g., PHB" /></MudItem>
+            <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="model.SourcePage" Label="Source Page" Variant="Variant.Outlined" Min="1" /></MudItem>
             <MudItem xs="12" md="6">
                 <MudSelect T="int"
                            MultiSelection="true"
@@ -147,7 +160,17 @@
             Alias = dto.Alias,
             Effect = dto.Effect,
             RequiresAttunement = dto.RequiresAttunement,
-            AttunementRequirement = dto.AttunementRequirement
+            AttunementRequirement = dto.AttunementRequirement,
+            DamageDice = dto.DamageDice,
+            DamageType = dto.DamageType,
+            VersatileDamageDice = dto.VersatileDamageDice,
+            ArmorClass = dto.ArmorClass,
+            StrengthRequirement = dto.StrengthRequirement,
+            StealthDisadvantage = dto.StealthDisadvantage,
+            RangeNormal = dto.RangeNormal,
+            RangeLong = dto.RangeLong,
+            SourceBook = dto.SourceBook,
+            SourcePage = dto.SourcePage
         };
         selectedTagIds = model.TagDefinitionIds.ToHashSet();
 
@@ -214,6 +237,16 @@
             model.Effect,
             model.RequiresAttunement,
             model.AttunementRequirement,
+            model.DamageDice,
+            model.DamageType,
+            model.VersatileDamageDice,
+            model.ArmorClass,
+            model.StrengthRequirement,
+            model.StealthDisadvantage,
+            model.RangeNormal,
+            model.RangeLong,
+            model.SourceBook,
+            model.SourcePage,
             model.TagDefinitionIds,
             model.SourceType,
             model.Alias
@@ -243,6 +276,16 @@
         public string? Effect { get; set; }
         public bool RequiresAttunement { get; set; }
         public string? AttunementRequirement { get; set; }
+        public string? DamageDice { get; set; }
+        public string? DamageType { get; set; }
+        public string? VersatileDamageDice { get; set; }
+        public int? ArmorClass { get; set; }
+        public int? StrengthRequirement { get; set; }
+        public bool StealthDisadvantage { get; set; }
+        public int? RangeNormal { get; set; }
+        public int? RangeLong { get; set; }
+        public string? SourceBook { get; set; }
+        public int? SourcePage { get; set; }
         public List<int> TagDefinitionIds { get; set; } = new();
         public SourceType SourceType { get; set; } = SourceType.Official;
         public string? Alias { get; set; }
@@ -253,5 +296,5 @@
     private sealed record RarityDto(int RarityDefinitionId, int GameSystemId, string Name, string Slug);
     private sealed record CurrencyDto(int CurrencyDefinitionId, int GameSystemId, string Name, string Code);
     private sealed record TagDto(int TagDefinitionId, int GameSystemId, string Name, string Slug);
-    private sealed record ItemDto(int ItemId, int GameSystemId, string Name, string Slug, string? Alias, int? ItemTypeDefinitionId, int? RarityDefinitionId, string? Description, decimal? CostAmount, int? CurrencyDefinitionId, string? CostCurrency, decimal? Weight, int Quantity, string? Tags, string? Effect, bool RequiresAttunement, string? AttunementRequirement, List<int>? TagDefinitionIds, List<string>? TagNames, SourceType SourceType);
+    private sealed record ItemDto(int ItemId, int GameSystemId, string Name, string Slug, string? Alias, int? ItemTypeDefinitionId, int? RarityDefinitionId, string? Description, decimal? CostAmount, int? CurrencyDefinitionId, string? CostCurrency, decimal? Weight, int Quantity, string? Tags, string? Effect, bool RequiresAttunement, string? AttunementRequirement, string? DamageDice, string? DamageType, string? VersatileDamageDice, int? ArmorClass, int? StrengthRequirement, bool StealthDisadvantage, int? RangeNormal, int? RangeLong, string? SourceBook, int? SourcePage, List<int>? TagDefinitionIds, List<string>? TagNames, SourceType SourceType);
 }
