@@ -1,0 +1,110 @@
+{
+  "gameSystems": [
+    {
+      "name": "Dungeons & Dragons 5e",
+      "slug": "dungeons-dragons-5e",
+      "alias": "D&D 5e",
+      "description": "Fifth edition fantasy tabletop RPG.",
+      "sourceType": "Official"
+    },
+    {
+      "name": "Pathfinder 2e",
+      "slug": "pathfinder-2e",
+      "alias": "PF2e",
+      "description": "Second edition fantasy tabletop RPG.",
+      "sourceType": "Official"
+    }
+  ],
+  "itemTypes": [
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Weapon",
+      "slug": "weapon",
+      "description": "Items intended for combat attacks."
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Potion",
+      "slug": "potion",
+      "description": "Consumable magical liquids."
+    },
+    {
+      "gameSystemSlug": "pathfinder-2e",
+      "name": "Weapon",
+      "slug": "weapon",
+      "description": "Items intended for combat attacks."
+    },
+    {
+      "gameSystemSlug": "pathfinder-2e",
+      "name": "Consumable",
+      "slug": "consumable",
+      "description": "Single-use or expended items."
+    }
+  ],
+  "rarities": [
+    { "gameSystemSlug": "dungeons-dragons-5e", "name": "Common", "slug": "common", "sortOrder": 1 },
+    { "gameSystemSlug": "dungeons-dragons-5e", "name": "Uncommon", "slug": "uncommon", "sortOrder": 2 },
+    { "gameSystemSlug": "dungeons-dragons-5e", "name": "Rare", "slug": "rare", "sortOrder": 3 },
+    { "gameSystemSlug": "pathfinder-2e", "name": "Common", "slug": "common", "sortOrder": 1 },
+    { "gameSystemSlug": "pathfinder-2e", "name": "Uncommon", "slug": "uncommon", "sortOrder": 2 },
+    { "gameSystemSlug": "pathfinder-2e", "name": "Rare", "slug": "rare", "sortOrder": 3 }
+  ],
+  "currencies": [
+    { "gameSystemSlug": "dungeons-dragons-5e", "code": "gp", "name": "Gold Piece", "symbol": "gp" },
+    { "gameSystemSlug": "dungeons-dragons-5e", "code": "sp", "name": "Silver Piece", "symbol": "sp" },
+    { "gameSystemSlug": "pathfinder-2e", "code": "gp", "name": "Gold Piece", "symbol": "gp" },
+    { "gameSystemSlug": "pathfinder-2e", "code": "sp", "name": "Silver Piece", "symbol": "sp" }
+  ],
+  "items": [
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Healing Potion",
+      "slug": "healing-potion",
+      "itemTypeSlug": "potion",
+      "raritySlug": "common",
+      "description": "A common red potion that restores hit points.",
+      "costAmount": 50,
+      "currencyCode": "gp",
+      "weight": 0.5,
+      "quantity": 1,
+      "sourceType": "Official"
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Longsword",
+      "slug": "longsword",
+      "itemTypeSlug": "weapon",
+      "raritySlug": "common",
+      "description": "A versatile martial melee weapon.",
+      "costAmount": 15,
+      "currencyCode": "gp",
+      "weight": 3,
+      "quantity": 1,
+      "sourceType": "Official"
+    },
+    {
+      "gameSystemSlug": "pathfinder-2e",
+      "name": "Minor Healing Potion",
+      "slug": "minor-healing-potion",
+      "itemTypeSlug": "consumable",
+      "raritySlug": "common",
+      "description": "A basic consumable that restores a small amount of HP.",
+      "costAmount": 4,
+      "currencyCode": "gp",
+      "quantity": 1,
+      "sourceType": "Official"
+    },
+    {
+      "gameSystemSlug": "pathfinder-2e",
+      "name": "Explorer's Clothing",
+      "slug": "explorer-s-clothing",
+      "itemTypeSlug": "consumable",
+      "raritySlug": "common",
+      "description": "Simple but practical adventuring clothes.",
+      "costAmount": 1,
+      "currencyCode": "gp",
+      "quantity": 1,
+      "sourceType": "Official"
+    }
+  ]
+}

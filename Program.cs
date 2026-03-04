@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using MudBlazor.Services;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -188,7 +190,7 @@ using (var scope = app.Services.CreateScope())
     try { await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS IX_TagDefinitions_System_Slug_Unique_Active ON TagDefinitions (GameSystemId, Slug) WHERE DateDeletedUtc IS NULL;"); } catch (SqliteException) { }
     try { await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS IX_ItemTags_Item_Tag_Unique_Active ON ItemTags (ItemId, TagDefinitionId) WHERE DateDeletedUtc IS NULL;"); } catch (SqliteException) { }
 
-    await SeedStarterDataAsync(db);
+    await SeedStarterDataAsync(db, app.Environment.ContentRootPath);
 
 }
 
@@ -1177,66 +1179,211 @@ static async Task<string> GenerateUniqueItemSlugAsync(AppDbContext db, int gameS
 }
 
 
-static async Task SeedStarterDataAsync(AppDbContext db)
+static async Task SeedStarterDataAsync(AppDbContext db, string contentRootPath)
 {
-    var now = DateTime.UtcNow;
+    var seedPath = Path.Combine(contentRootPath, "SeedData", "seed-data.json");
+    if (!File.Exists(seedPath)) return;
 
-    var systemsToSeed = new[]
+    SeedDataFile? seed;
+    try
     {
-        new { Name = "Dungeons & Dragons 5e", Alias = "D&D 5e", Description = "Fifth edition fantasy tabletop RPG.", SourceType = SourceType.Official },
-        new { Name = "Pathfinder 2e", Alias = "PF2e", Description = "Second edition fantasy tabletop RPG.", SourceType = SourceType.Official }
-    };
-
-    foreach (var seed in systemsToSeed)
-    {
-        var slug = Slugify(seed.Name);
-        var existing = await db.GameSystems.FirstOrDefaultAsync(gs => gs.DateDeletedUtc == null && gs.Slug == slug);
-        if (existing is null)
+        await using var stream = File.OpenRead(seedPath);
+        var options = new JsonSerializerOptions
         {
-            db.GameSystems.Add(new GameSystem
-            {
-                Name = seed.Name,
-                Slug = await GenerateUniqueSlugAsync(db, slug),
-                Alias = seed.Alias,
-                Description = seed.Description,
-                SourceType = seed.SourceType,
-                DateCreatedUtc = now,
-                DateModifiedUtc = now
-            });
-        }
+            PropertyNameCaseInsensitive = true
+        };
+        options.Converters.Add(new JsonStringEnumConverter());
+        seed = await JsonSerializer.DeserializeAsync<SeedDataFile>(stream, options);
+    }
+    catch
+    {
+        return;
     }
 
-    await db.SaveChangesAsync();
+    if (seed is null) return;
+    var now = DateTime.UtcNow;
 
-    async Task EnsureItemAsync(string systemSlug, string itemName, string? description, decimal? costAmount, string? costCurrency, decimal? weight, SourceType sourceType = SourceType.Official)
+    var systemsBySlug = new Dictionary<string, GameSystem>();
+
+    foreach (var gs in seed.GameSystems)
     {
-        var system = await db.GameSystems.FirstOrDefaultAsync(gs => gs.DateDeletedUtc == null && gs.Slug == systemSlug);
-        if (system is null) return;
+        if (string.IsNullOrWhiteSpace(gs.Name)) continue;
 
-        var itemSlug = Slugify(itemName);
-        var existing = await db.Items.FirstOrDefaultAsync(i => i.DateDeletedUtc == null && i.GameSystemId == system.GameSystemId && i.Slug == itemSlug);
-        if (existing is not null) return;
+        var desiredSlug = string.IsNullOrWhiteSpace(gs.Slug) ? Slugify(gs.Name) : Slugify(gs.Slug);
+        if (string.IsNullOrWhiteSpace(desiredSlug)) desiredSlug = "game-system";
 
-        db.Items.Add(new Item
+        var existing = await db.GameSystems.FirstOrDefaultAsync(x => x.DateDeletedUtc == null && x.Slug == desiredSlug);
+        if (existing is null)
+        {
+            var uniqueSlug = await GenerateUniqueSlugAsync(db, desiredSlug);
+            existing = new GameSystem
+            {
+                Name = gs.Name.Trim(),
+                Slug = uniqueSlug,
+                Alias = gs.Alias,
+                Description = gs.Description,
+                SourceType = gs.SourceType,
+                DateCreatedUtc = now,
+                DateModifiedUtc = now
+            };
+            db.GameSystems.Add(existing);
+            await db.SaveChangesAsync();
+        }
+
+        systemsBySlug[existing.Slug] = existing;
+        if (!systemsBySlug.ContainsKey(desiredSlug))
+            systemsBySlug[desiredSlug] = existing;
+    }
+
+    async Task<GameSystem?> ResolveSystemAsync(string systemSlug)
+    {
+        var key = Slugify(systemSlug);
+        if (systemsBySlug.TryGetValue(key, out var gs)) return gs;
+
+        gs = await db.GameSystems.FirstOrDefaultAsync(x => x.DateDeletedUtc == null && x.Slug == key);
+        if (gs is not null) systemsBySlug[key] = gs;
+        return gs;
+    }
+
+    foreach (var it in seed.ItemTypes)
+    {
+        if (string.IsNullOrWhiteSpace(it.Name) || string.IsNullOrWhiteSpace(it.GameSystemSlug)) continue;
+
+        var system = await ResolveSystemAsync(it.GameSystemSlug);
+        if (system is null) continue;
+
+        var desiredSlug = string.IsNullOrWhiteSpace(it.Slug) ? Slugify(it.Name) : Slugify(it.Slug);
+        if (string.IsNullOrWhiteSpace(desiredSlug)) desiredSlug = "item-type";
+
+        var exists = await db.ItemTypeDefinitions.AnyAsync(x => x.DateDeletedUtc == null && x.GameSystemId == system.GameSystemId && x.Slug == desiredSlug);
+        if (exists) continue;
+
+        db.ItemTypeDefinitions.Add(new ItemTypeDefinition
         {
             GameSystemId = system.GameSystemId,
-            Name = itemName,
-            Slug = await GenerateUniqueItemSlugAsync(db, system.GameSystemId, itemSlug),
-            Description = description,
-            CostAmount = costAmount,
-            CostCurrency = costCurrency,
-            Weight = weight,
-            Quantity = 1,
-            SourceType = sourceType,
+            Name = it.Name.Trim(),
+            Slug = await GenerateUniqueItemTypeSlugAsync(db, system.GameSystemId, desiredSlug),
+            Description = it.Description,
             DateCreatedUtc = now,
             DateModifiedUtc = now
         });
     }
 
-    await EnsureItemAsync("dungeons-dragons-5e", "Healing Potion", "A common red potion that restores hit points.", 50m, "gp", 0.5m);
-    await EnsureItemAsync("dungeons-dragons-5e", "Longsword", "A versatile martial melee weapon.", 15m, "gp", 3m);
-    await EnsureItemAsync("pathfinder-2e", "Minor Healing Potion", "A basic consumable that restores a small amount of HP.", 4m, "gp", null);
-    await EnsureItemAsync("pathfinder-2e", "Explorer's Clothing", "Simple but practical adventuring clothes.", 1m, "gp", null);
+    foreach (var r in seed.Rarities)
+    {
+        if (string.IsNullOrWhiteSpace(r.Name) || string.IsNullOrWhiteSpace(r.GameSystemSlug)) continue;
+
+        var system = await ResolveSystemAsync(r.GameSystemSlug);
+        if (system is null) continue;
+
+        var desiredSlug = string.IsNullOrWhiteSpace(r.Slug) ? Slugify(r.Name) : Slugify(r.Slug);
+        if (string.IsNullOrWhiteSpace(desiredSlug)) desiredSlug = "rarity";
+
+        var exists = await db.RarityDefinitions.AnyAsync(x => x.DateDeletedUtc == null && x.GameSystemId == system.GameSystemId && x.Slug == desiredSlug);
+        if (exists) continue;
+
+        db.RarityDefinitions.Add(new RarityDefinition
+        {
+            GameSystemId = system.GameSystemId,
+            Name = r.Name.Trim(),
+            Slug = await GenerateUniqueRaritySlugAsync(db, system.GameSystemId, desiredSlug),
+            Description = r.Description,
+            SortOrder = r.SortOrder,
+            DateCreatedUtc = now,
+            DateModifiedUtc = now
+        });
+    }
+
+    foreach (var c in seed.Currencies)
+    {
+        if (string.IsNullOrWhiteSpace(c.Code) || string.IsNullOrWhiteSpace(c.GameSystemSlug)) continue;
+
+        var system = await ResolveSystemAsync(c.GameSystemSlug);
+        if (system is null) continue;
+
+        var code = c.Code.Trim().ToLowerInvariant();
+        var exists = await db.CurrencyDefinitions.AnyAsync(x => x.DateDeletedUtc == null && x.GameSystemId == system.GameSystemId && x.Code == code);
+        if (exists) continue;
+
+        db.CurrencyDefinitions.Add(new CurrencyDefinition
+        {
+            GameSystemId = system.GameSystemId,
+            Name = string.IsNullOrWhiteSpace(c.Name) ? code.ToUpperInvariant() : c.Name.Trim(),
+            Code = code,
+            Symbol = c.Symbol,
+            Description = c.Description,
+            DateCreatedUtc = now,
+            DateModifiedUtc = now
+        });
+    }
+
+    await db.SaveChangesAsync();
+
+    foreach (var i in seed.Items)
+    {
+        if (string.IsNullOrWhiteSpace(i.Name) || string.IsNullOrWhiteSpace(i.GameSystemSlug)) continue;
+
+        var system = await ResolveSystemAsync(i.GameSystemSlug);
+        if (system is null) continue;
+
+        var desiredSlug = string.IsNullOrWhiteSpace(i.Slug) ? Slugify(i.Name) : Slugify(i.Slug);
+        if (string.IsNullOrWhiteSpace(desiredSlug)) desiredSlug = "item";
+
+        var exists = await db.Items.AnyAsync(x => x.DateDeletedUtc == null && x.GameSystemId == system.GameSystemId && x.Slug == desiredSlug);
+        if (exists) continue;
+
+        int? itemTypeId = null;
+        if (!string.IsNullOrWhiteSpace(i.ItemTypeSlug))
+        {
+            var itemTypeSlug = Slugify(i.ItemTypeSlug);
+            itemTypeId = await db.ItemTypeDefinitions
+                .Where(x => x.DateDeletedUtc == null && x.GameSystemId == system.GameSystemId && x.Slug == itemTypeSlug)
+                .Select(x => (int?)x.ItemTypeDefinitionId)
+                .FirstOrDefaultAsync();
+        }
+
+        int? rarityId = null;
+        if (!string.IsNullOrWhiteSpace(i.RaritySlug))
+        {
+            var raritySlug = Slugify(i.RaritySlug);
+            rarityId = await db.RarityDefinitions
+                .Where(x => x.DateDeletedUtc == null && x.GameSystemId == system.GameSystemId && x.Slug == raritySlug)
+                .Select(x => (int?)x.RarityDefinitionId)
+                .FirstOrDefaultAsync();
+        }
+
+        int? currencyId = null;
+        if (!string.IsNullOrWhiteSpace(i.CurrencyCode))
+        {
+            var currencyCode = i.CurrencyCode.Trim().ToLowerInvariant();
+            currencyId = await db.CurrencyDefinitions
+                .Where(x => x.DateDeletedUtc == null && x.GameSystemId == system.GameSystemId && x.Code == currencyCode)
+                .Select(x => (int?)x.CurrencyDefinitionId)
+                .FirstOrDefaultAsync();
+        }
+
+        db.Items.Add(new Item
+        {
+            GameSystemId = system.GameSystemId,
+            Name = i.Name.Trim(),
+            Slug = await GenerateUniqueItemSlugAsync(db, system.GameSystemId, desiredSlug),
+            Alias = i.Alias,
+            ItemTypeDefinitionId = itemTypeId,
+            RarityDefinitionId = rarityId,
+            Description = i.Description,
+            CostAmount = i.CostAmount,
+            CurrencyDefinitionId = currencyId,
+            CostCurrency = i.CurrencyCode,
+            Weight = i.Weight,
+            Quantity = i.Quantity <= 0 ? 1 : i.Quantity,
+            Effect = i.Effect,
+            RequiresAttunement = i.RequiresAttunement,
+            AttunementRequirement = i.AttunementRequirement,
+            SourceType = i.SourceType,
+            DateCreatedUtc = now,
+            DateModifiedUtc = now
+        });
+    }
 
     await db.SaveChangesAsync();
 }
@@ -1265,6 +1412,69 @@ public sealed class Note
 }
 
 public sealed record CreateNoteRequest(string Title, string? Body);
+
+public sealed class SeedDataFile
+{
+    public List<SeedGameSystem> GameSystems { get; set; } = new();
+    public List<SeedItemType> ItemTypes { get; set; } = new();
+    public List<SeedRarity> Rarities { get; set; } = new();
+    public List<SeedCurrency> Currencies { get; set; } = new();
+    public List<SeedItem> Items { get; set; } = new();
+}
+
+public sealed class SeedGameSystem
+{
+    public string Name { get; set; } = string.Empty;
+    public string? Slug { get; set; }
+    public string? Alias { get; set; }
+    public string? Description { get; set; }
+    public SourceType SourceType { get; set; } = SourceType.Official;
+}
+
+public sealed class SeedItemType
+{
+    public string GameSystemSlug { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string? Slug { get; set; }
+    public string? Description { get; set; }
+}
+
+public sealed class SeedRarity
+{
+    public string GameSystemSlug { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string? Slug { get; set; }
+    public string? Description { get; set; }
+    public int SortOrder { get; set; }
+}
+
+public sealed class SeedCurrency
+{
+    public string GameSystemSlug { get; set; } = string.Empty;
+    public string Code { get; set; } = string.Empty;
+    public string? Name { get; set; }
+    public string? Symbol { get; set; }
+    public string? Description { get; set; }
+}
+
+public sealed class SeedItem
+{
+    public string GameSystemSlug { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string? Slug { get; set; }
+    public string? Alias { get; set; }
+    public string? ItemTypeSlug { get; set; }
+    public string? RaritySlug { get; set; }
+    public string? Description { get; set; }
+    public decimal? CostAmount { get; set; }
+    public string? CurrencyCode { get; set; }
+    public decimal? Weight { get; set; }
+    public int Quantity { get; set; } = 1;
+    public string? Effect { get; set; }
+    public bool RequiresAttunement { get; set; }
+    public string? AttunementRequirement { get; set; }
+    public SourceType SourceType { get; set; } = SourceType.Official;
+}
 
 public enum SourceType
 {
