@@ -20,40 +20,270 @@
       "gameSystemSlug": "dungeons-dragons-5e",
       "name": "Weapon",
       "slug": "weapon",
-      "description": "Items intended for combat attacks."
+      "description": "Weapons used for melee or ranged attacks."
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Armor",
+      "slug": "armor",
+      "description": "Protective gear worn for defense."
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Shield",
+      "slug": "shield",
+      "description": "Shields that improve Armor Class."
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Ammunition",
+      "slug": "ammunition",
+      "description": "Projectiles used with ranged weapons."
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Adventuring Gear",
+      "slug": "adventuring-gear",
+      "description": "General-use equipment for adventuring."
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Tool",
+      "slug": "tool",
+      "description": "Tools and kits used for specific tasks."
     },
     {
       "gameSystemSlug": "dungeons-dragons-5e",
       "name": "Potion",
       "slug": "potion",
-      "description": "Consumable magical liquids."
+      "description": "Magical consumable liquids."
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Scroll",
+      "slug": "scroll",
+      "description": "Spell scrolls and related parchment magic."
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Ring",
+      "slug": "ring",
+      "description": "Magical rings."
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Rod",
+      "slug": "rod",
+      "description": "Magical rods."
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Staff",
+      "slug": "staff",
+      "description": "Magical staffs."
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Wand",
+      "slug": "wand",
+      "description": "Magical wands."
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Wondrous Item",
+      "slug": "wondrous-item",
+      "description": "Miscellaneous magical items."
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Mount & Vehicle",
+      "slug": "mount-vehicle",
+      "description": "Mounts, tack, and vehicles."
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Trade Good",
+      "slug": "trade-good",
+      "description": "Goods and commodities with market value."
     },
     {
       "gameSystemSlug": "pathfinder-2e",
       "name": "Weapon",
       "slug": "weapon",
-      "description": "Items intended for combat attacks."
+      "description": "Weapons used for combat."
+    },
+    {
+      "gameSystemSlug": "pathfinder-2e",
+      "name": "Armor",
+      "slug": "armor",
+      "description": "Protective worn equipment."
+    },
+    {
+      "gameSystemSlug": "pathfinder-2e",
+      "name": "Shield",
+      "slug": "shield",
+      "description": "Defensive shields."
+    },
+    {
+      "gameSystemSlug": "pathfinder-2e",
+      "name": "Ammunition",
+      "slug": "ammunition",
+      "description": "Ammunition for ranged attacks."
     },
     {
       "gameSystemSlug": "pathfinder-2e",
       "name": "Consumable",
       "slug": "consumable",
       "description": "Single-use or expended items."
+    },
+    {
+      "gameSystemSlug": "pathfinder-2e",
+      "name": "Alchemical",
+      "slug": "alchemical",
+      "description": "Alchemical items and compounds."
+    },
+    {
+      "gameSystemSlug": "pathfinder-2e",
+      "name": "Adventuring Gear",
+      "slug": "adventuring-gear",
+      "description": "General equipment for exploration."
+    },
+    {
+      "gameSystemSlug": "pathfinder-2e",
+      "name": "Tool",
+      "slug": "tool",
+      "description": "Tools and kits."
+    },
+    {
+      "gameSystemSlug": "pathfinder-2e",
+      "name": "Worn Item",
+      "slug": "worn-item",
+      "description": "Wearable magical or mundane items."
+    },
+    {
+      "gameSystemSlug": "pathfinder-2e",
+      "name": "Snare",
+      "slug": "snare",
+      "description": "Deployable trap-like items."
     }
   ],
   "rarities": [
-    { "gameSystemSlug": "dungeons-dragons-5e", "name": "Common", "slug": "common", "sortOrder": 1 },
-    { "gameSystemSlug": "dungeons-dragons-5e", "name": "Uncommon", "slug": "uncommon", "sortOrder": 2 },
-    { "gameSystemSlug": "dungeons-dragons-5e", "name": "Rare", "slug": "rare", "sortOrder": 3 },
-    { "gameSystemSlug": "pathfinder-2e", "name": "Common", "slug": "common", "sortOrder": 1 },
-    { "gameSystemSlug": "pathfinder-2e", "name": "Uncommon", "slug": "uncommon", "sortOrder": 2 },
-    { "gameSystemSlug": "pathfinder-2e", "name": "Rare", "slug": "rare", "sortOrder": 3 }
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Common",
+      "slug": "common",
+      "sortOrder": 1
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Uncommon",
+      "slug": "uncommon",
+      "sortOrder": 2
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Rare",
+      "slug": "rare",
+      "sortOrder": 3
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Very Rare",
+      "slug": "very-rare",
+      "sortOrder": 4
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Legendary",
+      "slug": "legendary",
+      "sortOrder": 5
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Artifact",
+      "slug": "artifact",
+      "sortOrder": 6
+    },
+    {
+      "gameSystemSlug": "pathfinder-2e",
+      "name": "Common",
+      "slug": "common",
+      "sortOrder": 1
+    },
+    {
+      "gameSystemSlug": "pathfinder-2e",
+      "name": "Uncommon",
+      "slug": "uncommon",
+      "sortOrder": 2
+    },
+    {
+      "gameSystemSlug": "pathfinder-2e",
+      "name": "Rare",
+      "slug": "rare",
+      "sortOrder": 3
+    },
+    {
+      "gameSystemSlug": "pathfinder-2e",
+      "name": "Unique",
+      "slug": "unique",
+      "sortOrder": 4
+    }
   ],
   "currencies": [
-    { "gameSystemSlug": "dungeons-dragons-5e", "code": "gp", "name": "Gold Piece", "symbol": "gp" },
-    { "gameSystemSlug": "dungeons-dragons-5e", "code": "sp", "name": "Silver Piece", "symbol": "sp" },
-    { "gameSystemSlug": "pathfinder-2e", "code": "gp", "name": "Gold Piece", "symbol": "gp" },
-    { "gameSystemSlug": "pathfinder-2e", "code": "sp", "name": "Silver Piece", "symbol": "sp" }
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "code": "cp",
+      "name": "Copper Piece",
+      "symbol": "cp"
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "code": "sp",
+      "name": "Silver Piece",
+      "symbol": "sp"
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "code": "ep",
+      "name": "Electrum Piece",
+      "symbol": "ep"
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "code": "gp",
+      "name": "Gold Piece",
+      "symbol": "gp"
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "code": "pp",
+      "name": "Platinum Piece",
+      "symbol": "pp"
+    },
+    {
+      "gameSystemSlug": "pathfinder-2e",
+      "code": "cp",
+      "name": "Copper Piece",
+      "symbol": "cp"
+    },
+    {
+      "gameSystemSlug": "pathfinder-2e",
+      "code": "sp",
+      "name": "Silver Piece",
+      "symbol": "sp"
+    },
+    {
+      "gameSystemSlug": "pathfinder-2e",
+      "code": "gp",
+      "name": "Gold Piece",
+      "symbol": "gp"
+    },
+    {
+      "gameSystemSlug": "pathfinder-2e",
+      "code": "pp",
+      "name": "Platinum Piece",
+      "symbol": "pp"
+    }
   ],
   "items": [
     {
