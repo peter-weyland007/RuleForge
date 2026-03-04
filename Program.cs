@@ -1619,6 +1619,15 @@ static async Task SeedStarterDataAsync(AppDbContext db, string contentRootPath)
                 ChargesMax = i.ChargesMax,
                 RechargeRule = i.RechargeRule,
                 UsesPerDay = i.UsesPerDay,
+                ArmorCategory = i.ArmorCategory,
+                WeaponPropertyLight = i.WeaponPropertyLight,
+                WeaponPropertyHeavy = i.WeaponPropertyHeavy,
+                WeaponPropertyFinesse = i.WeaponPropertyFinesse,
+                WeaponPropertyThrown = i.WeaponPropertyThrown,
+                WeaponPropertyTwoHanded = i.WeaponPropertyTwoHanded,
+                WeaponPropertyLoading = i.WeaponPropertyLoading,
+                WeaponPropertyReach = i.WeaponPropertyReach,
+                WeaponPropertyAmmunition = i.WeaponPropertyAmmunition,
                 SourceType = i.SourceType,
                 DateCreatedUtc = now,
                 DateModifiedUtc = now
@@ -1656,6 +1665,15 @@ static async Task SeedStarterDataAsync(AppDbContext db, string contentRootPath)
             existingItem.ChargesMax = i.ChargesMax;
             existingItem.RechargeRule = i.RechargeRule;
             existingItem.UsesPerDay = i.UsesPerDay;
+            existingItem.ArmorCategory = i.ArmorCategory;
+            existingItem.WeaponPropertyLight = i.WeaponPropertyLight;
+            existingItem.WeaponPropertyHeavy = i.WeaponPropertyHeavy;
+            existingItem.WeaponPropertyFinesse = i.WeaponPropertyFinesse;
+            existingItem.WeaponPropertyThrown = i.WeaponPropertyThrown;
+            existingItem.WeaponPropertyTwoHanded = i.WeaponPropertyTwoHanded;
+            existingItem.WeaponPropertyLoading = i.WeaponPropertyLoading;
+            existingItem.WeaponPropertyReach = i.WeaponPropertyReach;
+            existingItem.WeaponPropertyAmmunition = i.WeaponPropertyAmmunition;
             existingItem.SourceType = i.SourceType;
             existingItem.DateModifiedUtc = now;
         }
