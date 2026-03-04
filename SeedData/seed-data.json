@@ -336,5 +336,157 @@
       "quantity": 1,
       "sourceType": "Official"
     }
+  ],
+  "tags": [
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Melee",
+      "slug": "melee"
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Ranged",
+      "slug": "ranged"
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Simple",
+      "slug": "simple"
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Martial",
+      "slug": "martial"
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Light",
+      "slug": "light"
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Heavy",
+      "slug": "heavy"
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Finesse",
+      "slug": "finesse"
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Two-Handed",
+      "slug": "two-handed"
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Versatile",
+      "slug": "versatile"
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Reach",
+      "slug": "reach"
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Thrown",
+      "slug": "thrown"
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Ammunition",
+      "slug": "ammunition"
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Loading",
+      "slug": "loading"
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Potion",
+      "slug": "potion"
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Consumable",
+      "slug": "consumable"
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Healing",
+      "slug": "healing"
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Wondrous",
+      "slug": "wondrous"
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "name": "Attunement",
+      "slug": "attunement"
+    },
+    {
+      "gameSystemSlug": "pathfinder-2e",
+      "name": "Melee",
+      "slug": "melee"
+    },
+    {
+      "gameSystemSlug": "pathfinder-2e",
+      "name": "Ranged",
+      "slug": "ranged"
+    },
+    {
+      "gameSystemSlug": "pathfinder-2e",
+      "name": "Simple",
+      "slug": "simple"
+    },
+    {
+      "gameSystemSlug": "pathfinder-2e",
+      "name": "Martial",
+      "slug": "martial"
+    },
+    {
+      "gameSystemSlug": "pathfinder-2e",
+      "name": "Agile",
+      "slug": "agile"
+    },
+    {
+      "gameSystemSlug": "pathfinder-2e",
+      "name": "Finesse",
+      "slug": "finesse"
+    },
+    {
+      "gameSystemSlug": "pathfinder-2e",
+      "name": "Reach",
+      "slug": "reach"
+    },
+    {
+      "gameSystemSlug": "pathfinder-2e",
+      "name": "Deadly",
+      "slug": "deadly"
+    },
+    {
+      "gameSystemSlug": "pathfinder-2e",
+      "name": "Versatile",
+      "slug": "versatile"
+    },
+    {
+      "gameSystemSlug": "pathfinder-2e",
+      "name": "Alchemical",
+      "slug": "alchemical"
+    },
+    {
+      "gameSystemSlug": "pathfinder-2e",
+      "name": "Consumable",
+      "slug": "consumable"
+    },
+    {
+      "gameSystemSlug": "pathfinder-2e",
+      "name": "Healing",
+      "slug": "healing"
+    }
   ]
 }

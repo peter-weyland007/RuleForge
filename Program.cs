@@ -1340,6 +1340,35 @@ static async Task SeedStarterDataAsync(AppDbContext db, string contentRootPath)
         }
     }
 
+    foreach (var t in seed.Tags)
+    {
+        if (string.IsNullOrWhiteSpace(t.Name) || string.IsNullOrWhiteSpace(t.GameSystemSlug)) continue;
+
+        var system = await ResolveSystemAsync(t.GameSystemSlug);
+        if (system is null) continue;
+
+        var desiredSlug = string.IsNullOrWhiteSpace(t.Slug) ? Slugify(t.Name) : Slugify(t.Slug);
+        if (string.IsNullOrWhiteSpace(desiredSlug)) desiredSlug = "tag";
+
+        var existingTag = await db.TagDefinitions.FirstOrDefaultAsync(x => x.DateDeletedUtc == null && x.GameSystemId == system.GameSystemId && x.Slug == desiredSlug);
+        if (existingTag is null)
+        {
+            db.TagDefinitions.Add(new TagDefinition
+            {
+                GameSystemId = system.GameSystemId,
+                Name = t.Name.Trim(),
+                Slug = await GenerateUniqueTagSlugAsync(db, system.GameSystemId, desiredSlug),
+                DateCreatedUtc = now,
+                DateModifiedUtc = now
+            });
+        }
+        else
+        {
+            existingTag.Name = t.Name.Trim();
+            existingTag.DateModifiedUtc = now;
+        }
+    }
+
     await db.SaveChangesAsync();
 
     foreach (var i in seed.Items)
@@ -1462,6 +1491,7 @@ public sealed class SeedDataFile
     public List<SeedItemType> ItemTypes { get; set; } = new();
     public List<SeedRarity> Rarities { get; set; } = new();
     public List<SeedCurrency> Currencies { get; set; } = new();
+    public List<SeedTag> Tags { get; set; } = new();
     public List<SeedItem> Items { get; set; } = new();
 }
 
@@ -1498,6 +1528,13 @@ public sealed class SeedCurrency
     public string? Name { get; set; }
     public string? Symbol { get; set; }
     public string? Description { get; set; }
+}
+
+public sealed class SeedTag
+{
+    public string GameSystemSlug { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string? Slug { get; set; }
 }
 
 public sealed class SeedItem
