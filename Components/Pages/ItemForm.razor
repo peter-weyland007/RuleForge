@@ -48,8 +48,18 @@
             <MudItem xs="12" md="6"><MudSelect T="int" MultiSelection="true" SelectedValues="model.TagDefinitionIds" SelectedValuesChanged="OnTagsChanged" Label="Tags" Variant="Variant.Outlined">@foreach (var t in tags){<MudSelectItem Value="@t.TagDefinitionId">@t.Name</MudSelectItem>}</MudSelect></MudItem>
             <MudItem xs="12" md="3"><MudTextField @bind-Value="model.Alias" Label="Alias (optional)" Variant="Variant.Outlined" /></MudItem>
 
-            <MudItem xs="12" md="3"><MudCheckBox @bind-Value="model.RequiresAttunement" Label="Requires Attunement" /></MudItem>
-            <MudItem xs="12" md="9"><MudTextField @bind-Value="model.AttunementRequirement" Label="Attunement Requirement" Variant="Variant.Outlined" Disabled="@(!model.RequiresAttunement)" /></MudItem>
+            <MudItem xs="12">
+                <MudPaper Outlined="true" Class="pa-3">
+                    <MudStack Spacing="2">
+                        <MudCheckBox @bind-Value="model.RequiresAttunement" Label="Requires Attunement" />
+                        <MudTextField @bind-Value="model.AttunementRequirement"
+                                      Label="Attunement Requirement"
+                                      Variant="Variant.Outlined"
+                                      Disabled="@(!model.RequiresAttunement)"
+                                      Placeholder="e.g., by a wizard" />
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
 
                         <MudItem xs="12">
                 <MarkdownEditor Value="@model.Effect" ValueChanged="@( (string? v) => model.Effect = v )" Label="Effect (Markdown)" Rows="10" ShowPreview="true" />
