@@ -632,6 +632,9 @@ api.MapPost("/items", async (CreateItemRequest req, AppDbContext db) =>
         if (!currencyExists) return Results.BadRequest("CurrencyDefinitionId is invalid for this system.");
     }
 
+    var validationError = ValidateItemRequest(req);
+    if (validationError is not null) return Results.BadRequest(validationError);
+
     var now = DateTime.UtcNow;
     var slug = await GenerateUniqueItemSlugAsync(db, req.GameSystemId, Slugify(req.Name));
     var row = new Item
@@ -705,6 +708,15 @@ api.MapPut("/items/{itemId:int}", async (int itemId, CreateItemRequest req, AppD
         var rarityExists = await db.RarityDefinitions.AnyAsync(r => r.RarityDefinitionId == req.RarityDefinitionId.Value && r.GameSystemId == req.GameSystemId && r.DateDeletedUtc == null);
         if (!rarityExists) return Results.BadRequest("RarityDefinitionId is invalid for this system.");
     }
+
+    if (req.CurrencyDefinitionId.HasValue)
+    {
+        var currencyExists = await db.CurrencyDefinitions.AnyAsync(c => c.CurrencyDefinitionId == req.CurrencyDefinitionId.Value && c.GameSystemId == req.GameSystemId && c.DateDeletedUtc == null);
+        if (!currencyExists) return Results.BadRequest("CurrencyDefinitionId is invalid for this system.");
+    }
+
+    var validationError = ValidateItemRequest(req);
+    if (validationError is not null) return Results.BadRequest(validationError);
 
     var newName = ToTitleCase(req.Name);
     var nameChanged = !string.Equals(row.Name, newName, StringComparison.Ordinal);
@@ -1609,6 +1621,31 @@ static async Task SeedStarterDataAsync(AppDbContext db, string contentRootPath)
 }
 
 
+static string? ValidateItemRequest(CreateItemRequest req)
+{
+    if (req.Quantity <= 0) return "Quantity must be at least 1.";
+    if (req.CostAmount.HasValue && req.CostAmount.Value < 0) return "CostAmount cannot be negative.";
+    if (req.Weight.HasValue && req.Weight.Value < 0) return "Weight cannot be negative.";
+
+    if (req.ArmorClass.HasValue && req.ArmorClass.Value < 0) return "ArmorClass cannot be negative.";
+    if (req.StrengthRequirement.HasValue && req.StrengthRequirement.Value < 0) return "StrengthRequirement cannot be negative.";
+    if (req.RangeNormal.HasValue && req.RangeNormal.Value < 0) return "RangeNormal cannot be negative.";
+    if (req.RangeLong.HasValue && req.RangeLong.Value < 0) return "RangeLong cannot be negative.";
+    if (req.RangeNormal.HasValue && req.RangeLong.HasValue && req.RangeLong.Value < req.RangeNormal.Value)
+        return "RangeLong must be greater than or equal to RangeNormal.";
+
+    if (req.SourcePage.HasValue && req.SourcePage.Value <= 0) return "SourcePage must be greater than 0.";
+
+    if (req.ChargesCurrent.HasValue && req.ChargesCurrent.Value < 0) return "ChargesCurrent cannot be negative.";
+    if (req.ChargesMax.HasValue && req.ChargesMax.Value < 0) return "ChargesMax cannot be negative.";
+    if (req.ChargesCurrent.HasValue && req.ChargesMax.HasValue && req.ChargesCurrent.Value > req.ChargesMax.Value)
+        return "ChargesCurrent cannot exceed ChargesMax.";
+
+    if (req.UsesPerDay.HasValue && req.UsesPerDay.Value < 0) return "UsesPerDay cannot be negative.";
+
+    return null;
+}
+
 public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
     public DbSet<Note> Notes => Set<Note>();
@@ -1797,6 +1834,8 @@ public sealed class Item
 }
 
 public sealed record CreateItemTypeRequest(int GameSystemId, string Name, string? Description);
+
+
 public sealed record CreateItemRequest(int GameSystemId, string Name, int? ItemTypeDefinitionId, int? RarityDefinitionId, string? Description, decimal? CostAmount = null, int? CurrencyDefinitionId = null, string? CostCurrency = null, decimal? Weight = null, int Quantity = 1, string? Tags = null, string? Effect = null, bool RequiresAttunement = false, string? AttunementRequirement = null, string? DamageDice = null, string? DamageType = null, string? VersatileDamageDice = null, int? ArmorClass = null, int? StrengthRequirement = null, bool StealthDisadvantage = false, int? RangeNormal = null, int? RangeLong = null, string? SourceBook = null, int? SourcePage = null, bool IsConsumable = false, int? ChargesCurrent = null, int? ChargesMax = null, string? RechargeRule = null, int? UsesPerDay = null, List<int>? TagDefinitionIds = null, SourceType SourceType = SourceType.Official, string? Alias = null);
 
 public sealed record UpsertItemTypeRequest(int GameSystemId, string Name, string? Description);
