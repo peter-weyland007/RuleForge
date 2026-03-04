@@ -188,9 +188,7 @@ using (var scope = app.Services.CreateScope())
     try { await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS IX_TagDefinitions_System_Slug_Unique_Active ON TagDefinitions (GameSystemId, Slug) WHERE DateDeletedUtc IS NULL;"); } catch (SqliteException) { }
     try { await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS IX_ItemTags_Item_Tag_Unique_Active ON ItemTags (ItemId, TagDefinitionId) WHERE DateDeletedUtc IS NULL;"); } catch (SqliteException) { }
 
-
-
-
+    await SeedStarterDataAsync(db);
 
 }
 
@@ -1177,6 +1175,72 @@ static async Task<string> GenerateUniqueItemSlugAsync(AppDbContext db, int gameS
 
     return candidate;
 }
+
+
+static async Task SeedStarterDataAsync(AppDbContext db)
+{
+    var now = DateTime.UtcNow;
+
+    var systemsToSeed = new[]
+    {
+        new { Name = "Dungeons & Dragons 5e", Alias = "D&D 5e", Description = "Fifth edition fantasy tabletop RPG.", SourceType = SourceType.Official },
+        new { Name = "Pathfinder 2e", Alias = "PF2e", Description = "Second edition fantasy tabletop RPG.", SourceType = SourceType.Official }
+    };
+
+    foreach (var seed in systemsToSeed)
+    {
+        var slug = Slugify(seed.Name);
+        var existing = await db.GameSystems.FirstOrDefaultAsync(gs => gs.DateDeletedUtc == null && gs.Slug == slug);
+        if (existing is null)
+        {
+            db.GameSystems.Add(new GameSystem
+            {
+                Name = seed.Name,
+                Slug = await GenerateUniqueSlugAsync(db, slug),
+                Alias = seed.Alias,
+                Description = seed.Description,
+                SourceType = seed.SourceType,
+                DateCreatedUtc = now,
+                DateModifiedUtc = now
+            });
+        }
+    }
+
+    await db.SaveChangesAsync();
+
+    async Task EnsureItemAsync(string systemSlug, string itemName, string? description, decimal? costAmount, string? costCurrency, decimal? weight, SourceType sourceType = SourceType.Official)
+    {
+        var system = await db.GameSystems.FirstOrDefaultAsync(gs => gs.DateDeletedUtc == null && gs.Slug == systemSlug);
+        if (system is null) return;
+
+        var itemSlug = Slugify(itemName);
+        var existing = await db.Items.FirstOrDefaultAsync(i => i.DateDeletedUtc == null && i.GameSystemId == system.GameSystemId && i.Slug == itemSlug);
+        if (existing is not null) return;
+
+        db.Items.Add(new Item
+        {
+            GameSystemId = system.GameSystemId,
+            Name = itemName,
+            Slug = await GenerateUniqueItemSlugAsync(db, system.GameSystemId, itemSlug),
+            Description = description,
+            CostAmount = costAmount,
+            CostCurrency = costCurrency,
+            Weight = weight,
+            Quantity = 1,
+            SourceType = sourceType,
+            DateCreatedUtc = now,
+            DateModifiedUtc = now
+        });
+    }
+
+    await EnsureItemAsync("dungeons-dragons-5e", "Healing Potion", "A common red potion that restores hit points.", 50m, "gp", 0.5m);
+    await EnsureItemAsync("dungeons-dragons-5e", "Longsword", "A versatile martial melee weapon.", 15m, "gp", 3m);
+    await EnsureItemAsync("pathfinder-2e", "Minor Healing Potion", "A basic consumable that restores a small amount of HP.", 4m, "gp", null);
+    await EnsureItemAsync("pathfinder-2e", "Explorer's Clothing", "Simple but practical adventuring clothes.", 1m, "gp", null);
+
+    await db.SaveChangesAsync();
+}
+
 
 public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
