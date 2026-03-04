@@ -302,7 +302,22 @@
         "potion",
         "consumable",
         "healing"
-      ]
+      ],
+      "damageDice": null,
+      "damageType": null,
+      "versatileDamageDice": null,
+      "armorClass": null,
+      "strengthRequirement": null,
+      "stealthDisadvantage": false,
+      "rangeNormal": 5,
+      "rangeLong": 5,
+      "sourceBook": "PHB",
+      "sourcePage": 153,
+      "isConsumable": true,
+      "chargesCurrent": null,
+      "chargesMax": null,
+      "rechargeRule": null,
+      "usesPerDay": 1
     },
     {
       "gameSystemSlug": "dungeons-dragons-5e",
@@ -321,7 +336,22 @@
         "melee",
         "martial",
         "versatile"
-      ]
+      ],
+      "damageDice": "1d8",
+      "damageType": "Slashing",
+      "versatileDamageDice": "1d10",
+      "armorClass": null,
+      "strengthRequirement": null,
+      "stealthDisadvantage": false,
+      "rangeNormal": 5,
+      "rangeLong": 5,
+      "sourceBook": "PHB",
+      "sourcePage": 149,
+      "isConsumable": false,
+      "chargesCurrent": null,
+      "chargesMax": null,
+      "rechargeRule": null,
+      "usesPerDay": null
     },
     {
       "gameSystemSlug": "pathfinder-2e",
@@ -337,7 +367,22 @@
       "tagSlugs": [
         "consumable",
         "healing"
-      ]
+      ],
+      "damageDice": null,
+      "damageType": null,
+      "versatileDamageDice": null,
+      "armorClass": null,
+      "strengthRequirement": null,
+      "stealthDisadvantage": false,
+      "rangeNormal": null,
+      "rangeLong": null,
+      "sourceBook": "CRB",
+      "sourcePage": 563,
+      "isConsumable": true,
+      "chargesCurrent": null,
+      "chargesMax": null,
+      "rechargeRule": null,
+      "usesPerDay": 1
     },
     {
       "gameSystemSlug": "pathfinder-2e",
@@ -352,7 +397,22 @@
       "sourceType": "Official",
       "tagSlugs": [
         "consumable"
-      ]
+      ],
+      "damageDice": null,
+      "damageType": null,
+      "versatileDamageDice": null,
+      "armorClass": 0,
+      "strengthRequirement": null,
+      "stealthDisadvantage": false,
+      "rangeNormal": null,
+      "rangeLong": null,
+      "sourceBook": "CRB",
+      "sourcePage": 289,
+      "isConsumable": false,
+      "chargesCurrent": null,
+      "chargesMax": null,
+      "rechargeRule": null,
+      "usesPerDay": null
     }
   ],
   "tags": [
