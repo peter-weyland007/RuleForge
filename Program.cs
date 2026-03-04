@@ -642,10 +642,12 @@ api.MapPost("/items", async (CreateItemRequest req, AppDbContext db) =>
     if (!gsExists) return Results.BadRequest("GameSystemId is invalid.");
     if (string.IsNullOrWhiteSpace(req.Name)) return Results.BadRequest("Name is required.");
 
+    string? itemTypeName = null;
     if (req.ItemTypeDefinitionId.HasValue)
     {
-        var typeExists = await db.ItemTypeDefinitions.AnyAsync(t => t.ItemTypeDefinitionId == req.ItemTypeDefinitionId.Value && t.GameSystemId == req.GameSystemId && t.DateDeletedUtc == null);
-        if (!typeExists) return Results.BadRequest("ItemTypeDefinitionId is invalid for this system.");
+        var itemType = await db.ItemTypeDefinitions.FirstOrDefaultAsync(t => t.ItemTypeDefinitionId == req.ItemTypeDefinitionId.Value && t.GameSystemId == req.GameSystemId && t.DateDeletedUtc == null);
+        if (itemType is null) return Results.BadRequest("ItemTypeDefinitionId is invalid for this system.");
+        itemTypeName = itemType.Name;
     }
 
     if (req.RarityDefinitionId.HasValue)
@@ -662,6 +664,8 @@ api.MapPost("/items", async (CreateItemRequest req, AppDbContext db) =>
 
     var validationError = ValidateItemRequest(req);
     if (validationError is not null) return Results.BadRequest(validationError);
+    var typeValidationError = ValidateItemRequestByType(req, itemTypeName);
+    if (typeValidationError is not null) return Results.BadRequest(typeValidationError);
 
     var now = DateTime.UtcNow;
     var slug = await GenerateUniqueItemSlugAsync(db, req.GameSystemId, Slugify(req.Name));
@@ -734,10 +738,12 @@ api.MapPut("/items/{itemId:int}", async (int itemId, CreateItemRequest req, AppD
     if (!gsExists) return Results.BadRequest("GameSystemId is invalid.");
     if (string.IsNullOrWhiteSpace(req.Name)) return Results.BadRequest("Name is required.");
 
+    string? itemTypeName = null;
     if (req.ItemTypeDefinitionId.HasValue)
     {
-        var typeExists = await db.ItemTypeDefinitions.AnyAsync(t => t.ItemTypeDefinitionId == req.ItemTypeDefinitionId.Value && t.GameSystemId == req.GameSystemId && t.DateDeletedUtc == null);
-        if (!typeExists) return Results.BadRequest("ItemTypeDefinitionId is invalid for this system.");
+        var itemType = await db.ItemTypeDefinitions.FirstOrDefaultAsync(t => t.ItemTypeDefinitionId == req.ItemTypeDefinitionId.Value && t.GameSystemId == req.GameSystemId && t.DateDeletedUtc == null);
+        if (itemType is null) return Results.BadRequest("ItemTypeDefinitionId is invalid for this system.");
+        itemTypeName = itemType.Name;
     }
 
     if (req.RarityDefinitionId.HasValue)
@@ -754,6 +760,8 @@ api.MapPut("/items/{itemId:int}", async (int itemId, CreateItemRequest req, AppD
 
     var validationError = ValidateItemRequest(req);
     if (validationError is not null) return Results.BadRequest(validationError);
+    var typeValidationError = ValidateItemRequestByType(req, itemTypeName);
+    if (typeValidationError is not null) return Results.BadRequest(typeValidationError);
 
     var newName = ToTitleCase(req.Name);
     var nameChanged = !string.Equals(row.Name, newName, StringComparison.Ordinal);
@@ -1743,6 +1751,32 @@ static string? ValidateItemRequest(CreateItemRequest req)
         if (!allowed.Contains(req.ArmorCategory.Trim(), StringComparer.OrdinalIgnoreCase))
             return "ArmorCategory must be Light, Medium, Heavy, or Shield.";
     }
+
+    return null;
+}
+
+static string? ValidateItemRequestByType(CreateItemRequest req, string? itemTypeName)
+{
+    var type = itemTypeName?.Trim().ToLowerInvariant() ?? string.Empty;
+    var isWeapon = type.Contains("weapon");
+    var isArmor = type.Contains("armor") || type.Contains("shield");
+    var isConsumable = type.Contains("potion") || type.Contains("consumable");
+    var isMagic = isConsumable || type.Contains("wondrous") || type.Contains("ring") || type.Contains("wand") || type.Contains("rod") || type.Contains("staff") || type.Contains("scroll");
+
+    if (isWeapon)
+    {
+        if (string.IsNullOrWhiteSpace(req.DamageDice)) return "Weapons require DamageDice.";
+        if (string.IsNullOrWhiteSpace(req.DamageType)) return "Weapons require DamageType.";
+    }
+
+    if (isArmor)
+    {
+        if (!req.ArmorClass.HasValue) return "Armor/Shield items require ArmorClass.";
+        if (string.IsNullOrWhiteSpace(req.ArmorCategory)) return "Armor/Shield items require ArmorCategory.";
+    }
+
+    if (!isMagic && req.RequiresAttunement)
+        return "RequiresAttunement should only be used for magic-oriented items.";
 
     return null;
 }

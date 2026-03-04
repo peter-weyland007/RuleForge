@@ -116,22 +116,37 @@
     <MudPaper Class="pa-4" Outlined="true">
         <MudText Typo="Typo.subtitle1" Class="mb-3">Magic & Attunement</MudText>
         <MudGrid>
-            <MudItem xs="12" md="2"><MudCheckBox @bind-Value="model.IsConsumable" Label="Consumable" /></MudItem>
-            <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="model.ChargesCurrent" Label="Charges (Current)" Variant="Variant.Outlined" Min="0" /></MudItem>
-            <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="model.ChargesMax" Label="Charges (Max)" Variant="Variant.Outlined" Min="0" /></MudItem>
-            <MudItem xs="12" md="3"><MudTextField @bind-Value="model.RechargeRule" Label="Recharge Rule" Variant="Variant.Outlined" Placeholder="e.g., dawn" /></MudItem>
-            <MudItem xs="12" md="3"><MudNumericField T="int?" @bind-Value="model.UsesPerDay" Label="Uses / Day" Variant="Variant.Outlined" Min="0" /></MudItem>
-
-            <MudItem xs="12" md="3">
-                <MudCheckBox @bind-Value="model.RequiresAttunement" Label="Requires Attunement" />
-            </MudItem>
-            @if (model.RequiresAttunement)
+            @if (IsConsumableType || IsMagicType)
             {
-                <MudItem xs="12" md="9">
-                    <MudTextField @bind-Value="model.AttunementRequirement"
-                                  Label="Attunement Requirement"
-                                  Variant="Variant.Outlined"
-                                  Placeholder="e.g., by a wizard" />
+                <MudItem xs="12" md="2"><MudCheckBox @bind-Value="model.IsConsumable" Label="Consumable" /></MudItem>
+                <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="model.ChargesCurrent" Label="Charges (Current)" Variant="Variant.Outlined" Min="0" /></MudItem>
+                <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="model.ChargesMax" Label="Charges (Max)" Variant="Variant.Outlined" Min="0" /></MudItem>
+                <MudItem xs="12" md="3"><MudTextField @bind-Value="model.RechargeRule" Label="Recharge Rule" Variant="Variant.Outlined" Placeholder="e.g., dawn" /></MudItem>
+                <MudItem xs="12" md="3"><MudNumericField T="int?" @bind-Value="model.UsesPerDay" Label="Uses / Day" Variant="Variant.Outlined" Min="0" /></MudItem>
+            }
+
+            @if (IsMagicType)
+            {
+                <MudItem xs="12" md="3">
+                    <MudCheckBox @bind-Value="model.RequiresAttunement" Label="Requires Attunement" />
+                </MudItem>
+                @if (model.RequiresAttunement)
+                {
+                    <MudItem xs="12" md="9">
+                        <MudTextField @bind-Value="model.AttunementRequirement"
+                                      Label="Attunement Requirement"
+                                      Variant="Variant.Outlined"
+                                      Placeholder="e.g., by a wizard" />
+                    </MudItem>
+                }
+            }
+
+            @if (!IsConsumableType && !IsMagicType)
+            {
+                <MudItem xs="12">
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                        Magic/attunement fields are shown for potion/consumable and magic-oriented item types.
+                    </MudAlert>
                 </MudItem>
             }
         </MudGrid>
@@ -295,14 +310,69 @@
     private bool IsWeaponType => SelectedTypeName?.Contains("weapon", StringComparison.OrdinalIgnoreCase) == true;
     private bool IsArmorType => SelectedTypeName?.Contains("armor", StringComparison.OrdinalIgnoreCase) == true
                                || SelectedTypeName?.Contains("shield", StringComparison.OrdinalIgnoreCase) == true;
+    private bool IsConsumableType => SelectedTypeName?.Contains("potion", StringComparison.OrdinalIgnoreCase) == true
+                                  || SelectedTypeName?.Contains("consumable", StringComparison.OrdinalIgnoreCase) == true;
+    private bool IsMagicType => SelectedTypeName?.Contains("wondrous", StringComparison.OrdinalIgnoreCase) == true
+                             || SelectedTypeName?.Contains("ring", StringComparison.OrdinalIgnoreCase) == true
+                             || SelectedTypeName?.Contains("wand", StringComparison.OrdinalIgnoreCase) == true
+                             || SelectedTypeName?.Contains("rod", StringComparison.OrdinalIgnoreCase) == true
+                             || SelectedTypeName?.Contains("staff", StringComparison.OrdinalIgnoreCase) == true
+                             || SelectedTypeName?.Contains("scroll", StringComparison.OrdinalIgnoreCase) == true
+                             || IsConsumableType;
 
     private string? SelectedTypeName => types.FirstOrDefault(t => t.ItemTypeDefinitionId == model.ItemTypeDefinitionId)?.Name;
+
+    private void NormalizeByType()
+    {
+        if (!IsWeaponType)
+        {
+            model.DamageDice = null;
+            model.DamageType = null;
+            model.VersatileDamageDice = null;
+            model.RangeNormal = null;
+            model.RangeLong = null;
+            model.WeaponPropertyLight = false;
+            model.WeaponPropertyHeavy = false;
+            model.WeaponPropertyFinesse = false;
+            model.WeaponPropertyThrown = false;
+            model.WeaponPropertyTwoHanded = false;
+            model.WeaponPropertyLoading = false;
+            model.WeaponPropertyReach = false;
+            model.WeaponPropertyAmmunition = false;
+        }
+
+        if (!IsArmorType)
+        {
+            model.ArmorClass = null;
+            model.ArmorCategory = null;
+            model.StrengthRequirement = null;
+            model.StealthDisadvantage = false;
+        }
+
+        if (!IsConsumableType && !IsMagicType)
+        {
+            model.IsConsumable = false;
+            model.ChargesCurrent = null;
+            model.ChargesMax = null;
+            model.RechargeRule = null;
+            model.UsesPerDay = null;
+            model.RequiresAttunement = false;
+            model.AttunementRequirement = null;
+        }
+
+        if (!IsMagicType)
+        {
+            model.RequiresAttunement = false;
+            model.AttunementRequirement = null;
+        }
+    }
 
     private async Task Save()
     {
         if (string.IsNullOrWhiteSpace(model.Name) || model.GameSystemId <= 0) return;
 
         model.TagDefinitionIds = selectedTagIds.ToList();
+        NormalizeByType();
 
         var req = new CreateItemRequest(
             model.GameSystemId,
