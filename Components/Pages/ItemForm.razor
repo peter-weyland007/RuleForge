@@ -58,6 +58,12 @@
 
             <MudItem xs="12" md="4"><MudTextField @bind-Value="model.SourceBook" Label="Source Book" Variant="Variant.Outlined" Placeholder="e.g., PHB" /></MudItem>
             <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="model.SourcePage" Label="Source Page" Variant="Variant.Outlined" Min="1" /></MudItem>
+
+            <MudItem xs="12" md="2"><MudCheckBox @bind-Value="model.IsConsumable" Label="Consumable" /></MudItem>
+            <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="model.ChargesCurrent" Label="Charges (Current)" Variant="Variant.Outlined" Min="0" /></MudItem>
+            <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="model.ChargesMax" Label="Charges (Max)" Variant="Variant.Outlined" Min="0" /></MudItem>
+            <MudItem xs="12" md="3"><MudTextField @bind-Value="model.RechargeRule" Label="Recharge Rule" Variant="Variant.Outlined" Placeholder="e.g., dawn" /></MudItem>
+            <MudItem xs="12" md="3"><MudNumericField T="int?" @bind-Value="model.UsesPerDay" Label="Uses / Day" Variant="Variant.Outlined" Min="0" /></MudItem>
             <MudItem xs="12" md="6">
                 <MudSelect T="int"
                            MultiSelection="true"
@@ -170,7 +176,12 @@
             RangeNormal = dto.RangeNormal,
             RangeLong = dto.RangeLong,
             SourceBook = dto.SourceBook,
-            SourcePage = dto.SourcePage
+            SourcePage = dto.SourcePage,
+            IsConsumable = dto.IsConsumable,
+            ChargesCurrent = dto.ChargesCurrent,
+            ChargesMax = dto.ChargesMax,
+            RechargeRule = dto.RechargeRule,
+            UsesPerDay = dto.UsesPerDay
         };
         selectedTagIds = model.TagDefinitionIds.ToHashSet();
 
@@ -247,6 +258,11 @@
             model.RangeLong,
             model.SourceBook,
             model.SourcePage,
+            model.IsConsumable,
+            model.ChargesCurrent,
+            model.ChargesMax,
+            model.RechargeRule,
+            model.UsesPerDay,
             model.TagDefinitionIds,
             model.SourceType,
             model.Alias
@@ -286,6 +302,11 @@
         public int? RangeLong { get; set; }
         public string? SourceBook { get; set; }
         public int? SourcePage { get; set; }
+        public bool IsConsumable { get; set; }
+        public int? ChargesCurrent { get; set; }
+        public int? ChargesMax { get; set; }
+        public string? RechargeRule { get; set; }
+        public int? UsesPerDay { get; set; }
         public List<int> TagDefinitionIds { get; set; } = new();
         public SourceType SourceType { get; set; } = SourceType.Official;
         public string? Alias { get; set; }
@@ -296,5 +317,5 @@
     private sealed record RarityDto(int RarityDefinitionId, int GameSystemId, string Name, string Slug);
     private sealed record CurrencyDto(int CurrencyDefinitionId, int GameSystemId, string Name, string Code);
     private sealed record TagDto(int TagDefinitionId, int GameSystemId, string Name, string Slug);
-    private sealed record ItemDto(int ItemId, int GameSystemId, string Name, string Slug, string? Alias, int? ItemTypeDefinitionId, int? RarityDefinitionId, string? Description, decimal? CostAmount, int? CurrencyDefinitionId, string? CostCurrency, decimal? Weight, int Quantity, string? Tags, string? Effect, bool RequiresAttunement, string? AttunementRequirement, string? DamageDice, string? DamageType, string? VersatileDamageDice, int? ArmorClass, int? StrengthRequirement, bool StealthDisadvantage, int? RangeNormal, int? RangeLong, string? SourceBook, int? SourcePage, List<int>? TagDefinitionIds, List<string>? TagNames, SourceType SourceType);
+    private sealed record ItemDto(int ItemId, int GameSystemId, string Name, string Slug, string? Alias, int? ItemTypeDefinitionId, int? RarityDefinitionId, string? Description, decimal? CostAmount, int? CurrencyDefinitionId, string? CostCurrency, decimal? Weight, int Quantity, string? Tags, string? Effect, bool RequiresAttunement, string? AttunementRequirement, string? DamageDice, string? DamageType, string? VersatileDamageDice, int? ArmorClass, int? StrengthRequirement, bool StealthDisadvantage, int? RangeNormal, int? RangeLong, string? SourceBook, int? SourcePage, bool IsConsumable, int? ChargesCurrent, int? ChargesMax, string? RechargeRule, int? UsesPerDay, List<int>? TagDefinitionIds, List<string>? TagNames, SourceType SourceType);
 }

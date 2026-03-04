@@ -123,6 +123,11 @@ using (var scope = app.Services.CreateScope())
             RangeLong INTEGER NULL,
             SourceBook TEXT NULL,
             SourcePage INTEGER NULL,
+            IsConsumable INTEGER NOT NULL DEFAULT 0,
+            ChargesCurrent INTEGER NULL,
+            ChargesMax INTEGER NULL,
+            RechargeRule TEXT NULL,
+            UsesPerDay INTEGER NULL,
             SourceType INTEGER NOT NULL,
             DateCreatedUtc TEXT NOT NULL,
             DateModifiedUtc TEXT NOT NULL,
@@ -168,6 +173,11 @@ using (var scope = app.Services.CreateScope())
     try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Items ADD COLUMN RangeLong INTEGER NULL;"); } catch (SqliteException) { }
     try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Items ADD COLUMN SourceBook TEXT NULL;"); } catch (SqliteException) { }
     try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Items ADD COLUMN SourcePage INTEGER NULL;"); } catch (SqliteException) { }
+    try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Items ADD COLUMN IsConsumable INTEGER NOT NULL DEFAULT 0;"); } catch (SqliteException) { }
+    try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Items ADD COLUMN ChargesCurrent INTEGER NULL;"); } catch (SqliteException) { }
+    try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Items ADD COLUMN ChargesMax INTEGER NULL;"); } catch (SqliteException) { }
+    try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Items ADD COLUMN RechargeRule TEXT NULL;"); } catch (SqliteException) { }
+    try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Items ADD COLUMN UsesPerDay INTEGER NULL;"); } catch (SqliteException) { }
 
     await db.Database.ExecuteSqlRawAsync("""
         CREATE TABLE IF NOT EXISTS CurrencyDefinitions (
@@ -563,6 +573,11 @@ api.MapGet("/items/{itemId:int}", async (int itemId, AppDbContext db) =>
         row.RangeLong,
         row.SourceBook,
         row.SourcePage,
+        row.IsConsumable,
+        row.ChargesCurrent,
+        row.ChargesMax,
+        row.RechargeRule,
+        row.UsesPerDay,
         row.SourceType,
         row.DateCreatedUtc,
         row.DateModifiedUtc,
@@ -584,6 +599,7 @@ api.MapGet("/items", async (int gameSystemId, AppDbContext db) =>
         i.ItemId,i.GameSystemId,i.Name,i.Slug,i.Alias,i.ItemTypeDefinitionId,i.RarityDefinitionId,i.Description,
         i.CostAmount,i.CurrencyDefinitionId,i.CostCurrency,i.Weight,i.Quantity,i.Tags,
         i.DamageDice,i.DamageType,i.VersatileDamageDice,i.ArmorClass,i.StrengthRequirement,i.StealthDisadvantage,i.RangeNormal,i.RangeLong,i.SourceBook,i.SourcePage,
+        i.IsConsumable,i.ChargesCurrent,i.ChargesMax,i.RechargeRule,i.UsesPerDay,
         i.SourceType,i.DateCreatedUtc,i.DateModifiedUtc,i.DateDeletedUtc,
         TagDefinitionIds = tagLinks.Where(l=>l.ItemId==i.ItemId).Select(l=>l.TagDefinitionId).ToList(),
         TagNames = tags.Where(t=>tagLinks.Any(l=>l.ItemId==i.ItemId && l.TagDefinitionId==t.TagDefinitionId)).Select(t=>t.Name).ToList()
@@ -646,6 +662,11 @@ api.MapPost("/items", async (CreateItemRequest req, AppDbContext db) =>
         RangeLong = req.RangeLong,
         SourceBook = string.IsNullOrWhiteSpace(req.SourceBook) ? null : req.SourceBook.Trim(),
         SourcePage = req.SourcePage,
+        IsConsumable = req.IsConsumable,
+        ChargesCurrent = req.ChargesCurrent,
+        ChargesMax = req.ChargesMax,
+        RechargeRule = string.IsNullOrWhiteSpace(req.RechargeRule) ? null : req.RechargeRule.Trim(),
+        UsesPerDay = req.UsesPerDay,
         SourceType = req.SourceType,
         DateCreatedUtc = now,
         DateModifiedUtc = now
@@ -717,6 +738,11 @@ api.MapPut("/items/{itemId:int}", async (int itemId, CreateItemRequest req, AppD
     row.RangeLong = req.RangeLong;
     row.SourceBook = string.IsNullOrWhiteSpace(req.SourceBook) ? null : req.SourceBook.Trim();
     row.SourcePage = req.SourcePage;
+    row.IsConsumable = req.IsConsumable;
+    row.ChargesCurrent = req.ChargesCurrent;
+    row.ChargesMax = req.ChargesMax;
+    row.RechargeRule = string.IsNullOrWhiteSpace(req.RechargeRule) ? null : req.RechargeRule.Trim();
+    row.UsesPerDay = req.UsesPerDay;
     row.SourceType = req.SourceType;
     row.DateModifiedUtc = DateTime.UtcNow;
 
@@ -1686,6 +1712,11 @@ public sealed class SeedItem
     public int? RangeLong { get; set; }
     public string? SourceBook { get; set; }
     public int? SourcePage { get; set; }
+    public bool IsConsumable { get; set; }
+    public int? ChargesCurrent { get; set; }
+    public int? ChargesMax { get; set; }
+    public string? RechargeRule { get; set; }
+    public int? UsesPerDay { get; set; }
     public SourceType SourceType { get; set; } = SourceType.Official;
 }
 
@@ -1754,6 +1785,11 @@ public sealed class Item
     public int? RangeLong { get; set; }
     public string? SourceBook { get; set; }
     public int? SourcePage { get; set; }
+    public bool IsConsumable { get; set; }
+    public int? ChargesCurrent { get; set; }
+    public int? ChargesMax { get; set; }
+    public string? RechargeRule { get; set; }
+    public int? UsesPerDay { get; set; }
     public SourceType SourceType { get; set; } = SourceType.Official;
     public DateTime DateCreatedUtc { get; set; }
     public DateTime DateModifiedUtc { get; set; }
@@ -1761,7 +1797,7 @@ public sealed class Item
 }
 
 public sealed record CreateItemTypeRequest(int GameSystemId, string Name, string? Description);
-public sealed record CreateItemRequest(int GameSystemId, string Name, int? ItemTypeDefinitionId, int? RarityDefinitionId, string? Description, decimal? CostAmount = null, int? CurrencyDefinitionId = null, string? CostCurrency = null, decimal? Weight = null, int Quantity = 1, string? Tags = null, string? Effect = null, bool RequiresAttunement = false, string? AttunementRequirement = null, string? DamageDice = null, string? DamageType = null, string? VersatileDamageDice = null, int? ArmorClass = null, int? StrengthRequirement = null, bool StealthDisadvantage = false, int? RangeNormal = null, int? RangeLong = null, string? SourceBook = null, int? SourcePage = null, List<int>? TagDefinitionIds = null, SourceType SourceType = SourceType.Official, string? Alias = null);
+public sealed record CreateItemRequest(int GameSystemId, string Name, int? ItemTypeDefinitionId, int? RarityDefinitionId, string? Description, decimal? CostAmount = null, int? CurrencyDefinitionId = null, string? CostCurrency = null, decimal? Weight = null, int Quantity = 1, string? Tags = null, string? Effect = null, bool RequiresAttunement = false, string? AttunementRequirement = null, string? DamageDice = null, string? DamageType = null, string? VersatileDamageDice = null, int? ArmorClass = null, int? StrengthRequirement = null, bool StealthDisadvantage = false, int? RangeNormal = null, int? RangeLong = null, string? SourceBook = null, int? SourcePage = null, bool IsConsumable = false, int? ChargesCurrent = null, int? ChargesMax = null, string? RechargeRule = null, int? UsesPerDay = null, List<int>? TagDefinitionIds = null, SourceType SourceType = SourceType.Official, string? Alias = null);
 
 public sealed record UpsertItemTypeRequest(int GameSystemId, string Name, string? Description);
 
