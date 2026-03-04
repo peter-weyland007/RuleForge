@@ -128,6 +128,15 @@ using (var scope = app.Services.CreateScope())
             ChargesMax INTEGER NULL,
             RechargeRule TEXT NULL,
             UsesPerDay INTEGER NULL,
+            ArmorCategory TEXT NULL,
+            WeaponPropertyLight INTEGER NOT NULL DEFAULT 0,
+            WeaponPropertyHeavy INTEGER NOT NULL DEFAULT 0,
+            WeaponPropertyFinesse INTEGER NOT NULL DEFAULT 0,
+            WeaponPropertyThrown INTEGER NOT NULL DEFAULT 0,
+            WeaponPropertyTwoHanded INTEGER NOT NULL DEFAULT 0,
+            WeaponPropertyLoading INTEGER NOT NULL DEFAULT 0,
+            WeaponPropertyReach INTEGER NOT NULL DEFAULT 0,
+            WeaponPropertyAmmunition INTEGER NOT NULL DEFAULT 0,
             SourceType INTEGER NOT NULL,
             DateCreatedUtc TEXT NOT NULL,
             DateModifiedUtc TEXT NOT NULL,
@@ -178,6 +187,15 @@ using (var scope = app.Services.CreateScope())
     try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Items ADD COLUMN ChargesMax INTEGER NULL;"); } catch (SqliteException) { }
     try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Items ADD COLUMN RechargeRule TEXT NULL;"); } catch (SqliteException) { }
     try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Items ADD COLUMN UsesPerDay INTEGER NULL;"); } catch (SqliteException) { }
+    try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Items ADD COLUMN ArmorCategory TEXT NULL;"); } catch (SqliteException) { }
+    try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Items ADD COLUMN WeaponPropertyLight INTEGER NOT NULL DEFAULT 0;"); } catch (SqliteException) { }
+    try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Items ADD COLUMN WeaponPropertyHeavy INTEGER NOT NULL DEFAULT 0;"); } catch (SqliteException) { }
+    try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Items ADD COLUMN WeaponPropertyFinesse INTEGER NOT NULL DEFAULT 0;"); } catch (SqliteException) { }
+    try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Items ADD COLUMN WeaponPropertyThrown INTEGER NOT NULL DEFAULT 0;"); } catch (SqliteException) { }
+    try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Items ADD COLUMN WeaponPropertyTwoHanded INTEGER NOT NULL DEFAULT 0;"); } catch (SqliteException) { }
+    try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Items ADD COLUMN WeaponPropertyLoading INTEGER NOT NULL DEFAULT 0;"); } catch (SqliteException) { }
+    try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Items ADD COLUMN WeaponPropertyReach INTEGER NOT NULL DEFAULT 0;"); } catch (SqliteException) { }
+    try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Items ADD COLUMN WeaponPropertyAmmunition INTEGER NOT NULL DEFAULT 0;"); } catch (SqliteException) { }
 
     await db.Database.ExecuteSqlRawAsync("""
         CREATE TABLE IF NOT EXISTS CurrencyDefinitions (
@@ -578,6 +596,15 @@ api.MapGet("/items/{itemId:int}", async (int itemId, AppDbContext db) =>
         row.ChargesMax,
         row.RechargeRule,
         row.UsesPerDay,
+        row.ArmorCategory,
+        row.WeaponPropertyLight,
+        row.WeaponPropertyHeavy,
+        row.WeaponPropertyFinesse,
+        row.WeaponPropertyThrown,
+        row.WeaponPropertyTwoHanded,
+        row.WeaponPropertyLoading,
+        row.WeaponPropertyReach,
+        row.WeaponPropertyAmmunition,
         row.SourceType,
         row.DateCreatedUtc,
         row.DateModifiedUtc,
@@ -600,6 +627,7 @@ api.MapGet("/items", async (int gameSystemId, AppDbContext db) =>
         i.CostAmount,i.CurrencyDefinitionId,i.CostCurrency,i.Weight,i.Quantity,i.Tags,
         i.DamageDice,i.DamageType,i.VersatileDamageDice,i.ArmorClass,i.StrengthRequirement,i.StealthDisadvantage,i.RangeNormal,i.RangeLong,i.SourceBook,i.SourcePage,
         i.IsConsumable,i.ChargesCurrent,i.ChargesMax,i.RechargeRule,i.UsesPerDay,
+        i.ArmorCategory,i.WeaponPropertyLight,i.WeaponPropertyHeavy,i.WeaponPropertyFinesse,i.WeaponPropertyThrown,i.WeaponPropertyTwoHanded,i.WeaponPropertyLoading,i.WeaponPropertyReach,i.WeaponPropertyAmmunition,
         i.SourceType,i.DateCreatedUtc,i.DateModifiedUtc,i.DateDeletedUtc,
         TagDefinitionIds = tagLinks.Where(l=>l.ItemId==i.ItemId).Select(l=>l.TagDefinitionId).ToList(),
         TagNames = tags.Where(t=>tagLinks.Any(l=>l.ItemId==i.ItemId && l.TagDefinitionId==t.TagDefinitionId)).Select(t=>t.Name).ToList()
@@ -670,6 +698,15 @@ api.MapPost("/items", async (CreateItemRequest req, AppDbContext db) =>
         ChargesMax = req.ChargesMax,
         RechargeRule = string.IsNullOrWhiteSpace(req.RechargeRule) ? null : req.RechargeRule.Trim(),
         UsesPerDay = req.UsesPerDay,
+        ArmorCategory = string.IsNullOrWhiteSpace(req.ArmorCategory) ? null : req.ArmorCategory.Trim(),
+        WeaponPropertyLight = req.WeaponPropertyLight,
+        WeaponPropertyHeavy = req.WeaponPropertyHeavy,
+        WeaponPropertyFinesse = req.WeaponPropertyFinesse,
+        WeaponPropertyThrown = req.WeaponPropertyThrown,
+        WeaponPropertyTwoHanded = req.WeaponPropertyTwoHanded,
+        WeaponPropertyLoading = req.WeaponPropertyLoading,
+        WeaponPropertyReach = req.WeaponPropertyReach,
+        WeaponPropertyAmmunition = req.WeaponPropertyAmmunition,
         SourceType = req.SourceType,
         DateCreatedUtc = now,
         DateModifiedUtc = now
@@ -755,6 +792,15 @@ api.MapPut("/items/{itemId:int}", async (int itemId, CreateItemRequest req, AppD
     row.ChargesMax = req.ChargesMax;
     row.RechargeRule = string.IsNullOrWhiteSpace(req.RechargeRule) ? null : req.RechargeRule.Trim();
     row.UsesPerDay = req.UsesPerDay;
+    row.ArmorCategory = string.IsNullOrWhiteSpace(req.ArmorCategory) ? null : req.ArmorCategory.Trim();
+    row.WeaponPropertyLight = req.WeaponPropertyLight;
+    row.WeaponPropertyHeavy = req.WeaponPropertyHeavy;
+    row.WeaponPropertyFinesse = req.WeaponPropertyFinesse;
+    row.WeaponPropertyThrown = req.WeaponPropertyThrown;
+    row.WeaponPropertyTwoHanded = req.WeaponPropertyTwoHanded;
+    row.WeaponPropertyLoading = req.WeaponPropertyLoading;
+    row.WeaponPropertyReach = req.WeaponPropertyReach;
+    row.WeaponPropertyAmmunition = req.WeaponPropertyAmmunition;
     row.SourceType = req.SourceType;
     row.DateModifiedUtc = DateTime.UtcNow;
 
@@ -1673,6 +1719,13 @@ static string? ValidateItemRequest(CreateItemRequest req)
 
     if (req.UsesPerDay.HasValue && req.UsesPerDay.Value < 0) return "UsesPerDay cannot be negative.";
 
+    if (!string.IsNullOrWhiteSpace(req.ArmorCategory))
+    {
+        var allowed = new[] { "Light", "Medium", "Heavy", "Shield" };
+        if (!allowed.Contains(req.ArmorCategory.Trim(), StringComparer.OrdinalIgnoreCase))
+            return "ArmorCategory must be Light, Medium, Heavy, or Shield.";
+    }
+
     return null;
 }
 
@@ -1784,6 +1837,15 @@ public sealed class SeedItem
     public int? ChargesMax { get; set; }
     public string? RechargeRule { get; set; }
     public int? UsesPerDay { get; set; }
+    public string? ArmorCategory { get; set; }
+    public bool WeaponPropertyLight { get; set; }
+    public bool WeaponPropertyHeavy { get; set; }
+    public bool WeaponPropertyFinesse { get; set; }
+    public bool WeaponPropertyThrown { get; set; }
+    public bool WeaponPropertyTwoHanded { get; set; }
+    public bool WeaponPropertyLoading { get; set; }
+    public bool WeaponPropertyReach { get; set; }
+    public bool WeaponPropertyAmmunition { get; set; }
     public SourceType SourceType { get; set; } = SourceType.Official;
 }
 
@@ -1857,6 +1919,15 @@ public sealed class Item
     public int? ChargesMax { get; set; }
     public string? RechargeRule { get; set; }
     public int? UsesPerDay { get; set; }
+    public string? ArmorCategory { get; set; }
+    public bool WeaponPropertyLight { get; set; }
+    public bool WeaponPropertyHeavy { get; set; }
+    public bool WeaponPropertyFinesse { get; set; }
+    public bool WeaponPropertyThrown { get; set; }
+    public bool WeaponPropertyTwoHanded { get; set; }
+    public bool WeaponPropertyLoading { get; set; }
+    public bool WeaponPropertyReach { get; set; }
+    public bool WeaponPropertyAmmunition { get; set; }
     public SourceType SourceType { get; set; } = SourceType.Official;
     public DateTime DateCreatedUtc { get; set; }
     public DateTime DateModifiedUtc { get; set; }
@@ -1866,7 +1937,7 @@ public sealed class Item
 public sealed record CreateItemTypeRequest(int GameSystemId, string Name, string? Description);
 
 
-public sealed record CreateItemRequest(int GameSystemId, string Name, int? ItemTypeDefinitionId, int? RarityDefinitionId, string? Description, decimal? CostAmount = null, int? CurrencyDefinitionId = null, string? CostCurrency = null, decimal? Weight = null, int Quantity = 1, string? Tags = null, string? Effect = null, bool RequiresAttunement = false, string? AttunementRequirement = null, string? DamageDice = null, string? DamageType = null, string? VersatileDamageDice = null, int? ArmorClass = null, int? StrengthRequirement = null, bool StealthDisadvantage = false, int? RangeNormal = null, int? RangeLong = null, string? SourceBook = null, int? SourcePage = null, bool IsConsumable = false, int? ChargesCurrent = null, int? ChargesMax = null, string? RechargeRule = null, int? UsesPerDay = null, List<int>? TagDefinitionIds = null, SourceType SourceType = SourceType.Official, string? Alias = null);
+public sealed record CreateItemRequest(int GameSystemId, string Name, int? ItemTypeDefinitionId, int? RarityDefinitionId, string? Description, decimal? CostAmount = null, int? CurrencyDefinitionId = null, string? CostCurrency = null, decimal? Weight = null, int Quantity = 1, string? Tags = null, string? Effect = null, bool RequiresAttunement = false, string? AttunementRequirement = null, string? DamageDice = null, string? DamageType = null, string? VersatileDamageDice = null, int? ArmorClass = null, int? StrengthRequirement = null, bool StealthDisadvantage = false, int? RangeNormal = null, int? RangeLong = null, string? SourceBook = null, int? SourcePage = null, bool IsConsumable = false, int? ChargesCurrent = null, int? ChargesMax = null, string? RechargeRule = null, int? UsesPerDay = null, string? ArmorCategory = null, bool WeaponPropertyLight = false, bool WeaponPropertyHeavy = false, bool WeaponPropertyFinesse = false, bool WeaponPropertyThrown = false, bool WeaponPropertyTwoHanded = false, bool WeaponPropertyLoading = false, bool WeaponPropertyReach = false, bool WeaponPropertyAmmunition = false, List<int>? TagDefinitionIds = null, SourceType SourceType = SourceType.Official, string? Alias = null);
 
 public sealed record UpsertItemTypeRequest(int GameSystemId, string Name, string? Description);
 

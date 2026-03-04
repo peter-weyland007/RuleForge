@@ -60,18 +60,56 @@
         </MudGrid>
     </MudPaper>
 
-    <MudPaper Class="pa-4" Outlined="true">
+        <MudPaper Class="pa-4" Outlined="true">
         <MudText Typo="Typo.subtitle1" Class="mb-3">Combat Profile</MudText>
         <MudGrid>
-            <MudItem xs="12" md="3"><MudTextField @bind-Value="model.DamageDice" Label="Damage Dice" Variant="Variant.Outlined" Placeholder="e.g., 1d8" /></MudItem>
-            <MudItem xs="12" md="3"><MudTextField @bind-Value="model.DamageType" Label="Damage Type" Variant="Variant.Outlined" Placeholder="e.g., Slashing" /></MudItem>
-            <MudItem xs="12" md="3"><MudTextField @bind-Value="model.VersatileDamageDice" Label="Versatile Dice" Variant="Variant.Outlined" Placeholder="e.g., 1d10" /></MudItem>
-            <MudItem xs="12" md="3"><MudNumericField T="int?" @bind-Value="model.ArmorClass" Label="Armor Class" Variant="Variant.Outlined" Min="0" /></MudItem>
+            @if (IsWeaponType)
+            {
+                <MudItem xs="12" md="3"><MudTextField @bind-Value="model.DamageDice" Label="Damage Dice" Variant="Variant.Outlined" Placeholder="e.g., 1d8" /></MudItem>
+                <MudItem xs="12" md="3"><MudTextField @bind-Value="model.DamageType" Label="Damage Type" Variant="Variant.Outlined" Placeholder="e.g., Slashing" /></MudItem>
+                <MudItem xs="12" md="3"><MudTextField @bind-Value="model.VersatileDamageDice" Label="Versatile Dice" Variant="Variant.Outlined" Placeholder="e.g., 1d10" /></MudItem>
+                <MudItem xs="12" md="3"><MudNumericField T="int?" @bind-Value="model.RangeNormal" Label="Range (Normal)" Variant="Variant.Outlined" Min="0" /></MudItem>
+                <MudItem xs="12" md="3"><MudNumericField T="int?" @bind-Value="model.RangeLong" Label="Range (Long)" Variant="Variant.Outlined" Min="0" /></MudItem>
 
-            <MudItem xs="12" md="3"><MudNumericField T="int?" @bind-Value="model.StrengthRequirement" Label="STR Requirement" Variant="Variant.Outlined" Min="0" /></MudItem>
-            <MudItem xs="12" md="3"><MudNumericField T="int?" @bind-Value="model.RangeNormal" Label="Range (Normal)" Variant="Variant.Outlined" Min="0" /></MudItem>
-            <MudItem xs="12" md="3"><MudNumericField T="int?" @bind-Value="model.RangeLong" Label="Range (Long)" Variant="Variant.Outlined" Min="0" /></MudItem>
-            <MudItem xs="12" md="3"><MudCheckBox @bind-Value="model.StealthDisadvantage" Label="Stealth Disadvantage" /></MudItem>
+                <MudItem xs="12">
+                    <MudText Typo="Typo.caption" Class="mb-1">Weapon Properties</MudText>
+                    <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="2">
+                        <MudCheckBox @bind-Value="model.WeaponPropertyLight" Label="Light" />
+                        <MudCheckBox @bind-Value="model.WeaponPropertyHeavy" Label="Heavy" />
+                        <MudCheckBox @bind-Value="model.WeaponPropertyFinesse" Label="Finesse" />
+                        <MudCheckBox @bind-Value="model.WeaponPropertyThrown" Label="Thrown" />
+                        <MudCheckBox @bind-Value="model.WeaponPropertyTwoHanded" Label="Two-Handed" />
+                        <MudCheckBox @bind-Value="model.WeaponPropertyLoading" Label="Loading" />
+                        <MudCheckBox @bind-Value="model.WeaponPropertyReach" Label="Reach" />
+                        <MudCheckBox @bind-Value="model.WeaponPropertyAmmunition" Label="Ammunition" />
+                    </MudStack>
+                </MudItem>
+            }
+
+            @if (IsArmorType)
+            {
+                <MudItem xs="12" md="3"><MudNumericField T="int?" @bind-Value="model.ArmorClass" Label="Armor Class" Variant="Variant.Outlined" Min="0" /></MudItem>
+                <MudItem xs="12" md="3">
+                    <MudSelect T="string" @bind-Value="model.ArmorCategory" Label="Armor Category" Variant="Variant.Outlined">
+                        <MudSelectItem Value="@((string?)null)">(none)</MudSelectItem>
+                        <MudSelectItem Value="@("Light")">Light</MudSelectItem>
+                        <MudSelectItem Value="@("Medium")">Medium</MudSelectItem>
+                        <MudSelectItem Value="@("Heavy")">Heavy</MudSelectItem>
+                        <MudSelectItem Value="@("Shield")">Shield</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="3"><MudNumericField T="int?" @bind-Value="model.StrengthRequirement" Label="STR Requirement" Variant="Variant.Outlined" Min="0" /></MudItem>
+                <MudItem xs="12" md="3"><MudCheckBox @bind-Value="model.StealthDisadvantage" Label="Stealth Disadvantage" /></MudItem>
+            }
+
+            @if (!IsWeaponType && !IsArmorType)
+            {
+                <MudItem xs="12">
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                        Select an item type like <b>Weapon</b> or <b>Armor/Shield</b> to show profile-specific fields.
+                    </MudAlert>
+                </MudItem>
+            }
         </MudGrid>
     </MudPaper>
 
@@ -199,7 +237,16 @@
             ChargesCurrent = dto.ChargesCurrent,
             ChargesMax = dto.ChargesMax,
             RechargeRule = dto.RechargeRule,
-            UsesPerDay = dto.UsesPerDay
+            UsesPerDay = dto.UsesPerDay,
+            ArmorCategory = dto.ArmorCategory,
+            WeaponPropertyLight = dto.WeaponPropertyLight,
+            WeaponPropertyHeavy = dto.WeaponPropertyHeavy,
+            WeaponPropertyFinesse = dto.WeaponPropertyFinesse,
+            WeaponPropertyThrown = dto.WeaponPropertyThrown,
+            WeaponPropertyTwoHanded = dto.WeaponPropertyTwoHanded,
+            WeaponPropertyLoading = dto.WeaponPropertyLoading,
+            WeaponPropertyReach = dto.WeaponPropertyReach,
+            WeaponPropertyAmmunition = dto.WeaponPropertyAmmunition
         };
         selectedTagIds = model.TagDefinitionIds.ToHashSet();
 
@@ -245,6 +292,12 @@
         selectedTagIds.Remove(tagId);
     }
 
+    private bool IsWeaponType => SelectedTypeName?.Contains("weapon", StringComparison.OrdinalIgnoreCase) == true;
+    private bool IsArmorType => SelectedTypeName?.Contains("armor", StringComparison.OrdinalIgnoreCase) == true
+                               || SelectedTypeName?.Contains("shield", StringComparison.OrdinalIgnoreCase) == true;
+
+    private string? SelectedTypeName => types.FirstOrDefault(t => t.ItemTypeDefinitionId == model.ItemTypeDefinitionId)?.Name;
+
     private async Task Save()
     {
         if (string.IsNullOrWhiteSpace(model.Name) || model.GameSystemId <= 0) return;
@@ -281,6 +334,15 @@
             model.ChargesMax,
             model.RechargeRule,
             model.UsesPerDay,
+            model.ArmorCategory,
+            model.WeaponPropertyLight,
+            model.WeaponPropertyHeavy,
+            model.WeaponPropertyFinesse,
+            model.WeaponPropertyThrown,
+            model.WeaponPropertyTwoHanded,
+            model.WeaponPropertyLoading,
+            model.WeaponPropertyReach,
+            model.WeaponPropertyAmmunition,
             model.TagDefinitionIds,
             model.SourceType,
             model.Alias
@@ -325,6 +387,15 @@
         public int? ChargesMax { get; set; }
         public string? RechargeRule { get; set; }
         public int? UsesPerDay { get; set; }
+        public string? ArmorCategory { get; set; }
+        public bool WeaponPropertyLight { get; set; }
+        public bool WeaponPropertyHeavy { get; set; }
+        public bool WeaponPropertyFinesse { get; set; }
+        public bool WeaponPropertyThrown { get; set; }
+        public bool WeaponPropertyTwoHanded { get; set; }
+        public bool WeaponPropertyLoading { get; set; }
+        public bool WeaponPropertyReach { get; set; }
+        public bool WeaponPropertyAmmunition { get; set; }
         public List<int> TagDefinitionIds { get; set; } = new();
         public SourceType SourceType { get; set; } = SourceType.Official;
         public string? Alias { get; set; }
@@ -335,5 +406,5 @@
     private sealed record RarityDto(int RarityDefinitionId, int GameSystemId, string Name, string Slug);
     private sealed record CurrencyDto(int CurrencyDefinitionId, int GameSystemId, string Name, string Code);
     private sealed record TagDto(int TagDefinitionId, int GameSystemId, string Name, string Slug);
-    private sealed record ItemDto(int ItemId, int GameSystemId, string Name, string Slug, string? Alias, int? ItemTypeDefinitionId, int? RarityDefinitionId, string? Description, decimal? CostAmount, int? CurrencyDefinitionId, string? CostCurrency, decimal? Weight, int Quantity, string? Tags, string? Effect, bool RequiresAttunement, string? AttunementRequirement, string? DamageDice, string? DamageType, string? VersatileDamageDice, int? ArmorClass, int? StrengthRequirement, bool StealthDisadvantage, int? RangeNormal, int? RangeLong, string? SourceBook, int? SourcePage, bool IsConsumable, int? ChargesCurrent, int? ChargesMax, string? RechargeRule, int? UsesPerDay, List<int>? TagDefinitionIds, List<string>? TagNames, SourceType SourceType);
+    private sealed record ItemDto(int ItemId, int GameSystemId, string Name, string Slug, string? Alias, int? ItemTypeDefinitionId, int? RarityDefinitionId, string? Description, decimal? CostAmount, int? CurrencyDefinitionId, string? CostCurrency, decimal? Weight, int Quantity, string? Tags, string? Effect, bool RequiresAttunement, string? AttunementRequirement, string? DamageDice, string? DamageType, string? VersatileDamageDice, int? ArmorClass, int? StrengthRequirement, bool StealthDisadvantage, int? RangeNormal, int? RangeLong, string? SourceBook, int? SourcePage, bool IsConsumable, int? ChargesCurrent, int? ChargesMax, string? RechargeRule, int? UsesPerDay, string? ArmorCategory, bool WeaponPropertyLight, bool WeaponPropertyHeavy, bool WeaponPropertyFinesse, bool WeaponPropertyThrown, bool WeaponPropertyTwoHanded, bool WeaponPropertyLoading, bool WeaponPropertyReach, bool WeaponPropertyAmmunition, List<int>? TagDefinitionIds, List<string>? TagNames, SourceType SourceType);
 }
