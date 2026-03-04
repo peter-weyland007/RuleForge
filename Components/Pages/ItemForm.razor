@@ -45,7 +45,30 @@
             <MudItem xs="12" md="2"><MudSelect T="int?" @bind-Value="model.CurrencyDefinitionId" Label="Currency" Variant="Variant.Outlined"><MudSelectItem Value="@((int?)null)">(none)</MudSelectItem>@foreach (var c in currencies) { <MudSelectItem Value="@((int?)c.CurrencyDefinitionId)">@c.Code</MudSelectItem> }</MudSelect></MudItem>
             <MudItem xs="12" md="2"><MudNumericField T="decimal?" @bind-Value="model.Weight" Label="Weight (lb)" Variant="Variant.Outlined" /></MudItem>
             <MudItem xs="12" md="2"><MudNumericField T="int" @bind-Value="model.Quantity" Label="Qty" Variant="Variant.Outlined" Min="1" /></MudItem>
-            <MudItem xs="12" md="6"><MudSelect T="int" MultiSelection="true" SelectedValues="model.TagDefinitionIds" SelectedValuesChanged="OnTagsChanged" Label="Tags" Variant="Variant.Outlined">@foreach (var t in tags){<MudSelectItem Value="@t.TagDefinitionId">@t.Name</MudSelectItem>}</MudSelect></MudItem>
+            <MudItem xs="12" md="6">
+                <MudSelect T="int"
+                           MultiSelection="true"
+                           @bind-SelectedValues="SelectedTagValues"
+                           Label="Tags"
+                           Variant="Variant.Outlined"
+                           MultiSelectionTextFunc="TagSelectionText">
+                    @foreach (var t in tags)
+                    {
+                        <MudSelectItem Value="@t.TagDefinitionId">@t.Name</MudSelectItem>
+                    }
+                </MudSelect>
+                @if (selectedTagIds.Count > 0)
+                {
+                    <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mt-2">
+                        @foreach (var tag in tags.Where(t => selectedTagIds.Contains(t.TagDefinitionId)).OrderBy(t => t.Name))
+                        {
+                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined" OnClose="@(() => RemoveTag(tag.TagDefinitionId))">
+                                @tag.Name
+                            </MudChip>
+                        }
+                    </MudStack>
+                }
+            </MudItem>
             <MudItem xs="12" md="3"><MudTextField @bind-Value="model.Alias" Label="Alias (optional)" Variant="Variant.Outlined" /></MudItem>
 
             <MudItem xs="12">
@@ -96,6 +119,7 @@
     {
         systems = await Http.GetFromJsonAsync<List<GameSystemDto>>(Nav.ToAbsoluteUri("/api/game-systems")) ?? new();
         model.GameSystemId = systems.FirstOrDefault()?.GameSystemId ?? 0;
+        selectedTagIds = model.TagDefinitionIds.ToHashSet();
         await LoadLookups();
     }
 
@@ -125,6 +149,7 @@
             RequiresAttunement = dto.RequiresAttunement,
             AttunementRequirement = dto.AttunementRequirement
         };
+        selectedTagIds = model.TagDefinitionIds.ToHashSet();
 
         await LoadLookups();
     }
@@ -136,6 +161,7 @@
         model.RarityDefinitionId = null;
         model.CurrencyDefinitionId = null;
         model.TagDefinitionIds = new List<int>();
+        selectedTagIds.Clear();
         await LoadLookups();
     }
 
@@ -148,15 +174,30 @@
         tags = await Http.GetFromJsonAsync<List<TagDto>>(Nav.ToAbsoluteUri($"/api/tags?gameSystemId={model.GameSystemId}")) ?? new();
     }
 
-    private Task OnTagsChanged(IEnumerable<int> values)
+    private HashSet<int> selectedTagIds = new();
+    private IEnumerable<int> SelectedTagValues
     {
-        model.TagDefinitionIds = values?.ToList() ?? new List<int>();
-        return Task.CompletedTask;
+        get => selectedTagIds;
+        set => selectedTagIds = value?.ToHashSet() ?? new HashSet<int>();
+    }
+
+    private string TagSelectionText(List<string> _)
+
+    {
+        var count = selectedTagIds.Count;
+        return count == 0 ? "(none)" : $"{count} selected";
+    }
+
+    private void RemoveTag(int tagId)
+    {
+        selectedTagIds.Remove(tagId);
     }
 
     private async Task Save()
     {
         if (string.IsNullOrWhiteSpace(model.Name) || model.GameSystemId <= 0) return;
+
+        model.TagDefinitionIds = selectedTagIds.ToList();
 
         var req = new CreateItemRequest(
             model.GameSystemId,
