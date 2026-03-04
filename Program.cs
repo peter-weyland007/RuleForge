@@ -503,7 +503,43 @@ api.MapDelete("/admin/rarities/{rarityDefinitionId:int}", async (int rarityDefin
 api.MapGet("/items/{itemId:int}", async (int itemId, AppDbContext db) =>
 {
     var row = await db.Items.FirstOrDefaultAsync(x => x.ItemId == itemId && x.DateDeletedUtc == null);
-    return row is null ? Results.NotFound() : Results.Ok(row);
+    if (row is null) return Results.NotFound();
+
+    var tagLinks = await db.ItemTags
+        .Where(it => it.DateDeletedUtc == null && it.ItemId == row.ItemId)
+        .ToListAsync();
+
+    var tagIds = tagLinks.Select(t => t.TagDefinitionId).Distinct().ToList();
+    var tags = await db.TagDefinitions
+        .Where(t => t.DateDeletedUtc == null && tagIds.Contains(t.TagDefinitionId))
+        .ToListAsync();
+
+    return Results.Ok(new
+    {
+        row.ItemId,
+        row.GameSystemId,
+        row.Name,
+        row.Slug,
+        row.Alias,
+        row.ItemTypeDefinitionId,
+        row.RarityDefinitionId,
+        row.Description,
+        row.CostAmount,
+        row.CurrencyDefinitionId,
+        row.CostCurrency,
+        row.Weight,
+        row.Quantity,
+        row.Tags,
+        row.Effect,
+        row.RequiresAttunement,
+        row.AttunementRequirement,
+        row.SourceType,
+        row.DateCreatedUtc,
+        row.DateModifiedUtc,
+        row.DateDeletedUtc,
+        TagDefinitionIds = tagLinks.Select(l => l.TagDefinitionId).ToList(),
+        TagNames = tags.Select(t => t.Name).ToList()
+    });
 }).WithTags("Items");
 
 api.MapGet("/items", async (int gameSystemId, AppDbContext db) =>
