@@ -46,6 +46,20 @@
         </MudGrid>
     </MudPaper>
 
+    <MudPaper Class="pa-3" Outlined="true">
+        <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" AlignItems="AlignItems.Center">
+            <MudText Typo="Typo.caption">Active profile:</MudText>
+            <MudChip T="string" Size="Size.Small" Color="@(IsWeaponType ? Color.Primary : Color.Default)" Variant="Variant.Outlined">Weapon</MudChip>
+            <MudChip T="string" Size="Size.Small" Color="@(IsArmorType ? Color.Primary : Color.Default)" Variant="Variant.Outlined">Armor/Shield</MudChip>
+            <MudChip T="string" Size="Size.Small" Color="@(IsConsumableType ? Color.Primary : Color.Default)" Variant="Variant.Outlined">Consumable</MudChip>
+            <MudChip T="string" Size="Size.Small" Color="@(IsMagicType ? Color.Secondary : Color.Default)" Variant="Variant.Outlined">Magic</MudChip>
+            @if (string.IsNullOrWhiteSpace(SelectedTypeName))
+            {
+                <MudText Typo="Typo.caption" Class="ml-2">Choose an item type to activate tailored statblocks.</MudText>
+            }
+        </MudStack>
+    </MudPaper>
+
     <MudPaper Class="pa-4" Outlined="true">
         <MudText Typo="Typo.subtitle1" Class="mb-3">Economy & Source</MudText>
         <MudGrid>
@@ -61,7 +75,8 @@
     </MudPaper>
 
         <MudPaper Class="pa-4" Outlined="true">
-        <MudText Typo="Typo.subtitle1" Class="mb-3">Combat Profile</MudText>
+        <MudText Typo="Typo.subtitle1" Class="mb-1">Combat Profile</MudText>
+        <MudText Typo="Typo.caption" Class="mb-3">Only relevant fields for the selected type are shown.</MudText>
         <MudGrid>
             @if (IsWeaponType)
             {
@@ -114,7 +129,8 @@
     </MudPaper>
 
     <MudPaper Class="pa-4" Outlined="true">
-        <MudText Typo="Typo.subtitle1" Class="mb-3">Magic & Attunement</MudText>
+        <MudText Typo="Typo.subtitle1" Class="mb-1">Magic & Attunement</MudText>
+        <MudText Typo="Typo.caption" Class="mb-3">Use for potions, scrolls, rings, wands, rods, staffs, and wondrous items.</MudText>
         <MudGrid>
             @if (IsConsumableType || IsMagicType)
             {
