@@ -297,7 +297,12 @@
       "currencyCode": "gp",
       "weight": 0.5,
       "quantity": 1,
-      "sourceType": "Official"
+      "sourceType": "Official",
+      "tagSlugs": [
+        "potion",
+        "consumable",
+        "healing"
+      ]
     },
     {
       "gameSystemSlug": "dungeons-dragons-5e",
@@ -310,7 +315,13 @@
       "currencyCode": "gp",
       "weight": 3,
       "quantity": 1,
-      "sourceType": "Official"
+      "sourceType": "Official",
+      "tagSlugs": [
+        "weapon",
+        "melee",
+        "martial",
+        "versatile"
+      ]
     },
     {
       "gameSystemSlug": "pathfinder-2e",
@@ -322,7 +333,11 @@
       "costAmount": 4,
       "currencyCode": "gp",
       "quantity": 1,
-      "sourceType": "Official"
+      "sourceType": "Official",
+      "tagSlugs": [
+        "consumable",
+        "healing"
+      ]
     },
     {
       "gameSystemSlug": "pathfinder-2e",
@@ -334,7 +349,10 @@
       "costAmount": 1,
       "currencyCode": "gp",
       "quantity": 1,
-      "sourceType": "Official"
+      "sourceType": "Official",
+      "tagSlugs": [
+        "consumable"
+      ]
     }
   ],
   "tags": [

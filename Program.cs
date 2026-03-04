@@ -1436,6 +1436,8 @@ static async Task SeedStarterDataAsync(AppDbContext db, string contentRootPath)
                 DateCreatedUtc = now,
                 DateModifiedUtc = now
             });
+            await db.SaveChangesAsync();
+            existingItem = await db.Items.FirstOrDefaultAsync(x => x.DateDeletedUtc == null && x.GameSystemId == system.GameSystemId && x.Slug == desiredSlug);
         }
         else
         {
@@ -1454,6 +1456,38 @@ static async Task SeedStarterDataAsync(AppDbContext db, string contentRootPath)
             existingItem.AttunementRequirement = i.AttunementRequirement;
             existingItem.SourceType = i.SourceType;
             existingItem.DateModifiedUtc = now;
+        }
+
+        if (existingItem is not null)
+        {
+            var desiredTagSlugs = (i.TagSlugs ?? new List<string>())
+                .Select(Slugify)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct()
+                .ToList();
+
+            var desiredTagIds = await db.TagDefinitions
+                .Where(t => t.DateDeletedUtc == null && t.GameSystemId == system.GameSystemId && desiredTagSlugs.Contains(t.Slug))
+                .Select(t => t.TagDefinitionId)
+                .ToListAsync();
+
+            var activeLinks = await db.ItemTags
+                .Where(it => it.DateDeletedUtc == null && it.ItemId == existingItem.ItemId)
+                .ToListAsync();
+
+            foreach (var link in activeLinks.Where(l => !desiredTagIds.Contains(l.TagDefinitionId)))
+                link.DateDeletedUtc = now;
+
+            var activeTagIds = activeLinks.Where(l => l.DateDeletedUtc == null).Select(l => l.TagDefinitionId).ToHashSet();
+            foreach (var tagId in desiredTagIds.Where(id => !activeTagIds.Contains(id)))
+            {
+                db.ItemTags.Add(new ItemTag
+                {
+                    ItemId = existingItem.ItemId,
+                    TagDefinitionId = tagId,
+                    DateCreatedUtc = now
+                });
+            }
         }
     }
 
@@ -1545,6 +1579,7 @@ public sealed class SeedItem
     public string? Alias { get; set; }
     public string? ItemTypeSlug { get; set; }
     public string? RaritySlug { get; set; }
+    public List<string> TagSlugs { get; set; } = new();
     public string? Description { get; set; }
     public decimal? CostAmount { get; set; }
     public string? CurrencyCode { get; set; }
