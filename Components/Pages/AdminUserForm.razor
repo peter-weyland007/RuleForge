@@ -12,6 +12,7 @@
     <MudPaper Class="pa-4" Outlined="true">
         <MudGrid>
             <MudItem xs="12" md="6"><MudTextField @bind-Value="model.Email" Label="Email" Variant="Variant.Outlined" Disabled="@_isEdit" Required="true" /></MudItem>
+            <MudItem xs="12" md="6"><MudTextField @bind-Value="model.Username" Label="Username" Variant="Variant.Outlined" Disabled="@_isEdit" Required="true" /></MudItem>
 
             @if (!_isEdit)
             {
@@ -55,6 +56,7 @@
         model = new FormModel
         {
             Email = dto.Email,
+            Username = dto.Username,
             Role = dto.Role,
             IsActive = dto.IsActive,
             IsSystemAccount = dto.IsSystemAccount,
@@ -73,7 +75,7 @@
         else
         {
             if (string.IsNullOrWhiteSpace(model.Email) || string.IsNullOrWhiteSpace(model.Password)) return;
-            res = await Http.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/admin/users"), new { Email = model.Email, Password = model.Password, Role = model.Role, IsActive = model.IsActive, MustChangePassword = model.MustChangePassword });
+            res = await Http.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/admin/users"), new { Email = model.Email, Username = model.Username, Password = model.Password, Role = model.Role, IsActive = model.IsActive, MustChangePassword = model.MustChangePassword });
         }
 
         if (res.IsSuccessStatusCode) Nav.NavigateTo("/admin/users");
@@ -82,6 +84,7 @@
     private sealed class FormModel
     {
         public string Email { get; set; } = string.Empty;
+        public string Username { get; set; } = string.Empty;
         public string Password { get; set; } = string.Empty;
         public string Role { get; set; } = "Users";
         public bool IsActive { get; set; } = true;
@@ -89,5 +92,5 @@
         public bool MustChangePassword { get; set; } = true;
     }
 
-    private sealed record UserDto(int AppUserId, string Email, string Role, bool IsActive, bool IsSystemAccount, bool MustChangePassword);
+    private sealed record UserDto(int AppUserId, string Email, string Username, string Role, bool IsActive, bool IsSystemAccount, bool MustChangePassword);
 }

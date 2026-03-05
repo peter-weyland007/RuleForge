@@ -14,10 +14,11 @@
 
     <MudTable Items="rows" Dense="true" Hover="true">
         <HeaderContent>
-            <MudTh>Email</MudTh><MudTh>Role</MudTh><MudTh>Active</MudTh><MudTh>System</MudTh><MudTh>Must Change Password</MudTh><MudTh></MudTh>
+            <MudTh>Email</MudTh><MudTh>Username</MudTh><MudTh>Role</MudTh><MudTh>Active</MudTh><MudTh>System</MudTh><MudTh>Must Change Password</MudTh><MudTh></MudTh>
         </HeaderContent>
         <RowTemplate>
             <MudTd>@context.Email</MudTd>
+            <MudTd>@context.Username</MudTd>
             <MudTd>@context.Role</MudTd>
             <MudTd>@(context.IsActive ? "Yes" : "No")</MudTd>
             <MudTd>@(context.IsSystemAccount ? "Yes" : "No")</MudTd>
@@ -37,5 +38,5 @@
         rows = await Http.GetFromJsonAsync<List<UserDto>>(Nav.ToAbsoluteUri("/api/admin/users")) ?? new();
     }
 
-    private sealed record UserDto(int AppUserId, string Email, string Role, bool IsActive, bool IsSystemAccount, bool MustChangePassword);
+    private sealed record UserDto(int AppUserId, string Email, string Username, string Role, bool IsActive, bool IsSystemAccount, bool MustChangePassword);
 }

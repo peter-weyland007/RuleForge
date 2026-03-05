@@ -278,6 +278,7 @@ using (var scope = app.Services.CreateScope())
         CREATE TABLE IF NOT EXISTS AppUsers (
             AppUserId INTEGER PRIMARY KEY AUTOINCREMENT,
             Email TEXT NOT NULL,
+            Username TEXT NOT NULL,
             PasswordHash TEXT NOT NULL,
             PasswordSalt TEXT NOT NULL,
             Role TEXT NOT NULL,
@@ -289,10 +290,13 @@ using (var scope = app.Services.CreateScope())
             DateDeletedUtc TEXT NULL
         );
     """);
+    try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE AppUsers ADD COLUMN Username TEXT NOT NULL DEFAULT '';"); } catch (SqliteException) { }
     try { await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS IX_AppUsers_Email_Unique_Active ON AppUsers (Email) WHERE DateDeletedUtc IS NULL;"); } catch (SqliteException) { }
+    try { await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS IX_AppUsers_Username_Unique_Active ON AppUsers (Username) WHERE DateDeletedUtc IS NULL;"); } catch (SqliteException) { }
     try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE AppUsers ADD COLUMN IsSystemAccount INTEGER NOT NULL DEFAULT 0;"); } catch (SqliteException) { }
     try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE AppUsers ADD COLUMN MustChangePassword INTEGER NOT NULL DEFAULT 0;"); } catch (SqliteException) { }
     try { await db.Database.ExecuteSqlRawAsync("UPDATE AppUsers SET Role='Users' WHERE DateDeletedUtc IS NULL AND Role IS NOT NULL AND Role NOT IN ('Admin','Users');"); } catch (SqliteException) { }
+    try { await db.Database.ExecuteSqlRawAsync("UPDATE AppUsers SET Username = lower(substr(Email,1,instr(Email,'@')-1)) WHERE DateDeletedUtc IS NULL AND (Username IS NULL OR Username='') AND instr(Email,'@')>1;"); } catch (SqliteException) { }
 
     await EnsureSeedAdminAccountAsync(db);
     await SeedStarterDataAsync(db, app.Environment.ContentRootPath);
@@ -306,14 +310,17 @@ api.MapGet("/health", () => Results.Ok(new { ok = true, service = "RuleForge", u
 
 api.MapPost("/auth/register", async (RegisterRequest req, AppDbContext db) =>
 {
-    if (string.IsNullOrWhiteSpace(req.Email) || string.IsNullOrWhiteSpace(req.Password))
-        return Results.BadRequest("Email and password are required.");
+    if (string.IsNullOrWhiteSpace(req.Email) || string.IsNullOrWhiteSpace(req.Username) || string.IsNullOrWhiteSpace(req.Password))
+        return Results.BadRequest("Email, username, and password are required.");
 
     var email = req.Email.Trim().ToLowerInvariant();
+    var username = req.Username.Trim().ToLowerInvariant();
     if (req.Password.Length < 8) return Results.BadRequest("Password must be at least 8 characters.");
 
     var exists = await db.AppUsers.AnyAsync(u => u.DateDeletedUtc == null && u.Email == email);
     if (exists) return Results.BadRequest("Email is already registered.");
+    var usernameExists = await db.AppUsers.AnyAsync(u => u.DateDeletedUtc == null && u.Username == username);
+    if (usernameExists) return Results.BadRequest("Username is already registered.");
 
     var userCount = await db.AppUsers.CountAsync(u => u.DateDeletedUtc == null);
     var role = userCount == 0 ? "Admin" : "Users";
@@ -323,6 +330,7 @@ api.MapPost("/auth/register", async (RegisterRequest req, AppDbContext db) =>
     var user = new AppUser
     {
         Email = email,
+        Username = username,
         PasswordHash = hash,
         PasswordSalt = salt,
         Role = role,
@@ -335,16 +343,16 @@ api.MapPost("/auth/register", async (RegisterRequest req, AppDbContext db) =>
     db.AppUsers.Add(user);
     await db.SaveChangesAsync();
 
-    return Results.Ok(new { user.AppUserId, user.Email, user.Role, user.IsActive, user.MustChangePassword });
+    return Results.Ok(new { user.AppUserId, user.Email, user.Username, user.Role, user.IsActive, user.MustChangePassword });
 }).WithTags("Auth");
 
 api.MapPost("/auth/login", async (LoginRequest req, AppDbContext db, HttpContext http) =>
 {
-    if (string.IsNullOrWhiteSpace(req.Email) || string.IsNullOrWhiteSpace(req.Password))
-        return Results.BadRequest("Email and password are required.");
+    if (string.IsNullOrWhiteSpace(req.Identifier) || string.IsNullOrWhiteSpace(req.Password))
+        return Results.BadRequest("Identifier and password are required.");
 
-    var email = req.Email.Trim().ToLowerInvariant();
-    var user = await db.AppUsers.FirstOrDefaultAsync(u => u.DateDeletedUtc == null && u.Email == email);
+    var ident = req.Identifier.Trim().ToLowerInvariant();
+    var user = await db.AppUsers.FirstOrDefaultAsync(u => u.DateDeletedUtc == null && (u.Email == ident || u.Username == ident));
     if (user is null || !user.IsActive) return Results.Unauthorized();
 
     if (!VerifyPassword(req.Password, user.PasswordHash, user.PasswordSalt)) return Results.Unauthorized();
@@ -354,14 +362,15 @@ api.MapPost("/auth/login", async (LoginRequest req, AppDbContext db, HttpContext
         new(ClaimTypes.NameIdentifier, user.AppUserId.ToString()),
         new(ClaimTypes.Email, user.Email),
         new(ClaimTypes.Role, user.Role),
-        new(ClaimTypes.Name, user.Email),
+        new(ClaimTypes.Name, user.Username),
+        new("username", user.Username),
         new("must_change_password", user.MustChangePassword ? "true" : "false")
     };
     var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
     var principal = new ClaimsPrincipal(identity);
     await http.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);
 
-    return Results.Ok(new { user.AppUserId, user.Email, user.Role, user.MustChangePassword });
+    return Results.Ok(new { user.AppUserId, user.Email, user.Username, user.Role, user.MustChangePassword });
 }).WithTags("Auth");
 
 api.MapPost("/auth/logout", async (HttpContext http) =>
@@ -407,6 +416,7 @@ api.MapGet("/auth/me", (HttpContext http) =>
     {
         id = http.User.FindFirstValue(ClaimTypes.NameIdentifier),
         email = http.User.FindFirstValue(ClaimTypes.Email),
+        username = http.User.FindFirstValue("username"),
         role = http.User.FindFirstValue(ClaimTypes.Role),
         mustChangePassword = string.Equals(http.User.FindFirstValue("must_change_password"), "true", StringComparison.OrdinalIgnoreCase)
     });
@@ -418,17 +428,18 @@ api.MapGet("/admin/users", async (AppDbContext db) =>
     await db.AppUsers
         .Where(u => u.DateDeletedUtc == null)
         .OrderBy(u => u.Email)
-        .Select(u => new { u.AppUserId, u.Email, u.Role, u.IsActive, u.IsSystemAccount, u.MustChangePassword, u.DateCreatedUtc, u.DateModifiedUtc })
+        .Select(u => new { u.AppUserId, u.Email, u.Username, u.Role, u.IsActive, u.IsSystemAccount, u.MustChangePassword, u.DateCreatedUtc, u.DateModifiedUtc })
         .ToListAsync())
     .WithTags("Admin");
 
 
 api.MapPost("/admin/users", async (CreateUserAdminRequest req, AppDbContext db) =>
 {
-    if (string.IsNullOrWhiteSpace(req.Email) || string.IsNullOrWhiteSpace(req.Password))
-        return Results.BadRequest("Email and password are required.");
+    if (string.IsNullOrWhiteSpace(req.Email) || string.IsNullOrWhiteSpace(req.Username) || string.IsNullOrWhiteSpace(req.Password))
+        return Results.BadRequest("Email, username, and password are required.");
 
     var email = req.Email.Trim().ToLowerInvariant();
+    var username = req.Username.Trim().ToLowerInvariant();
     if (req.Password.Length < 8) return Results.BadRequest("Password must be at least 8 characters.");
 
     var role = (req.Role ?? "").Trim();
@@ -436,12 +447,15 @@ api.MapPost("/admin/users", async (CreateUserAdminRequest req, AppDbContext db) 
 
     var exists = await db.AppUsers.AnyAsync(u => u.DateDeletedUtc == null && u.Email == email);
     if (exists) return Results.BadRequest("Email is already registered.");
+    var usernameExists = await db.AppUsers.AnyAsync(u => u.DateDeletedUtc == null && u.Username == username);
+    if (usernameExists) return Results.BadRequest("Username is already registered.");
 
     var (hash, salt) = HashPassword(req.Password);
     var now = DateTime.UtcNow;
     var user = new AppUser
     {
         Email = email,
+        Username = username,
         PasswordHash = hash,
         PasswordSalt = salt,
         Role = role,
@@ -454,13 +468,13 @@ api.MapPost("/admin/users", async (CreateUserAdminRequest req, AppDbContext db) 
     db.AppUsers.Add(user);
     await db.SaveChangesAsync();
 
-    return Results.Ok(new { user.AppUserId, user.Email, user.Role, user.IsActive, user.IsSystemAccount, user.MustChangePassword });
+    return Results.Ok(new { user.AppUserId, user.Email, user.Username, user.Role, user.IsActive, user.IsSystemAccount, user.MustChangePassword });
 }).WithTags("Admin");
 
 api.MapGet("/admin/users/{appUserId:int}", async (int appUserId, AppDbContext db) =>
 {
     var u = await db.AppUsers.FirstOrDefaultAsync(x => x.AppUserId == appUserId && x.DateDeletedUtc == null);
-    return u is null ? Results.NotFound() : Results.Ok(new { u.AppUserId, u.Email, u.Role, u.IsActive, u.IsSystemAccount, u.MustChangePassword });
+    return u is null ? Results.NotFound() : Results.Ok(new { u.AppUserId, u.Email, u.Username, u.Role, u.IsActive, u.IsSystemAccount, u.MustChangePassword });
 }).WithTags("Admin");
 
 api.MapPut("/admin/users/{appUserId:int}", async (int appUserId, UpdateUserAdminRequest req, AppDbContext db) =>
@@ -2204,6 +2218,7 @@ static async Task EnsureSeedAdminAccountAsync(AppDbContext db)
         db.AppUsers.Add(new AppUser
         {
             Email = email,
+            Username = "admin",
             PasswordHash = hash,
             PasswordSalt = salt,
             Role = "Admin",
@@ -2218,6 +2233,7 @@ static async Task EnsureSeedAdminAccountAsync(AppDbContext db)
     else
     {
         var changed = false;
+        if (!string.Equals(existing.Username, "admin", StringComparison.OrdinalIgnoreCase)) { existing.Username = "admin"; changed = true; }
         if (!existing.IsSystemAccount) { existing.IsSystemAccount = true; changed = true; }
         if (!string.Equals(existing.Role, "Admin", StringComparison.OrdinalIgnoreCase)) { existing.Role = "Admin"; changed = true; }
         if (!existing.IsActive) { existing.IsActive = true; changed = true; }
@@ -2504,6 +2520,7 @@ public sealed class AppUser
 {
     public int AppUserId { get; set; }
     public string Email { get; set; } = string.Empty;
+    public string Username { get; set; } = string.Empty;
     public string PasswordHash { get; set; } = string.Empty;
     public string PasswordSalt { get; set; } = string.Empty;
     public string Role { get; set; } = "Viewer";
@@ -2515,11 +2532,11 @@ public sealed class AppUser
     public DateTime? DateDeletedUtc { get; set; }
 }
 
-public sealed record RegisterRequest(string Email, string Password);
-public sealed record LoginRequest(string Email, string Password);
+public sealed record RegisterRequest(string Email, string Username, string Password);
+public sealed record LoginRequest(string Identifier, string Password);
 public sealed record ChangePasswordRequest(string CurrentPassword, string NewPassword);
 public sealed record UpdateUserAdminRequest(string Role, bool IsActive);
-public sealed record CreateUserAdminRequest(string Email, string Password, string Role, bool IsActive = true, bool MustChangePassword = true);
+public sealed record CreateUserAdminRequest(string Email, string Username, string Password, string Role, bool IsActive = true, bool MustChangePassword = true);
 
 public sealed class SourceMaterial
 {

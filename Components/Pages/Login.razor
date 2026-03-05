@@ -9,7 +9,7 @@
     <MudText Typo="Typo.h4">Login</MudText>
     <MudPaper Class="pa-4" Outlined="true">
         <MudStack Spacing="2">
-            <MudTextField @bind-Value="email" Label="Email" Variant="Variant.Outlined" Required="true" />
+            <MudTextField @bind-Value="email" Label="Email or Username" Variant="Variant.Outlined" Required="true" />
             <MudTextField @bind-Value="password" Label="Password" InputType="InputType.Password" Variant="Variant.Outlined" Required="true" />
             @if (!string.IsNullOrWhiteSpace(error))
             {
@@ -29,7 +29,7 @@
     private async Task DoLogin()
     {
         error = null;
-        var res = await Http.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/auth/login"), new { Email = email, Password = password });
+        var res = await Http.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/auth/login"), new { Identifier = email, Password = password });
         if (res.IsSuccessStatusCode)
         {
             var me = await Http.GetFromJsonAsync<AuthMe>(Nav.ToAbsoluteUri("/api/auth/me"));
@@ -46,5 +46,5 @@
         error = await res.Content.ReadAsStringAsync();
     }
 
-    private sealed record AuthMe(string? id, string? email, string? role, bool mustChangePassword);
+    private sealed record AuthMe(string? id, string? email, string? username, string? role, bool mustChangePassword);
 }

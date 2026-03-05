@@ -10,6 +10,7 @@
     <MudPaper Class="pa-4" Outlined="true">
         <MudStack Spacing="2">
             <MudTextField @bind-Value="email" Label="Email" Variant="Variant.Outlined" Required="true" />
+            <MudTextField @bind-Value="username" Label="Username" Variant="Variant.Outlined" Required="true" />
             <MudTextField @bind-Value="password" Label="Password" InputType="InputType.Password" Variant="Variant.Outlined" Required="true" HelperText="Minimum 8 characters" />
             @if (!string.IsNullOrWhiteSpace(error))
             {
@@ -23,13 +24,14 @@
 
 @code {
     private string email = string.Empty;
+    private string username = string.Empty;
     private string password = string.Empty;
     private string? error;
 
     private async Task DoRegister()
     {
         error = null;
-        var res = await Http.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/auth/register"), new { Email = email, Password = password });
+        var res = await Http.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/auth/register"), new { Email = email, Username = username, Password = password });
         if (res.IsSuccessStatusCode)
         {
             Nav.NavigateTo("/login");
