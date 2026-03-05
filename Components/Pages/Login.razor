@@ -32,10 +32,19 @@
         var res = await Http.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/auth/login"), new { Email = email, Password = password });
         if (res.IsSuccessStatusCode)
         {
+            var me = await Http.GetFromJsonAsync<AuthMe>(Nav.ToAbsoluteUri("/api/auth/me"));
+            if (me?.mustChangePassword == true)
+            {
+                Nav.NavigateTo("/change-password");
+                return;
+            }
+
             Nav.NavigateTo("/");
             return;
         }
 
         error = await res.Content.ReadAsStringAsync();
     }
+
+    private sealed record AuthMe(string? id, string? email, string? role, bool mustChangePassword);
 }

@@ -282,13 +282,18 @@ using (var scope = app.Services.CreateScope())
             PasswordSalt TEXT NOT NULL,
             Role TEXT NOT NULL,
             IsActive INTEGER NOT NULL DEFAULT 1,
+            IsSystemAccount INTEGER NOT NULL DEFAULT 0,
+            MustChangePassword INTEGER NOT NULL DEFAULT 0,
             DateCreatedUtc TEXT NOT NULL,
             DateModifiedUtc TEXT NOT NULL,
             DateDeletedUtc TEXT NULL
         );
     """);
     try { await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS IX_AppUsers_Email_Unique_Active ON AppUsers (Email) WHERE DateDeletedUtc IS NULL;"); } catch (SqliteException) { }
+    try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE AppUsers ADD COLUMN IsSystemAccount INTEGER NOT NULL DEFAULT 0;"); } catch (SqliteException) { }
+    try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE AppUsers ADD COLUMN MustChangePassword INTEGER NOT NULL DEFAULT 0;"); } catch (SqliteException) { }
 
+    await EnsureSeedAdminAccountAsync(db);
     await SeedStarterDataAsync(db, app.Environment.ContentRootPath);
 
 }
@@ -321,13 +326,15 @@ api.MapPost("/auth/register", async (RegisterRequest req, AppDbContext db) =>
         PasswordSalt = salt,
         Role = role,
         IsActive = true,
+        IsSystemAccount = false,
+        MustChangePassword = false,
         DateCreatedUtc = now,
         DateModifiedUtc = now
     };
     db.AppUsers.Add(user);
     await db.SaveChangesAsync();
 
-    return Results.Ok(new { user.AppUserId, user.Email, user.Role, user.IsActive });
+    return Results.Ok(new { user.AppUserId, user.Email, user.Role, user.IsActive, user.MustChangePassword });
 }).WithTags("Auth");
 
 api.MapPost("/auth/login", async (LoginRequest req, AppDbContext db, HttpContext http) =>
@@ -346,17 +353,48 @@ api.MapPost("/auth/login", async (LoginRequest req, AppDbContext db, HttpContext
         new(ClaimTypes.NameIdentifier, user.AppUserId.ToString()),
         new(ClaimTypes.Email, user.Email),
         new(ClaimTypes.Role, user.Role),
-        new(ClaimTypes.Name, user.Email)
+        new(ClaimTypes.Name, user.Email),
+        new("must_change_password", user.MustChangePassword ? "true" : "false")
     };
     var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
     var principal = new ClaimsPrincipal(identity);
     await http.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);
 
-    return Results.Ok(new { user.AppUserId, user.Email, user.Role });
+    return Results.Ok(new { user.AppUserId, user.Email, user.Role, user.MustChangePassword });
 }).WithTags("Auth");
 
 api.MapPost("/auth/logout", async (HttpContext http) =>
 {
+    await http.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+    return Results.Ok(new { ok = true });
+}).WithTags("Auth");
+
+
+api.MapPost("/auth/change-password", async (ChangePasswordRequest req, AppDbContext db, HttpContext http) =>
+{
+    if (http.User?.Identity?.IsAuthenticated != true) return Results.Unauthorized();
+    var idRaw = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+    if (!int.TryParse(idRaw, out var userId)) return Results.Unauthorized();
+
+    var user = await db.AppUsers.FirstOrDefaultAsync(u => u.AppUserId == userId && u.DateDeletedUtc == null);
+    if (user is null || !user.IsActive) return Results.Unauthorized();
+
+    if (string.IsNullOrWhiteSpace(req.CurrentPassword) || string.IsNullOrWhiteSpace(req.NewPassword))
+        return Results.BadRequest("CurrentPassword and NewPassword are required.");
+
+    if (!VerifyPassword(req.CurrentPassword, user.PasswordHash, user.PasswordSalt))
+        return Results.BadRequest("Current password is invalid.");
+
+    if (req.NewPassword.Length < 8)
+        return Results.BadRequest("New password must be at least 8 characters.");
+
+    var (hash, salt) = HashPassword(req.NewPassword);
+    user.PasswordHash = hash;
+    user.PasswordSalt = salt;
+    user.MustChangePassword = false;
+    user.DateModifiedUtc = DateTime.UtcNow;
+    await db.SaveChangesAsync();
+
     await http.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
     return Results.Ok(new { ok = true });
 }).WithTags("Auth");
@@ -368,7 +406,8 @@ api.MapGet("/auth/me", (HttpContext http) =>
     {
         id = http.User.FindFirstValue(ClaimTypes.NameIdentifier),
         email = http.User.FindFirstValue(ClaimTypes.Email),
-        role = http.User.FindFirstValue(ClaimTypes.Role)
+        role = http.User.FindFirstValue(ClaimTypes.Role),
+        mustChangePassword = string.Equals(http.User.FindFirstValue("must_change_password"), "true", StringComparison.OrdinalIgnoreCase)
     });
 }).WithTags("Auth");
 
@@ -2079,6 +2118,45 @@ static string? ValidateItemRequestByType(CreateItemRequest req, string? itemType
 }
 
 
+
+static async Task EnsureSeedAdminAccountAsync(AppDbContext db)
+{
+    const string email = "admin@local";
+    const string tempPassword = "ChangeMe123!";
+
+    var existing = await db.AppUsers.FirstOrDefaultAsync(u => u.Email == email && u.DateDeletedUtc == null);
+    if (existing is null)
+    {
+        var (hash, salt) = HashPassword(tempPassword);
+        var now = DateTime.UtcNow;
+        db.AppUsers.Add(new AppUser
+        {
+            Email = email,
+            PasswordHash = hash,
+            PasswordSalt = salt,
+            Role = "Admin",
+            IsActive = true,
+            IsSystemAccount = true,
+            MustChangePassword = true,
+            DateCreatedUtc = now,
+            DateModifiedUtc = now
+        });
+        await db.SaveChangesAsync();
+    }
+    else
+    {
+        var changed = false;
+        if (!existing.IsSystemAccount) { existing.IsSystemAccount = true; changed = true; }
+        if (!string.Equals(existing.Role, "Admin", StringComparison.OrdinalIgnoreCase)) { existing.Role = "Admin"; changed = true; }
+        if (!existing.IsActive) { existing.IsActive = true; changed = true; }
+        if (changed)
+        {
+            existing.DateModifiedUtc = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+        }
+    }
+}
+
 static (string hash, string salt) HashPassword(string password)
 {
     var saltBytes = RandomNumberGenerator.GetBytes(16);
@@ -2358,6 +2436,8 @@ public sealed class AppUser
     public string PasswordSalt { get; set; } = string.Empty;
     public string Role { get; set; } = "Viewer";
     public bool IsActive { get; set; } = true;
+    public bool IsSystemAccount { get; set; }
+    public bool MustChangePassword { get; set; }
     public DateTime DateCreatedUtc { get; set; }
     public DateTime DateModifiedUtc { get; set; }
     public DateTime? DateDeletedUtc { get; set; }
@@ -2365,6 +2445,7 @@ public sealed class AppUser
 
 public sealed record RegisterRequest(string Email, string Password);
 public sealed record LoginRequest(string Email, string Password);
+public sealed record ChangePasswordRequest(string CurrentPassword, string NewPassword);
 
 public sealed class SourceMaterial
 {
