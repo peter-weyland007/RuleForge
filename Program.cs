@@ -28,6 +28,7 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.SlidingExpiration = true;
     });
 builder.Services.AddAuthorization();
+builder.Services.AddCascadingAuthenticationState();
 
 
 var dataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ruleforge");
@@ -48,6 +49,43 @@ if (!app.Environment.IsDevelopment())
 app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
+app.Use(async (ctx, next) =>
+{
+    static bool IsAdminPath(PathString path) =>
+        path.StartsWithSegments("/api/admin", StringComparison.OrdinalIgnoreCase) ||
+        path.StartsWithSegments("/admin", StringComparison.OrdinalIgnoreCase);
+
+    if (IsAdminPath(ctx.Request.Path))
+    {
+        if (ctx.User?.Identity?.IsAuthenticated != true)
+        {
+            if (ctx.Request.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase))
+            {
+                await ctx.ChallengeAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                return;
+            }
+
+            ctx.Response.Redirect("/login");
+            return;
+        }
+
+        if (!ctx.User.IsInRole("Admin"))
+        {
+            if (ctx.Request.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase))
+            {
+                ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
+                await ctx.Response.WriteAsync("Forbidden");
+                return;
+            }
+
+            ctx.Response.Redirect("/");
+            return;
+        }
+    }
+
+    await next();
+});
+
 app.UseAntiforgery();
 
 app.UseSwagger();

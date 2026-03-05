@@ -1,16 +1,22 @@
+@using Microsoft.AspNetCore.Components.Authorization
+
+<CascadingAuthenticationState>
 <MudNavMenu Dense="true">
     <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Home">Home</MudNavLink>
     <MudNavLink Href="/game-systems" Icon="@Icons.Material.Filled.TableView">Game Systems</MudNavLink>
     <MudNavLink Href="/items" Icon="@Icons.Material.Filled.Inventory2">Items</MudNavLink>
 
-    <MudNavGroup Title="Admin" Icon="@Icons.Material.Filled.AdminPanelSettings" Expanded="true">
-        <MudNavLink Href="/admin/operations" Icon="@Icons.Material.Filled.Settings">Operations</MudNavLink>
-        <MudNavLink Href="/admin/reference-data" Icon="@Icons.Material.Filled.Dataset">Reference Data</MudNavLink>
+    <AuthorizeView Roles="Admin">
+        <MudNavGroup Title="Admin" Icon="@Icons.Material.Filled.AdminPanelSettings" Expanded="true">
+            <MudNavLink Href="/admin/operations" Icon="@Icons.Material.Filled.Settings">Operations</MudNavLink>
+            <MudNavLink Href="/admin/reference-data" Icon="@Icons.Material.Filled.Dataset">Reference Data</MudNavLink>
+        </MudNavGroup>
+    </AuthorizeView>
+
+    <MudNavGroup Title="Account" Icon="@Icons.Material.Filled.Person" Expanded="false">
+        <MudNavLink Href="/login" Icon="@Icons.Material.Filled.Login">Login</MudNavLink>
+        <MudNavLink Href="/register" Icon="@Icons.Material.Filled.PersonAdd">Register</MudNavLink>
+        <MudNavLink Href="/change-password" Icon="@Icons.Material.Filled.Password">Change Password</MudNavLink>
     </MudNavGroup>
 </MudNavMenu>
-
-
-<MudNavGroup Title="Account" Icon="@Icons.Material.Filled.Person" Expanded="false">
-    <MudNavLink Href="/login" Icon="@Icons.Material.Filled.Login">Login</MudNavLink>
-    <MudNavLink Href="/register" Icon="@Icons.Material.Filled.PersonAdd">Register</MudNavLink>
-</MudNavGroup>
+</CascadingAuthenticationState>
