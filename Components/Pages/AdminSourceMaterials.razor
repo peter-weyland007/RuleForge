@@ -33,12 +33,12 @@
 
     protected override async Task OnInitializedAsync()
     {
-        systems = await Http.GetFromJsonAsync<List<GameSystemDto>>("/api/game-systems") ?? new();
+        systems = await Http.GetFromJsonAsync<List<GameSystemDto>>(Nav.ToAbsoluteUri("/api/game-systems")) ?? new();
         selectedSystemId = systems.FirstOrDefault()?.GameSystemId ?? 0;
         await Load();
     }
     private async Task OnSystemChanged(int id){ selectedSystemId=id; await Load(); }
-    private async Task Load(){ if(selectedSystemId<=0)return; rows = await Http.GetFromJsonAsync<List<SourceMaterialDto>>($"/api/admin/source-materials?gameSystemId={selectedSystemId}") ?? new(); }
+    private async Task Load(){ if(selectedSystemId<=0)return; rows = await Http.GetFromJsonAsync<List<SourceMaterialDto>>(Nav.ToAbsoluteUri($"/api/admin/source-materials?gameSystemId={selectedSystemId}")) ?? new(); }
 
     private sealed record GameSystemDto(int GameSystemId, string Name);
     private sealed record SourceMaterialDto(int SourceMaterialId,int GameSystemId,string Code,string Title,string? Publisher,bool IsOfficial);

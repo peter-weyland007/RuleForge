@@ -44,7 +44,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        systems = await Http.GetFromJsonAsync<List<GameSystemDto>>("/api/game-systems") ?? new();
+        systems = await Http.GetFromJsonAsync<List<GameSystemDto>>(Nav.ToAbsoluteUri("/api/game-systems")) ?? new();
         model.GameSystemId = systems.FirstOrDefault()?.GameSystemId ?? 0;
         model.IsOfficial = true;
     }
@@ -52,7 +52,7 @@
     protected override async Task OnParametersSetAsync()
     {
         if (!_isEdit) return;
-        var dto = await Http.GetFromJsonAsync<SourceMaterialDto>($"/api/admin/source-materials/{SourceMaterialId!.Value}");
+        var dto = await Http.GetFromJsonAsync<SourceMaterialDto>(Nav.ToAbsoluteUri($"/api/admin/source-materials/{SourceMaterialId!.Value}"));
         if (dto is null) { Nav.NavigateTo("/admin/source-materials"); return; }
 
         model = new FormModel

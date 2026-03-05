@@ -28,7 +28,7 @@
     private List<TagDto> rows = new();
     private int selectedSystemId;
 
-    protected override async Task OnInitializedAsync(){ systems = await Http.GetFromJsonAsync<List<GameSystemDto>>("/api/game-systems") ?? new(); selectedSystemId = systems.FirstOrDefault()?.GameSystemId ?? 0; await Load(); }
+    protected override async Task OnInitializedAsync(){ systems = await Http.GetFromJsonAsync<List<GameSystemDto>>(Nav.ToAbsoluteUri("/api/game-systems")) ?? new(); selectedSystemId = systems.FirstOrDefault()?.GameSystemId ?? 0; await Load(); }
     private async Task OnSystemChanged(int id){ selectedSystemId=id; await Load(); }
     private async Task Load(){ if(selectedSystemId<=0)return; rows = await Http.GetFromJsonAsync<List<TagDto>>(Nav.ToAbsoluteUri($"/api/admin/tags?gameSystemId={selectedSystemId}")) ?? new(); }
 
