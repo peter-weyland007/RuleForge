@@ -348,7 +348,7 @@
         currencies = await Http.GetFromJsonAsync<List<CurrencyDto>>(Nav.ToAbsoluteUri($"/api/currencies?gameSystemId={model.GameSystemId}")) ?? new();
         sourceMaterials = await Http.GetFromJsonAsync<List<SourceMaterialDto>>(Nav.ToAbsoluteUri($"/api/source-materials?gameSystemId={model.GameSystemId}")) ?? new();
         owners = await Http.GetFromJsonAsync<List<UserOwnerDto>>(Nav.ToAbsoluteUri("/api/users")) ?? new();
-        try { campaigns = await JS.InvokeAsync<List<CampaignLiteDto>>("ruleforgeAuth.campaignsList") ?? new(); } catch { campaigns = new(); }
+        try { campaigns = await JS.InvokeAsync<List<CampaignLiteDto>>("ruleforgeAuth.campaignsAccessible") ?? new(); } catch { campaigns = new(); }
         tags = await Http.GetFromJsonAsync<List<TagDto>>(Nav.ToAbsoluteUri($"/api/tags?gameSystemId={model.GameSystemId}")) ?? new();
     }
 

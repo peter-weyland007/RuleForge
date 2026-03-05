@@ -89,6 +89,13 @@ window.ruleforgeAuth = {
   }
 ,
 
+  async campaignsAccessible() {
+    const res = await fetch('/api/campaigns/accessible', { credentials: 'include' });
+    const text = await res.text();
+    if (!res.ok) throw new Error(text || 'Failed to load accessible campaigns');
+    return text ? JSON.parse(text) : [];
+  },
+
   async campaignsList() {
     const res = await fetch('/api/campaigns', { credentials: 'include' });
     const text = await res.text();
