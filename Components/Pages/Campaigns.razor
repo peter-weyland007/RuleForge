@@ -1,7 +1,5 @@
 @page "/campaigns"
-@using System.Net.Http.Json
-@inject HttpClient Http
-@inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>Campaigns</PageTitle>
 
@@ -10,6 +8,11 @@
         <MudText Typo="Typo.h4">Campaigns</MudText>
         <MudButton Href="/campaigns/new" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">New Campaign</MudButton>
     </MudStack>
+
+    @if (!string.IsNullOrWhiteSpace(error))
+    {
+        <MudAlert Severity="Severity.Error">@error</MudAlert>
+    }
 
     <MudTable Items="rows" Dense="true" Hover="true">
         <HeaderContent>
@@ -32,10 +35,18 @@
 
 @code {
     private List<CampaignDto> rows = new();
+    private string? error;
 
     protected override async Task OnInitializedAsync()
     {
-        rows = await Http.GetFromJsonAsync<List<CampaignDto>>(Nav.ToAbsoluteUri("/api/campaigns")) ?? new();
+        try
+        {
+            rows = await JS.InvokeAsync<List<CampaignDto>>("ruleforgeAuth.campaignsList") ?? new();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
     }
 
     private sealed record CampaignDto(int CampaignId, string Title, string? Description, int? OwnerAppUserId, string? OwnerUsername, int CollaboratorCount, int PlayerCount);

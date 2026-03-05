@@ -3,6 +3,7 @@
 @using System.Net.Http.Json
 @inject HttpClient Http
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>@(_isEdit ? "Edit Campaign" : "New Campaign")</PageTitle>
 
@@ -79,11 +80,18 @@
         users = await Http.GetFromJsonAsync<List<UserDto>>(Nav.ToAbsoluteUri("/api/users")) ?? new();
 
         if (!_isEdit) return;
-        var dto = await Http.GetFromJsonAsync<CampaignDto>(Nav.ToAbsoluteUri($"/api/campaigns/{CampaignId!.Value}"));
-        if (dto is null) { Nav.NavigateTo("/campaigns"); return; }
-        model = new FormModel { Title = dto.Title, Description = dto.Description, OwnerAppUserId = dto.OwnerAppUserId };
-        selectedCollaboratorIds = (dto.CollaboratorUserIds ?? new List<int>()).ToHashSet();
-        selectedPlayerIds = (dto.PlayerUserIds ?? new List<int>()).ToHashSet();
+        try
+        {
+            var dto = await JS.InvokeAsync<CampaignDto>("ruleforgeAuth.campaignGet", CampaignId!.Value);
+            if (dto is null) { Nav.NavigateTo("/campaigns"); return; }
+            model = new FormModel { Title = dto.Title, Description = dto.Description, OwnerAppUserId = dto.OwnerAppUserId };
+            selectedCollaboratorIds = (dto.CollaboratorUserIds ?? new List<int>()).ToHashSet();
+            selectedPlayerIds = (dto.PlayerUserIds ?? new List<int>()).ToHashSet();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
     }
 
     private async Task Save()
@@ -91,12 +99,19 @@
         error = null;
         if (string.IsNullOrWhiteSpace(model.Title)) return;
         var req = new { Title = model.Title, Description = model.Description, OwnerAppUserId = model.OwnerAppUserId, CollaboratorUserIds = selectedCollaboratorIds.ToList(), PlayerUserIds = selectedPlayerIds.ToList() };
-        var res = _isEdit
-            ? await Http.PutAsJsonAsync(Nav.ToAbsoluteUri($"/api/campaigns/{CampaignId!.Value}"), req)
-            : await Http.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/campaigns"), req);
+        try
+        {
+            if (_isEdit)
+                await JS.InvokeAsync<object>("ruleforgeAuth.campaignUpdate", CampaignId!.Value, req);
+            else
+                await JS.InvokeAsync<object>("ruleforgeAuth.campaignCreate", req);
 
-        if (res.IsSuccessStatusCode) Nav.NavigateTo("/campaigns");
-        else error = await res.Content.ReadAsStringAsync();
+            Nav.NavigateTo("/campaigns");
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
     }
 
     private sealed class FormModel { public string Title { get; set; } = string.Empty; public string? Description { get; set; } public int? OwnerAppUserId { get; set; } }

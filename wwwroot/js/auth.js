@@ -87,4 +87,43 @@ window.ruleforgeAuth = {
     if (!res.ok) throw new Error(text || 'Failed to update user');
     return text ? JSON.parse(text) : {};
   }
+,
+
+  async campaignsList() {
+    const res = await fetch('/api/campaigns', { credentials: 'include' });
+    const text = await res.text();
+    if (!res.ok) throw new Error(text || 'Failed to load campaigns');
+    return text ? JSON.parse(text) : [];
+  },
+
+  async campaignGet(id) {
+    const res = await fetch(`/api/campaigns/${id}`, { credentials: 'include' });
+    const text = await res.text();
+    if (!res.ok) throw new Error(text || 'Failed to load campaign');
+    return text ? JSON.parse(text) : null;
+  },
+
+  async campaignCreate(payload) {
+    const res = await fetch('/api/campaigns', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload)
+    });
+    const text = await res.text();
+    if (!res.ok) throw new Error(text || 'Failed to create campaign');
+    return text ? JSON.parse(text) : {};
+  },
+
+  async campaignUpdate(id, payload) {
+    const res = await fetch(`/api/campaigns/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload)
+    });
+    const text = await res.text();
+    if (!res.ok) throw new Error(text || 'Failed to update campaign');
+    return text ? JSON.parse(text) : {};
+  }
 };
