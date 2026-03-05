@@ -52,7 +52,6 @@ app.UseAuthorization();
 app.Use(async (ctx, next) =>
 {
     static bool IsAdminPath(PathString path) =>
-        path.StartsWithSegments("/api/admin", StringComparison.OrdinalIgnoreCase) ||
         path.StartsWithSegments("/admin", StringComparison.OrdinalIgnoreCase);
 
     if (IsAdminPath(ctx.Request.Path))
