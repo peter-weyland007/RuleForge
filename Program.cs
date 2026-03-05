@@ -619,6 +619,7 @@ api.MapGet("/campaigns/{campaignId:int}", async (int campaignId, AppDbContext db
 
 api.MapPost("/campaigns", async (UpsertCampaignRequest req, AppDbContext db, HttpContext http) =>
 {
+    if (http.User?.Identity?.IsAuthenticated != true) return Results.Unauthorized();
     if (string.IsNullOrWhiteSpace(req.Title)) return Results.BadRequest("Title is required.");
     var title = ToTitleCase(req.Title.Trim());
 
@@ -629,7 +630,8 @@ api.MapPost("/campaigns", async (UpsertCampaignRequest req, AppDbContext db, Htt
     if (!ownerUserId.HasValue)
     {
         var idRaw = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (int.TryParse(idRaw, out var uid)) ownerUserId = uid;
+        if (!int.TryParse(idRaw, out var uid)) return Results.Unauthorized();
+        ownerUserId = uid;
     }
 
     if (ownerUserId.HasValue)
@@ -656,8 +658,9 @@ api.MapPost("/campaigns", async (UpsertCampaignRequest req, AppDbContext db, Htt
     return Results.Ok(row);
 }).WithTags("Campaigns");
 
-api.MapPut("/campaigns/{campaignId:int}", async (int campaignId, UpsertCampaignRequest req, AppDbContext db) =>
+api.MapPut("/campaigns/{campaignId:int}", async (int campaignId, UpsertCampaignRequest req, AppDbContext db, HttpContext http) =>
 {
+    if (http.User?.Identity?.IsAuthenticated != true) return Results.Unauthorized();
     var row = await db.Campaigns.FirstOrDefaultAsync(c => c.CampaignId == campaignId && c.DateDeletedUtc == null);
     if (row is null) return Results.NotFound();
     if (string.IsNullOrWhiteSpace(req.Title)) return Results.BadRequest("Title is required.");
@@ -684,8 +687,9 @@ api.MapPut("/campaigns/{campaignId:int}", async (int campaignId, UpsertCampaignR
     return Results.Ok(row);
 }).WithTags("Campaigns");
 
-api.MapDelete("/campaigns/{campaignId:int}", async (int campaignId, AppDbContext db) =>
+api.MapDelete("/campaigns/{campaignId:int}", async (int campaignId, AppDbContext db, HttpContext http) =>
 {
+    if (http.User?.Identity?.IsAuthenticated != true) return Results.Unauthorized();
     var row = await db.Campaigns.FirstOrDefaultAsync(c => c.CampaignId == campaignId && c.DateDeletedUtc == null);
     if (row is null) return Results.NotFound();
     row.DateDeletedUtc = DateTime.UtcNow;
