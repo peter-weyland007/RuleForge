@@ -234,6 +234,11 @@
         </MudGrid>
     </MudPaper>
 
+    @if (!string.IsNullOrWhiteSpace(saveError))
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@saveError</MudAlert>
+    }
+
     <MudPaper Class="pa-3" Outlined="true">
         <MudStack Row="true" Spacing="2" Justify="Justify.FlexEnd">
             <MudButton Href="/items" Variant="Variant.Text" Color="Color.Secondary">Cancel</MudButton>
@@ -255,6 +260,7 @@
     private List<CampaignLiteDto> campaigns = new();
     private List<TagDto> tags = new();
     private FormModel model = new();
+    private string? saveError;
 
     protected override async Task OnInitializedAsync()
     {
@@ -439,6 +445,7 @@
 
     private async Task Save()
     {
+        saveError = null;
         if (string.IsNullOrWhiteSpace(model.Name) || model.GameSystemId <= 0) return;
 
         model.TagDefinitionIds = selectedTagIds.ToList();
@@ -497,7 +504,13 @@
             : await Http.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/items"), req);
 
         if (res.IsSuccessStatusCode)
+        {
             Nav.NavigateTo("/items");
+            return;
+        }
+
+        saveError = await res.Content.ReadAsStringAsync();
+        if (string.IsNullOrWhiteSpace(saveError)) saveError = "Save failed.";
     }
 
     private sealed class FormModel
