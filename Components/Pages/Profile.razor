@@ -1,7 +1,6 @@
 @page "/profile"
-@using System.Net.Http.Json
-@inject HttpClient Http
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>Profile</PageTitle>
 
@@ -60,7 +59,7 @@
     {
         try
         {
-            me = await Http.GetFromJsonAsync<AuthMe>(Nav.ToAbsoluteUri("/api/auth/me"));
+            me = await JS.InvokeAsync<AuthMe?>("ruleforgeAuth.me");
         }
         catch
         {
@@ -76,22 +75,22 @@
     {
         error = null;
         ok = null;
-
-        var res = await Http.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/auth/change-password"), new { CurrentPassword = currentPassword, NewPassword = newPassword });
-        if (res.IsSuccessStatusCode)
+        try
         {
+            await JS.InvokeAsync<object>("ruleforgeAuth.changePassword", currentPassword, newPassword);
             ok = "Password updated. Please log in again.";
             await Task.Delay(700);
             Nav.NavigateTo("/login", true);
-            return;
         }
-
-        error = await res.Content.ReadAsStringAsync();
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
     }
 
     private async Task DoLogout()
     {
-        await Http.PostAsync(Nav.ToAbsoluteUri("/api/auth/logout"), null);
+        await JS.InvokeAsync<object>("ruleforgeAuth.logout");
         Nav.NavigateTo("/login", true);
     }
 

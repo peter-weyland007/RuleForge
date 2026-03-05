@@ -1,7 +1,6 @@
 @page "/register"
-@using System.Net.Http.Json
-@inject HttpClient Http
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>Register</PageTitle>
 
@@ -31,13 +30,14 @@
     private async Task DoRegister()
     {
         error = null;
-        var res = await Http.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/auth/register"), new { Email = email, Username = username, Password = password });
-        if (res.IsSuccessStatusCode)
+        try
         {
-            Nav.NavigateTo("/login");
-            return;
+            await JS.InvokeAsync<object>("ruleforgeAuth.register", email, username, password);
+            Nav.NavigateTo("/login", true);
         }
-
-        error = await res.Content.ReadAsStringAsync();
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
     }
 }

@@ -1,7 +1,6 @@
 @page "/login"
-@using System.Net.Http.Json
-@inject HttpClient Http
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>Login</PageTitle>
 
@@ -9,7 +8,7 @@
     <MudText Typo="Typo.h4">Login</MudText>
     <MudPaper Class="pa-4" Outlined="true">
         <MudStack Spacing="2">
-            <MudTextField @bind-Value="email" Label="Email or Username" Variant="Variant.Outlined" Required="true" />
+            <MudTextField @bind-Value="identifier" Label="Email or Username" Variant="Variant.Outlined" Required="true" />
             <MudTextField @bind-Value="password" Label="Password" InputType="InputType.Password" Variant="Variant.Outlined" Required="true" />
             @if (!string.IsNullOrWhiteSpace(error))
             {
@@ -22,28 +21,29 @@
 </MudStack>
 
 @code {
-    private string email = string.Empty;
+    private string identifier = string.Empty;
     private string password = string.Empty;
     private string? error;
 
     private async Task DoLogin()
     {
         error = null;
-        var res = await Http.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/auth/login"), new { Identifier = email, Password = password });
-        if (res.IsSuccessStatusCode)
+        try
         {
-            var me = await Http.GetFromJsonAsync<AuthMe>(Nav.ToAbsoluteUri("/api/auth/me"));
+            await JS.InvokeAsync<object>("ruleforgeAuth.login", identifier, password);
+            var me = await JS.InvokeAsync<AuthMe?>("ruleforgeAuth.me");
             if (me?.mustChangePassword == true)
             {
-                Nav.NavigateTo("/change-password");
+                Nav.NavigateTo("/change-password", true);
                 return;
             }
 
-            Nav.NavigateTo("/");
-            return;
+            Nav.NavigateTo("/", true);
         }
-
-        error = await res.Content.ReadAsStringAsync();
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
     }
 
     private sealed record AuthMe(string? id, string? email, string? username, string? role, bool mustChangePassword);
