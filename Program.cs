@@ -1242,7 +1242,11 @@ api.MapPost("/items", async (CreateItemRequest req, AppDbContext db, HttpContext
 
         var campaignAllowed = await db.Campaigns.AnyAsync(c => c.CampaignId == req.CampaignId.Value && c.DateDeletedUtc == null &&
             (c.OwnerAppUserId == currentUserId || db.CampaignCollaborators.Any(cc => cc.CampaignId == c.CampaignId && cc.AppUserId == currentUserId && cc.DateDeletedUtc == null)));
-        if (!campaignAllowed) return Results.BadRequest("CampaignId is invalid or inaccessible.");
+        if (!campaignAllowed)
+        {
+            var errorUid = await LogHandledErrorAsync(db, http, "CampaignId is invalid or inaccessible.");
+            return Results.BadRequest($"CampaignId is invalid or inaccessible. Error ID: {errorUid}");
+        }
     }
 
     // Source exclusivity
@@ -1387,7 +1391,11 @@ api.MapPut("/items/{itemId:int}", async (int itemId, CreateItemRequest req, AppD
 
         var campaignAllowed = await db.Campaigns.AnyAsync(c => c.CampaignId == req.CampaignId.Value && c.DateDeletedUtc == null &&
             (c.OwnerAppUserId == currentUserId || db.CampaignCollaborators.Any(cc => cc.CampaignId == c.CampaignId && cc.AppUserId == currentUserId && cc.DateDeletedUtc == null)));
-        if (!campaignAllowed) return Results.BadRequest("CampaignId is invalid or inaccessible.");
+        if (!campaignAllowed)
+        {
+            var errorUid = await LogHandledErrorAsync(db, http, "CampaignId is invalid or inaccessible.");
+            return Results.BadRequest($"CampaignId is invalid or inaccessible. Error ID: {errorUid}");
+        }
     }
 
     // Source exclusivity
@@ -2698,6 +2706,28 @@ static async Task SyncCampaignMembershipsAsync(AppDbContext db, int campaignId, 
     var existingPlayerIds = existingPlayers.Where(r => r.DateDeletedUtc == null).Select(r => r.AppUserId).ToHashSet();
     foreach (var uid in desiredPlayers.Where(id => !existingPlayerIds.Contains(id)))
         db.CampaignPlayers.Add(new CampaignPlayer { CampaignId = campaignId, AppUserId = uid, DateCreatedUtc = now });
+}
+
+
+static async Task<string> LogHandledErrorAsync(AppDbContext db, HttpContext http, string message)
+{
+    var errorUid = $"RF-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid().ToString("N")[..8]}";
+    int? userId = null;
+    var idRaw = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+    if (int.TryParse(idRaw, out var uid)) userId = uid;
+
+    db.AppErrors.Add(new AppError
+    {
+        ErrorUid = errorUid,
+        Path = http.Request.Path,
+        Method = http.Request.Method,
+        UserId = userId,
+        Message = message,
+        StackTrace = null,
+        DateCreatedUtc = DateTime.UtcNow
+    });
+    await db.SaveChangesAsync();
+    return errorUid;
 }
 
 public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
