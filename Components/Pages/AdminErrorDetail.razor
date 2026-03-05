@@ -1,0 +1,43 @@
+@page "/admin/errors/{ErrorUid}"
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject NavigationManager Nav
+
+<PageTitle>Error Detail</PageTitle>
+
+<MudStack Spacing="3">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+        <MudText Typo="Typo.h4">Error Detail</MudText>
+        <MudButton Href="/admin/errors" Variant="Variant.Outlined">Back</MudButton>
+    </MudStack>
+
+    @if (row is null)
+    {
+        <MudAlert Severity="Severity.Warning">Error not found.</MudAlert>
+    }
+    else
+    {
+        <MudPaper Class="pa-4" Outlined="true">
+            <MudGrid>
+                <MudItem xs="12" md="6"><MudText Typo="Typo.caption">Error ID</MudText><MudText Typo="Typo.body1">@row.ErrorUid</MudText></MudItem>
+                <MudItem xs="12" md="6"><MudText Typo="Typo.caption">When (UTC)</MudText><MudText Typo="Typo.body1">@row.DateCreatedUtc</MudText></MudItem>
+                <MudItem xs="12" md="6"><MudText Typo="Typo.caption">Method</MudText><MudText Typo="Typo.body1">@row.Method</MudText></MudItem>
+                <MudItem xs="12" md="6"><MudText Typo="Typo.caption">Path</MudText><MudText Typo="Typo.body1">@row.Path</MudText></MudItem>
+                <MudItem xs="12"><MudText Typo="Typo.caption">Message</MudText><MudText Typo="Typo.body1">@row.Message</MudText></MudItem>
+                <MudItem xs="12"><MudText Typo="Typo.caption">Stack Trace</MudText><MudTextField Value="@row.StackTrace" Lines="18" Variant="Variant.Outlined" ReadOnly="true" /></MudItem>
+            </MudGrid>
+        </MudPaper>
+    }
+</MudStack>
+
+@code {
+    [Parameter] public string ErrorUid { get; set; } = string.Empty;
+    private ErrorDto? row;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        row = await Http.GetFromJsonAsync<ErrorDto>(Nav.ToAbsoluteUri($"/api/admin/errors/{Uri.EscapeDataString(ErrorUid)}"));
+    }
+
+    private sealed record ErrorDto(int AppErrorId, string ErrorUid, string? Path, string? Method, int? UserId, string? Message, string? StackTrace, DateTime DateCreatedUtc);
+}

@@ -86,6 +86,44 @@ app.Use(async (ctx, next) =>
     await next();
 });
 
+app.Use(async (ctx, next) =>
+{
+    try
+    {
+        await next();
+    }
+    catch (Exception ex)
+    {
+        var errorUid = $"RF-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid().ToString("N")[..8]}";
+        try
+        {
+            await using var scope = app.Services.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            int? userId = null;
+            var idRaw = ctx.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (int.TryParse(idRaw, out var uid)) userId = uid;
+
+            db.AppErrors.Add(new AppError
+            {
+                ErrorUid = errorUid,
+                Path = ctx.Request.Path,
+                Method = ctx.Request.Method,
+                UserId = userId,
+                Message = ex.Message,
+                StackTrace = ex.ToString(),
+                DateCreatedUtc = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+        catch { }
+
+        ctx.Response.StatusCode = 500;
+        ctx.Response.Headers["X-Error-Id"] = errorUid;
+        var msg = $"An internal error occurred. Error ID: {errorUid}";
+        await ctx.Response.WriteAsync(msg);
+    }
+});
+
 app.UseAntiforgery();
 
 app.UseSwagger();
@@ -369,6 +407,20 @@ using (var scope = app.Services.CreateScope())
             DateDeletedUtc TEXT NULL
         );
     """);
+
+    await db.Database.ExecuteSqlRawAsync("""
+        CREATE TABLE IF NOT EXISTS AppErrors (
+            AppErrorId INTEGER PRIMARY KEY AUTOINCREMENT,
+            ErrorUid TEXT NOT NULL,
+            Path TEXT NULL,
+            Method TEXT NULL,
+            UserId INTEGER NULL,
+            Message TEXT NULL,
+            StackTrace TEXT NULL,
+            DateCreatedUtc TEXT NOT NULL
+        );
+    """);
+    try { await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS IX_AppErrors_ErrorUid ON AppErrors (ErrorUid);"); } catch (SqliteException) { }
     try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE AppUsers ADD COLUMN Username TEXT NOT NULL DEFAULT '';"); } catch (SqliteException) { }
     try { await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS IX_AppUsers_Email_Unique_Active ON AppUsers (Email) WHERE DateDeletedUtc IS NULL;"); } catch (SqliteException) { }
     try { await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS IX_AppUsers_Username_Unique_Active ON AppUsers (Username) WHERE DateDeletedUtc IS NULL;"); } catch (SqliteException) { }
@@ -716,6 +768,29 @@ api.MapDelete("/campaigns/{campaignId:int}", async (int campaignId, AppDbContext
     await db.SaveChangesAsync();
     return Results.NoContent();
 }).WithTags("Campaigns");
+
+
+api.MapGet("/admin/errors", async (string? q, int? limit, AppDbContext db) =>
+{
+    var query = db.AppErrors.AsQueryable();
+    if (!string.IsNullOrWhiteSpace(q))
+    {
+        q = q.Trim();
+        query = query.Where(e => e.ErrorUid.Contains(q) || (e.Path ?? "").Contains(q) || (e.Message ?? "").Contains(q));
+    }
+
+    var take = Math.Clamp(limit ?? 100, 1, 500);
+    var rows = await query.OrderByDescending(e => e.DateCreatedUtc).Take(take)
+        .Select(e => new { e.AppErrorId, e.ErrorUid, e.Path, e.Method, e.UserId, e.Message, e.DateCreatedUtc })
+        .ToListAsync();
+    return Results.Ok(rows);
+}).WithTags("Admin");
+
+api.MapGet("/admin/errors/{errorUid}", async (string errorUid, AppDbContext db) =>
+{
+    var e = await db.AppErrors.FirstOrDefaultAsync(x => x.ErrorUid == errorUid);
+    return e is null ? Results.NotFound() : Results.Ok(e);
+}).WithTags("Admin");
 
 api.MapGet("/notes", async (AppDbContext db) =>
     await db.Notes.Where(n => n.DateDeletedUtc == null).OrderBy(n => n.NoteId).ToListAsync())
@@ -2640,6 +2715,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<Campaign> Campaigns => Set<Campaign>();
     public DbSet<CampaignCollaborator> CampaignCollaborators => Set<CampaignCollaborator>();
     public DbSet<CampaignPlayer> CampaignPlayers => Set<CampaignPlayer>();
+    public DbSet<AppError> AppErrors => Set<AppError>();
 }
 
 public sealed class Note
@@ -2878,6 +2954,18 @@ public sealed record MergeGameSystemsRequest(int FromGameSystemId, int ToGameSys
 public sealed record ReassignOrphansRequest(int FromGameSystemId, int ToGameSystemId);
 public sealed record ReassignOneOrphanRequest(string Kind, int Id, int ToGameSystemId);
 
+
+public sealed class AppError
+{
+    public int AppErrorId { get; set; }
+    public string ErrorUid { get; set; } = string.Empty;
+    public string? Path { get; set; }
+    public string? Method { get; set; }
+    public int? UserId { get; set; }
+    public string? Message { get; set; }
+    public string? StackTrace { get; set; }
+    public DateTime DateCreatedUtc { get; set; }
+}
 
 public sealed class Campaign
 {

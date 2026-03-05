@@ -1,0 +1,45 @@
+@page "/admin/errors"
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject NavigationManager Nav
+
+<PageTitle>Admin Errors</PageTitle>
+
+<MudStack Spacing="3">
+    <MudText Typo="Typo.h4">Admin · Error Logs</MudText>
+
+    <MudPaper Class="pa-4" Outlined="true">
+        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.End">
+            <MudTextField @bind-Value="query" Label="Search (Error ID / path / message)" Variant="Variant.Outlined" />
+            <MudNumericField T="int" @bind-Value="limit" Label="Limit" Min="1" Max="500" Variant="Variant.Outlined" />
+            <MudButton OnClick="Load" Variant="Variant.Filled" Color="Color.Primary">Search</MudButton>
+        </MudStack>
+    </MudPaper>
+
+    <MudTable Items="rows" Dense="true" Hover="true">
+        <HeaderContent><MudTh>Error ID</MudTh><MudTh>When (UTC)</MudTh><MudTh>Path</MudTh><MudTh>Message</MudTh><MudTh></MudTh></HeaderContent>
+        <RowTemplate>
+            <MudTd><MudText Typo="Typo.body2">@context.ErrorUid</MudText></MudTd>
+            <MudTd>@context.DateCreatedUtc</MudTd>
+            <MudTd>@context.Path</MudTd>
+            <MudTd>@context.Message</MudTd>
+            <MudTd><MudButton Href="@($"/admin/errors/{context.ErrorUid}")" Variant="Variant.Text" Color="Color.Primary">Open</MudButton></MudTd>
+        </RowTemplate>
+    </MudTable>
+</MudStack>
+
+@code {
+    private string? query;
+    private int limit = 100;
+    private List<RowDto> rows = new();
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        var q = string.IsNullOrWhiteSpace(query) ? "" : $"&q={Uri.EscapeDataString(query)}";
+        rows = await Http.GetFromJsonAsync<List<RowDto>>(Nav.ToAbsoluteUri($"/api/admin/errors?limit={limit}{q}")) ?? new();
+    }
+
+    private sealed record RowDto(int AppErrorId, string ErrorUid, string? Path, string? Method, int? UserId, string? Message, DateTime DateCreatedUtc);
+}
