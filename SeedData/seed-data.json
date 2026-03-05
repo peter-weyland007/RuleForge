@@ -326,7 +326,8 @@
       "weaponPropertyTwoHanded": false,
       "weaponPropertyLoading": false,
       "weaponPropertyReach": false,
-      "weaponPropertyAmmunition": false
+      "weaponPropertyAmmunition": false,
+      "sourceCode": "PHB"
     },
     {
       "gameSystemSlug": "dungeons-dragons-5e",
@@ -369,7 +370,8 @@
       "weaponPropertyLoading": false,
       "weaponPropertyReach": false,
       "weaponPropertyAmmunition": false,
-      "armorCategory": null
+      "armorCategory": null,
+      "sourceCode": "PHB"
     },
     {
       "gameSystemSlug": "pathfinder-2e",
@@ -400,7 +402,8 @@
       "chargesCurrent": null,
       "chargesMax": null,
       "rechargeRule": null,
-      "usesPerDay": 1
+      "usesPerDay": 1,
+      "sourceCode": "CRB"
     },
     {
       "gameSystemSlug": "pathfinder-2e",
@@ -430,7 +433,8 @@
       "chargesCurrent": null,
       "chargesMax": null,
       "rechargeRule": null,
-      "usesPerDay": null
+      "usesPerDay": null,
+      "sourceCode": "CRB"
     },
     {
       "gameSystemSlug": "dungeons-dragons-5e",
@@ -470,7 +474,8 @@
       "weaponPropertyTwoHanded": false,
       "weaponPropertyLoading": false,
       "weaponPropertyReach": false,
-      "weaponPropertyAmmunition": false
+      "weaponPropertyAmmunition": false,
+      "sourceCode": "PHB"
     },
     {
       "gameSystemSlug": "dungeons-dragons-5e",
@@ -510,7 +515,8 @@
       "weaponPropertyTwoHanded": false,
       "weaponPropertyLoading": false,
       "weaponPropertyReach": false,
-      "weaponPropertyAmmunition": false
+      "weaponPropertyAmmunition": false,
+      "sourceCode": "PHB"
     },
     {
       "gameSystemSlug": "dungeons-dragons-5e",
@@ -550,7 +556,8 @@
       "weaponPropertyTwoHanded": false,
       "weaponPropertyLoading": false,
       "weaponPropertyReach": false,
-      "weaponPropertyAmmunition": false
+      "weaponPropertyAmmunition": false,
+      "sourceCode": "PHB"
     }
   ],
   "tags": [
@@ -703,6 +710,29 @@
       "gameSystemSlug": "pathfinder-2e",
       "name": "Healing",
       "slug": "healing"
+    }
+  ],
+  "sourceMaterials": [
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "code": "PHB",
+      "title": "Player's Handbook",
+      "publisher": "Wizards of the Coast",
+      "isOfficial": true
+    },
+    {
+      "gameSystemSlug": "dungeons-dragons-5e",
+      "code": "DMG",
+      "title": "Dungeon Master's Guide",
+      "publisher": "Wizards of the Coast",
+      "isOfficial": true
+    },
+    {
+      "gameSystemSlug": "pathfinder-2e",
+      "code": "CRB",
+      "title": "Core Rulebook",
+      "publisher": "Paizo",
+      "isOfficial": true
     }
   ]
 }

@@ -79,8 +79,9 @@
             <MudItem xs="12" md="2"><MudNumericField T="int" @bind-Value="model.Quantity" Label="Qty" Variant="Variant.Outlined" Min="1" /></MudItem>
             <MudItem xs="12" md="2"><MudSelect T="SourceType" @bind-Value="model.SourceType" Label="Source Type" Variant="Variant.Outlined"><MudSelectItem Value="SourceType.Official">Official</MudSelectItem><MudSelectItem Value="SourceType.ThirdParty">Third Party</MudSelectItem><MudSelectItem Value="SourceType.Homebrew">Homebrew</MudSelectItem></MudSelect></MudItem>
 
-            <MudItem xs="12" md="4"><MudTextField @bind-Value="model.SourceBook" Label="Source Book" Variant="Variant.Outlined" Placeholder="e.g., PHB" /></MudItem>
+            <MudItem xs="12" md="4"><MudSelect T="int?" @bind-Value="model.SourceMaterialId" Label="Source Material" Variant="Variant.Outlined"><MudSelectItem Value="@((int?)null)">(none)</MudSelectItem>@foreach (var sm in sourceMaterials){ <MudSelectItem Value="@((int?)sm.SourceMaterialId)">@($"{sm.Code} — {sm.Title}")</MudSelectItem> }</MudSelect></MudItem>
             <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="model.SourcePage" Label="Source Page" Variant="Variant.Outlined" Min="1" /></MudItem>
+            <MudItem xs="12" md="3"><MudTextField @bind-Value="model.SourceBook" Label="Legacy Source Text" Variant="Variant.Outlined" Placeholder="optional" /></MudItem>
         </MudGrid>
     </MudPaper>
 
@@ -228,6 +229,7 @@
     private List<ItemTypeDto> types = new();
     private List<RarityDto> rarities = new();
     private List<CurrencyDto> currencies = new();
+    private List<SourceMaterialDto> sourceMaterials = new();
     private List<TagDto> tags = new();
     private FormModel model = new();
 
@@ -272,6 +274,7 @@
             StealthDisadvantage = dto.StealthDisadvantage,
             RangeNormal = dto.RangeNormal,
             RangeLong = dto.RangeLong,
+            SourceMaterialId = dto.SourceMaterialId,
             SourceBook = dto.SourceBook,
             SourcePage = dto.SourcePage,
             IsConsumable = dto.IsConsumable,
@@ -300,6 +303,7 @@
         model.ItemTypeDefinitionId = null;
         model.RarityDefinitionId = null;
         model.CurrencyDefinitionId = null;
+        model.SourceMaterialId = null;
         model.TagDefinitionIds = new List<int>();
         selectedTagIds.Clear();
         await LoadLookups();
@@ -311,6 +315,7 @@
         types = await Http.GetFromJsonAsync<List<ItemTypeDto>>(Nav.ToAbsoluteUri($"/api/item-types?gameSystemId={model.GameSystemId}")) ?? new();
         rarities = await Http.GetFromJsonAsync<List<RarityDto>>(Nav.ToAbsoluteUri($"/api/rarities?gameSystemId={model.GameSystemId}")) ?? new();
         currencies = await Http.GetFromJsonAsync<List<CurrencyDto>>(Nav.ToAbsoluteUri($"/api/currencies?gameSystemId={model.GameSystemId}")) ?? new();
+        sourceMaterials = await Http.GetFromJsonAsync<List<SourceMaterialDto>>(Nav.ToAbsoluteUri($"/api/source-materials?gameSystemId={model.GameSystemId}")) ?? new();
         tags = await Http.GetFromJsonAsync<List<TagDto>>(Nav.ToAbsoluteUri($"/api/tags?gameSystemId={model.GameSystemId}")) ?? new();
     }
 
@@ -423,6 +428,7 @@
             model.StealthDisadvantage,
             model.RangeNormal,
             model.RangeLong,
+            model.SourceMaterialId,
             model.SourceBook,
             model.SourcePage,
             model.IsConsumable,
@@ -476,6 +482,7 @@
         public bool StealthDisadvantage { get; set; }
         public int? RangeNormal { get; set; }
         public int? RangeLong { get; set; }
+        public int? SourceMaterialId { get; set; }
         public string? SourceBook { get; set; }
         public int? SourcePage { get; set; }
         public bool IsConsumable { get; set; }
@@ -501,6 +508,7 @@
     private sealed record ItemTypeDto(int ItemTypeDefinitionId, int GameSystemId, string Name, string Slug, string? Description);
     private sealed record RarityDto(int RarityDefinitionId, int GameSystemId, string Name, string Slug);
     private sealed record CurrencyDto(int CurrencyDefinitionId, int GameSystemId, string Name, string Code);
+    private sealed record SourceMaterialDto(int SourceMaterialId, int GameSystemId, string Code, string Title, string? Publisher, bool IsOfficial);
     private sealed record TagDto(int TagDefinitionId, int GameSystemId, string Name, string Slug);
-    private sealed record ItemDto(int ItemId, int GameSystemId, string Name, string Slug, string? Alias, int? ItemTypeDefinitionId, int? RarityDefinitionId, string? Description, decimal? CostAmount, int? CurrencyDefinitionId, string? CostCurrency, decimal? Weight, int Quantity, string? Tags, string? Effect, bool RequiresAttunement, string? AttunementRequirement, string? DamageDice, string? DamageType, string? VersatileDamageDice, int? ArmorClass, int? StrengthRequirement, bool StealthDisadvantage, int? RangeNormal, int? RangeLong, string? SourceBook, int? SourcePage, bool IsConsumable, int? ChargesCurrent, int? ChargesMax, string? RechargeRule, int? UsesPerDay, string? ArmorCategory, bool WeaponPropertyLight, bool WeaponPropertyHeavy, bool WeaponPropertyFinesse, bool WeaponPropertyThrown, bool WeaponPropertyTwoHanded, bool WeaponPropertyLoading, bool WeaponPropertyReach, bool WeaponPropertyAmmunition, List<int>? TagDefinitionIds, List<string>? TagNames, SourceType SourceType);
+    private sealed record ItemDto(int ItemId, int GameSystemId, string Name, string Slug, string? Alias, int? ItemTypeDefinitionId, int? RarityDefinitionId, string? Description, decimal? CostAmount, int? CurrencyDefinitionId, string? CostCurrency, decimal? Weight, int Quantity, string? Tags, string? Effect, bool RequiresAttunement, string? AttunementRequirement, string? DamageDice, string? DamageType, string? VersatileDamageDice, int? ArmorClass, int? StrengthRequirement, bool StealthDisadvantage, int? RangeNormal, int? RangeLong, int? SourceMaterialId, string? SourceBook, int? SourcePage, bool IsConsumable, int? ChargesCurrent, int? ChargesMax, string? RechargeRule, int? UsesPerDay, string? ArmorCategory, bool WeaponPropertyLight, bool WeaponPropertyHeavy, bool WeaponPropertyFinesse, bool WeaponPropertyThrown, bool WeaponPropertyTwoHanded, bool WeaponPropertyLoading, bool WeaponPropertyReach, bool WeaponPropertyAmmunition, List<int>? TagDefinitionIds, List<string>? TagNames, SourceType SourceType);
 }

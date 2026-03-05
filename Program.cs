@@ -121,6 +121,7 @@ using (var scope = app.Services.CreateScope())
             StealthDisadvantage INTEGER NOT NULL DEFAULT 0,
             RangeNormal INTEGER NULL,
             RangeLong INTEGER NULL,
+            SourceMaterialId INTEGER NULL,
             SourceBook TEXT NULL,
             SourcePage INTEGER NULL,
             IsConsumable INTEGER NOT NULL DEFAULT 0,
@@ -212,6 +213,23 @@ using (var scope = app.Services.CreateScope())
     """);
     try { await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS IX_CurrencyDefinitions_System_Code_Unique_Active ON CurrencyDefinitions (GameSystemId, Code) WHERE DateDeletedUtc IS NULL;"); } catch (SqliteException) { }
     try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Items ADD COLUMN CurrencyDefinitionId INTEGER NULL;"); } catch (SqliteException) { }
+
+
+    await db.Database.ExecuteSqlRawAsync("""
+        CREATE TABLE IF NOT EXISTS SourceMaterials (
+            SourceMaterialId INTEGER PRIMARY KEY AUTOINCREMENT,
+            GameSystemId INTEGER NOT NULL,
+            Code TEXT NOT NULL,
+            Title TEXT NOT NULL,
+            Publisher TEXT NULL,
+            IsOfficial INTEGER NOT NULL DEFAULT 1,
+            DateCreatedUtc TEXT NOT NULL,
+            DateModifiedUtc TEXT NOT NULL,
+            DateDeletedUtc TEXT NULL
+        );
+    """);
+    try { await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS IX_SourceMaterials_System_Code_Unique_Active ON SourceMaterials (GameSystemId, Code) WHERE DateDeletedUtc IS NULL;"); } catch (SqliteException) { }
+    try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Items ADD COLUMN SourceMaterialId INTEGER NULL;"); } catch (SqliteException) { }
 
     await db.Database.ExecuteSqlRawAsync("""
         CREATE TABLE IF NOT EXISTS TagDefinitions (
@@ -589,6 +607,7 @@ api.MapGet("/items/{itemId:int}", async (int itemId, AppDbContext db) =>
         row.StealthDisadvantage,
         row.RangeNormal,
         row.RangeLong,
+        row.SourceMaterialId,
         row.SourceBook,
         row.SourcePage,
         row.IsConsumable,
@@ -625,7 +644,7 @@ api.MapGet("/items", async (int gameSystemId, AppDbContext db) =>
     var outRows = items.Select(i => new {
         i.ItemId,i.GameSystemId,i.Name,i.Slug,i.Alias,i.ItemTypeDefinitionId,i.RarityDefinitionId,i.Description,
         i.CostAmount,i.CurrencyDefinitionId,i.CostCurrency,i.Weight,i.Quantity,i.Tags,
-        i.DamageDice,i.DamageType,i.VersatileDamageDice,i.ArmorClass,i.StrengthRequirement,i.StealthDisadvantage,i.RangeNormal,i.RangeLong,i.SourceBook,i.SourcePage,
+        i.DamageDice,i.DamageType,i.VersatileDamageDice,i.ArmorClass,i.StrengthRequirement,i.StealthDisadvantage,i.RangeNormal,i.RangeLong,i.SourceMaterialId,i.SourceBook,i.SourcePage,
         i.IsConsumable,i.ChargesCurrent,i.ChargesMax,i.RechargeRule,i.UsesPerDay,
         i.ArmorCategory,i.WeaponPropertyLight,i.WeaponPropertyHeavy,i.WeaponPropertyFinesse,i.WeaponPropertyThrown,i.WeaponPropertyTwoHanded,i.WeaponPropertyLoading,i.WeaponPropertyReach,i.WeaponPropertyAmmunition,
         i.SourceType,i.DateCreatedUtc,i.DateModifiedUtc,i.DateDeletedUtc,
@@ -662,6 +681,12 @@ api.MapPost("/items", async (CreateItemRequest req, AppDbContext db) =>
         if (!currencyExists) return Results.BadRequest("CurrencyDefinitionId is invalid for this system.");
     }
 
+    if (req.SourceMaterialId.HasValue)
+    {
+        var sourceExists = await db.SourceMaterials.AnyAsync(sm => sm.SourceMaterialId == req.SourceMaterialId.Value && sm.GameSystemId == req.GameSystemId && sm.DateDeletedUtc == null);
+        if (!sourceExists) return Results.BadRequest("SourceMaterialId is invalid for this system.");
+    }
+
     var validationError = ValidateItemRequest(req);
     if (validationError is not null) return Results.BadRequest(validationError);
     var typeValidationError = ValidateItemRequestByType(req, itemTypeName);
@@ -695,6 +720,7 @@ api.MapPost("/items", async (CreateItemRequest req, AppDbContext db) =>
         StealthDisadvantage = req.StealthDisadvantage,
         RangeNormal = req.RangeNormal,
         RangeLong = req.RangeLong,
+        SourceMaterialId = req.SourceMaterialId,
         SourceBook = string.IsNullOrWhiteSpace(req.SourceBook) ? null : req.SourceBook.Trim(),
         SourcePage = req.SourcePage,
         IsConsumable = req.IsConsumable,
@@ -758,6 +784,12 @@ api.MapPut("/items/{itemId:int}", async (int itemId, CreateItemRequest req, AppD
         if (!currencyExists) return Results.BadRequest("CurrencyDefinitionId is invalid for this system.");
     }
 
+    if (req.SourceMaterialId.HasValue)
+    {
+        var sourceExists = await db.SourceMaterials.AnyAsync(sm => sm.SourceMaterialId == req.SourceMaterialId.Value && sm.GameSystemId == req.GameSystemId && sm.DateDeletedUtc == null);
+        if (!sourceExists) return Results.BadRequest("SourceMaterialId is invalid for this system.");
+    }
+
     var validationError = ValidateItemRequest(req);
     if (validationError is not null) return Results.BadRequest(validationError);
     var typeValidationError = ValidateItemRequestByType(req, itemTypeName);
@@ -793,6 +825,7 @@ api.MapPut("/items/{itemId:int}", async (int itemId, CreateItemRequest req, AppD
     row.StealthDisadvantage = req.StealthDisadvantage;
     row.RangeNormal = req.RangeNormal;
     row.RangeLong = req.RangeLong;
+    row.SourceMaterialId = req.SourceMaterialId;
     row.SourceBook = string.IsNullOrWhiteSpace(req.SourceBook) ? null : req.SourceBook.Trim();
     row.SourcePage = req.SourcePage;
     row.IsConsumable = req.IsConsumable;
@@ -877,6 +910,53 @@ api.MapPost("/admin/game-systems/merge", async (MergeGameSystemsRequest req, App
 
 
 
+
+
+api.MapGet("/source-materials", async (int gameSystemId, AppDbContext db) =>
+    await db.SourceMaterials
+        .Where(x => x.DateDeletedUtc == null && x.GameSystemId == gameSystemId)
+        .OrderBy(x => x.Code)
+        .Select(x => new { x.SourceMaterialId, x.GameSystemId, x.Code, x.Title, x.Publisher, x.IsOfficial })
+        .ToListAsync())
+    .WithTags("Source Materials");
+
+api.MapPost("/source-materials", async (UpsertSourceMaterialRequest req, AppDbContext db) =>
+{
+    if (string.IsNullOrWhiteSpace(req.Code) || string.IsNullOrWhiteSpace(req.Title))
+        return Results.BadRequest("Code and Title are required.");
+
+    var gsExists = await db.GameSystems.AnyAsync(gs => gs.GameSystemId == req.GameSystemId && gs.DateDeletedUtc == null);
+    if (!gsExists) return Results.BadRequest("GameSystemId is invalid.");
+
+    var code = req.Code.Trim().ToUpperInvariant();
+    var existing = await db.SourceMaterials.FirstOrDefaultAsync(x => x.DateDeletedUtc == null && x.GameSystemId == req.GameSystemId && x.Code == code);
+    var now = DateTime.UtcNow;
+
+    if (existing is null)
+    {
+        existing = new SourceMaterial
+        {
+            GameSystemId = req.GameSystemId,
+            Code = code,
+            Title = req.Title.Trim(),
+            Publisher = string.IsNullOrWhiteSpace(req.Publisher) ? null : req.Publisher.Trim(),
+            IsOfficial = req.IsOfficial,
+            DateCreatedUtc = now,
+            DateModifiedUtc = now
+        };
+        db.SourceMaterials.Add(existing);
+    }
+    else
+    {
+        existing.Title = req.Title.Trim();
+        existing.Publisher = string.IsNullOrWhiteSpace(req.Publisher) ? null : req.Publisher.Trim();
+        existing.IsOfficial = req.IsOfficial;
+        existing.DateModifiedUtc = now;
+    }
+
+    await db.SaveChangesAsync();
+    return Results.Ok(existing);
+}).WithTags("Source Materials");
 
 api.MapGet("/tags", async (int gameSystemId, AppDbContext db) =>
     await db.TagDefinitions.Where(t => t.DateDeletedUtc == null && t.GameSystemId == gameSystemId).OrderBy(t => t.Name).ToListAsync())
@@ -1520,6 +1600,37 @@ static async Task SeedStarterDataAsync(AppDbContext db, string contentRootPath)
         }
     }
 
+    foreach (var sm in seed.SourceMaterials)
+    {
+        if (string.IsNullOrWhiteSpace(sm.Code) || string.IsNullOrWhiteSpace(sm.Title) || string.IsNullOrWhiteSpace(sm.GameSystemSlug)) continue;
+
+        var system = await ResolveSystemAsync(sm.GameSystemSlug);
+        if (system is null) continue;
+
+        var code = sm.Code.Trim().ToUpperInvariant();
+        var existing = await db.SourceMaterials.FirstOrDefaultAsync(x => x.DateDeletedUtc == null && x.GameSystemId == system.GameSystemId && x.Code == code);
+        if (existing is null)
+        {
+            db.SourceMaterials.Add(new SourceMaterial
+            {
+                GameSystemId = system.GameSystemId,
+                Code = code,
+                Title = sm.Title.Trim(),
+                Publisher = string.IsNullOrWhiteSpace(sm.Publisher) ? null : sm.Publisher.Trim(),
+                IsOfficial = sm.IsOfficial,
+                DateCreatedUtc = now,
+                DateModifiedUtc = now
+            });
+        }
+        else
+        {
+            existing.Title = sm.Title.Trim();
+            existing.Publisher = string.IsNullOrWhiteSpace(sm.Publisher) ? null : sm.Publisher.Trim();
+            existing.IsOfficial = sm.IsOfficial;
+            existing.DateModifiedUtc = now;
+        }
+    }
+
     foreach (var t in seed.Tags)
     {
         if (string.IsNullOrWhiteSpace(t.Name) || string.IsNullOrWhiteSpace(t.GameSystemSlug)) continue;
@@ -1593,6 +1704,16 @@ static async Task SeedStarterDataAsync(AppDbContext db, string contentRootPath)
                 .FirstOrDefaultAsync();
         }
 
+        int? sourceMaterialId = null;
+        if (!string.IsNullOrWhiteSpace(i.SourceCode))
+        {
+            var sourceCode = i.SourceCode.Trim().ToUpperInvariant();
+            sourceMaterialId = await db.SourceMaterials
+                .Where(x => x.DateDeletedUtc == null && x.GameSystemId == system.GameSystemId && x.Code == sourceCode)
+                .Select(x => (int?)x.SourceMaterialId)
+                .FirstOrDefaultAsync();
+        }
+
         if (existingItem is null)
         {
             db.Items.Add(new Item
@@ -1620,6 +1741,7 @@ static async Task SeedStarterDataAsync(AppDbContext db, string contentRootPath)
                 StealthDisadvantage = i.StealthDisadvantage,
                 RangeNormal = i.RangeNormal,
                 RangeLong = i.RangeLong,
+                SourceMaterialId = sourceMaterialId,
                 SourceBook = i.SourceBook,
                 SourcePage = i.SourcePage,
                 IsConsumable = i.IsConsumable,
@@ -1666,6 +1788,7 @@ static async Task SeedStarterDataAsync(AppDbContext db, string contentRootPath)
             existingItem.StealthDisadvantage = i.StealthDisadvantage;
             existingItem.RangeNormal = i.RangeNormal;
             existingItem.RangeLong = i.RangeLong;
+            existingItem.SourceMaterialId = sourceMaterialId;
             existingItem.SourceBook = i.SourceBook;
             existingItem.SourcePage = i.SourcePage;
             existingItem.IsConsumable = i.IsConsumable;
@@ -1788,6 +1911,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<Item> Items => Set<Item>();
     public DbSet<RarityDefinition> RarityDefinitions => Set<RarityDefinition>();
     public DbSet<CurrencyDefinition> CurrencyDefinitions => Set<CurrencyDefinition>();
+    public DbSet<SourceMaterial> SourceMaterials => Set<SourceMaterial>();
     public DbSet<TagDefinition> TagDefinitions => Set<TagDefinition>();
     public DbSet<ItemTag> ItemTags => Set<ItemTag>();
 }
@@ -1810,6 +1934,7 @@ public sealed class SeedDataFile
     public List<SeedItemType> ItemTypes { get; set; } = new();
     public List<SeedRarity> Rarities { get; set; } = new();
     public List<SeedCurrency> Currencies { get; set; } = new();
+    public List<SeedSourceMaterial> SourceMaterials { get; set; } = new();
     public List<SeedTag> Tags { get; set; } = new();
     public List<SeedItem> Items { get; set; } = new();
 }
@@ -1849,6 +1974,15 @@ public sealed class SeedCurrency
     public string? Description { get; set; }
 }
 
+public sealed class SeedSourceMaterial
+{
+    public string GameSystemSlug { get; set; } = string.Empty;
+    public string Code { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string? Publisher { get; set; }
+    public bool IsOfficial { get; set; } = true;
+}
+
 public sealed class SeedTag
 {
     public string GameSystemSlug { get; set; } = string.Empty;
@@ -1881,6 +2015,8 @@ public sealed class SeedItem
     public bool StealthDisadvantage { get; set; }
     public int? RangeNormal { get; set; }
     public int? RangeLong { get; set; }
+    public int? SourceMaterialId { get; set; }
+    public string? SourceCode { get; set; }
     public string? SourceBook { get; set; }
     public int? SourcePage { get; set; }
     public bool IsConsumable { get; set; }
@@ -1963,6 +2099,7 @@ public sealed class Item
     public bool StealthDisadvantage { get; set; }
     public int? RangeNormal { get; set; }
     public int? RangeLong { get; set; }
+    public int? SourceMaterialId { get; set; }
     public string? SourceBook { get; set; }
     public int? SourcePage { get; set; }
     public bool IsConsumable { get; set; }
@@ -1988,7 +2125,7 @@ public sealed class Item
 public sealed record CreateItemTypeRequest(int GameSystemId, string Name, string? Description);
 
 
-public sealed record CreateItemRequest(int GameSystemId, string Name, int? ItemTypeDefinitionId, int? RarityDefinitionId, string? Description, decimal? CostAmount = null, int? CurrencyDefinitionId = null, string? CostCurrency = null, decimal? Weight = null, int Quantity = 1, string? Tags = null, string? Effect = null, bool RequiresAttunement = false, string? AttunementRequirement = null, string? DamageDice = null, string? DamageType = null, string? VersatileDamageDice = null, int? ArmorClass = null, int? StrengthRequirement = null, bool StealthDisadvantage = false, int? RangeNormal = null, int? RangeLong = null, string? SourceBook = null, int? SourcePage = null, bool IsConsumable = false, int? ChargesCurrent = null, int? ChargesMax = null, string? RechargeRule = null, int? UsesPerDay = null, string? ArmorCategory = null, bool WeaponPropertyLight = false, bool WeaponPropertyHeavy = false, bool WeaponPropertyFinesse = false, bool WeaponPropertyThrown = false, bool WeaponPropertyTwoHanded = false, bool WeaponPropertyLoading = false, bool WeaponPropertyReach = false, bool WeaponPropertyAmmunition = false, List<int>? TagDefinitionIds = null, SourceType SourceType = SourceType.Official, string? Alias = null);
+public sealed record CreateItemRequest(int GameSystemId, string Name, int? ItemTypeDefinitionId, int? RarityDefinitionId, string? Description, decimal? CostAmount = null, int? CurrencyDefinitionId = null, string? CostCurrency = null, decimal? Weight = null, int Quantity = 1, string? Tags = null, string? Effect = null, bool RequiresAttunement = false, string? AttunementRequirement = null, string? DamageDice = null, string? DamageType = null, string? VersatileDamageDice = null, int? ArmorClass = null, int? StrengthRequirement = null, bool StealthDisadvantage = false, int? RangeNormal = null, int? RangeLong = null, int? SourceMaterialId = null, string? SourceBook = null, int? SourcePage = null, bool IsConsumable = false, int? ChargesCurrent = null, int? ChargesMax = null, string? RechargeRule = null, int? UsesPerDay = null, string? ArmorCategory = null, bool WeaponPropertyLight = false, bool WeaponPropertyHeavy = false, bool WeaponPropertyFinesse = false, bool WeaponPropertyThrown = false, bool WeaponPropertyTwoHanded = false, bool WeaponPropertyLoading = false, bool WeaponPropertyReach = false, bool WeaponPropertyAmmunition = false, List<int>? TagDefinitionIds = null, SourceType SourceType = SourceType.Official, string? Alias = null);
 
 public sealed record UpsertItemTypeRequest(int GameSystemId, string Name, string? Description);
 
@@ -2007,10 +2144,24 @@ public sealed class RarityDefinition
 }
 
 public sealed record UpsertRarityRequest(int GameSystemId, string Name, string? Description);
+public sealed record UpsertSourceMaterialRequest(int GameSystemId, string Code, string Title, string? Publisher, bool IsOfficial = true);
 
 public sealed record MergeGameSystemsRequest(int FromGameSystemId, int ToGameSystemId);
 public sealed record ReassignOrphansRequest(int FromGameSystemId, int ToGameSystemId);
 public sealed record ReassignOneOrphanRequest(string Kind, int Id, int ToGameSystemId);
+
+public sealed class SourceMaterial
+{
+    public int SourceMaterialId { get; set; }
+    public int GameSystemId { get; set; }
+    public string Code { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string? Publisher { get; set; }
+    public bool IsOfficial { get; set; } = true;
+    public DateTime DateCreatedUtc { get; set; }
+    public DateTime DateModifiedUtc { get; set; }
+    public DateTime? DateDeletedUtc { get; set; }
+}
 
 public sealed class CurrencyDefinition
 {
