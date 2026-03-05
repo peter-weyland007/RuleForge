@@ -337,6 +337,8 @@ using (var scope = app.Services.CreateScope())
     try { await db.Database.ExecuteSqlRawAsync("UPDATE AppUsers SET Role='Users' WHERE DateDeletedUtc IS NULL AND Role IS NOT NULL AND Role NOT IN ('Admin','Users');"); } catch (SqliteException) { }
     try { await db.Database.ExecuteSqlRawAsync("UPDATE AppUsers SET Username = lower(substr(Email,1,instr(Email,'@')-1)) WHERE DateDeletedUtc IS NULL AND (Username IS NULL OR Username='') AND instr(Email,'@')>1;"); } catch (SqliteException) { }
 
+    try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Items ADD COLUMN OwnerAppUserId INTEGER NULL;"); } catch (SqliteException) { }
+
     await EnsureSeedAdminAccountAsync(db);
     await SeedStarterDataAsync(db, app.Environment.ContentRootPath);
 
@@ -559,6 +561,14 @@ api.MapPost("/notes", async (CreateNoteRequest req, AppDbContext db) =>
     await db.SaveChangesAsync();
     return Results.Ok(note);
 }).WithTags("Notes");
+
+api.MapGet("/users", async (AppDbContext db) =>
+    await db.AppUsers
+        .Where(u => u.DateDeletedUtc == null && u.IsActive)
+        .OrderBy(u => u.Username)
+        .Select(u => new { u.AppUserId, u.Username, u.Email })
+        .ToListAsync())
+    .WithTags("Users");
 
 api.MapGet("/game-systems", async (AppDbContext db) =>
     await db.GameSystems
@@ -971,7 +981,19 @@ api.MapPost("/items", async (CreateItemRequest req, AppDbContext db, HttpContext
     {
         var idRaw = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (!int.TryParse(idRaw, out var currentUserId)) return Results.Unauthorized();
-        ownerUserId = currentUserId;
+        var isAdmin = string.Equals(http.User.FindFirstValue(ClaimTypes.Role), "Admin", StringComparison.OrdinalIgnoreCase);
+
+        if (req.OwnerAppUserId.HasValue)
+        {
+            var ownerExists = await db.AppUsers.AnyAsync(u => u.DateDeletedUtc == null && u.IsActive && u.AppUserId == req.OwnerAppUserId.Value);
+            if (!ownerExists) return Results.BadRequest("OwnerAppUserId is invalid.");
+            if (!isAdmin && req.OwnerAppUserId.Value != currentUserId) return Results.Forbid();
+            ownerUserId = req.OwnerAppUserId.Value;
+        }
+        else
+        {
+            ownerUserId = currentUserId;
+        }
     }
 
     var now = DateTime.UtcNow;
@@ -1083,11 +1105,26 @@ api.MapPut("/items/{itemId:int}", async (int itemId, CreateItemRequest req, AppD
     {
         ownerUserId = null;
     }
-    else if (!ownerUserId.HasValue)
+    else
     {
         var idRaw = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (!int.TryParse(idRaw, out var currentUserId)) return Results.Unauthorized();
-        ownerUserId = currentUserId;
+        var isAdmin = string.Equals(http.User.FindFirstValue(ClaimTypes.Role), "Admin", StringComparison.OrdinalIgnoreCase);
+
+        if (req.OwnerAppUserId.HasValue)
+        {
+            var ownerExists = await db.AppUsers.AnyAsync(u => u.DateDeletedUtc == null && u.IsActive && u.AppUserId == req.OwnerAppUserId.Value);
+            if (!ownerExists) return Results.BadRequest("OwnerAppUserId is invalid.");
+
+            var callerIsCurrentOwner = row.OwnerAppUserId.HasValue && row.OwnerAppUserId.Value == currentUserId;
+            if (!isAdmin && !callerIsCurrentOwner) return Results.Forbid();
+
+            ownerUserId = req.OwnerAppUserId.Value;
+        }
+        else if (!ownerUserId.HasValue)
+        {
+            ownerUserId = currentUserId;
+        }
     }
 
     var newName = ToTitleCase(req.Name);
@@ -2555,7 +2592,7 @@ public sealed class Item
 public sealed record CreateItemTypeRequest(int GameSystemId, string Name, string? Description);
 
 
-public sealed record CreateItemRequest(int GameSystemId, string Name, int? ItemTypeDefinitionId, int? RarityDefinitionId, string? Description, decimal? CostAmount = null, int? CurrencyDefinitionId = null, string? CostCurrency = null, decimal? Weight = null, int Quantity = 1, string? Tags = null, string? Effect = null, bool RequiresAttunement = false, string? AttunementRequirement = null, string? DamageDice = null, string? DamageType = null, string? VersatileDamageDice = null, int? ArmorClass = null, int? StrengthRequirement = null, bool StealthDisadvantage = false, int? RangeNormal = null, int? RangeLong = null, int? SourceMaterialId = null, string? SourceBook = null, int? SourcePage = null, bool IsConsumable = false, int? ChargesCurrent = null, int? ChargesMax = null, string? RechargeRule = null, int? UsesPerDay = null, string? ArmorCategory = null, bool WeaponPropertyLight = false, bool WeaponPropertyHeavy = false, bool WeaponPropertyFinesse = false, bool WeaponPropertyThrown = false, bool WeaponPropertyTwoHanded = false, bool WeaponPropertyLoading = false, bool WeaponPropertyReach = false, bool WeaponPropertyAmmunition = false, List<int>? TagDefinitionIds = null, SourceType SourceType = SourceType.Official, string? Alias = null);
+public sealed record CreateItemRequest(int GameSystemId, string Name, int? ItemTypeDefinitionId, int? RarityDefinitionId, string? Description, decimal? CostAmount = null, int? CurrencyDefinitionId = null, string? CostCurrency = null, decimal? Weight = null, int Quantity = 1, string? Tags = null, string? Effect = null, bool RequiresAttunement = false, string? AttunementRequirement = null, string? DamageDice = null, string? DamageType = null, string? VersatileDamageDice = null, int? ArmorClass = null, int? StrengthRequirement = null, bool StealthDisadvantage = false, int? RangeNormal = null, int? RangeLong = null, int? SourceMaterialId = null, string? SourceBook = null, int? SourcePage = null, bool IsConsumable = false, int? ChargesCurrent = null, int? ChargesMax = null, string? RechargeRule = null, int? UsesPerDay = null, string? ArmorCategory = null, bool WeaponPropertyLight = false, bool WeaponPropertyHeavy = false, bool WeaponPropertyFinesse = false, bool WeaponPropertyThrown = false, bool WeaponPropertyTwoHanded = false, bool WeaponPropertyLoading = false, bool WeaponPropertyReach = false, bool WeaponPropertyAmmunition = false, int? OwnerAppUserId = null, List<int>? TagDefinitionIds = null, SourceType SourceType = SourceType.Official, string? Alias = null);
 
 public sealed record UpsertItemTypeRequest(int GameSystemId, string Name, string? Description);
 

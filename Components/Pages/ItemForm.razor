@@ -82,6 +82,19 @@
             <MudItem xs="12" md="4"><MudSelect T="int?" @bind-Value="model.SourceMaterialId" Label="Source Material" Variant="Variant.Outlined"><MudSelectItem Value="@((int?)null)">(none)</MudSelectItem>@foreach (var sm in sourceMaterials){ <MudSelectItem Value="@((int?)sm.SourceMaterialId)">@($"{sm.Code} — {sm.Title}")</MudSelectItem> }</MudSelect></MudItem>
             <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="model.SourcePage" Label="Source Page" Variant="Variant.Outlined" Min="1" /></MudItem>
             <MudItem xs="12" md="3"><MudTextField @bind-Value="model.SourceBook" Label="Legacy Source Text" Variant="Variant.Outlined" Placeholder="optional" /></MudItem>
+
+            @if (model.SourceType != SourceType.Official)
+            {
+                <MudItem xs="12" md="6">
+                    <MudSelect T="int?" @bind-Value="model.OwnerAppUserId" Label="Owner" Variant="Variant.Outlined">
+                        <MudSelectItem Value="@((int?)null)">(auto / current user)</MudSelectItem>
+                        @foreach (var o in owners)
+                        {
+                            <MudSelectItem Value="@((int?)o.AppUserId)">@($"{o.Username} ({o.Email})")</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+            }
         </MudGrid>
     </MudPaper>
 
@@ -230,6 +243,7 @@
     private List<RarityDto> rarities = new();
     private List<CurrencyDto> currencies = new();
     private List<SourceMaterialDto> sourceMaterials = new();
+    private List<UserOwnerDto> owners = new();
     private List<TagDto> tags = new();
     private FormModel model = new();
 
@@ -275,6 +289,7 @@
             RangeNormal = dto.RangeNormal,
             RangeLong = dto.RangeLong,
             SourceMaterialId = dto.SourceMaterialId,
+            OwnerAppUserId = dto.OwnerAppUserId,
             SourceBook = dto.SourceBook,
             SourcePage = dto.SourcePage,
             IsConsumable = dto.IsConsumable,
@@ -316,6 +331,7 @@
         rarities = await Http.GetFromJsonAsync<List<RarityDto>>(Nav.ToAbsoluteUri($"/api/rarities?gameSystemId={model.GameSystemId}")) ?? new();
         currencies = await Http.GetFromJsonAsync<List<CurrencyDto>>(Nav.ToAbsoluteUri($"/api/currencies?gameSystemId={model.GameSystemId}")) ?? new();
         sourceMaterials = await Http.GetFromJsonAsync<List<SourceMaterialDto>>(Nav.ToAbsoluteUri($"/api/source-materials?gameSystemId={model.GameSystemId}")) ?? new();
+        owners = await Http.GetFromJsonAsync<List<UserOwnerDto>>(Nav.ToAbsoluteUri("/api/users")) ?? new();
         tags = await Http.GetFromJsonAsync<List<TagDto>>(Nav.ToAbsoluteUri($"/api/tags?gameSystemId={model.GameSystemId}")) ?? new();
     }
 
@@ -445,6 +461,7 @@
             model.WeaponPropertyLoading,
             model.WeaponPropertyReach,
             model.WeaponPropertyAmmunition,
+            model.OwnerAppUserId,
             model.TagDefinitionIds,
             model.SourceType,
             model.Alias
@@ -499,6 +516,7 @@
         public bool WeaponPropertyLoading { get; set; }
         public bool WeaponPropertyReach { get; set; }
         public bool WeaponPropertyAmmunition { get; set; }
+        public int? OwnerAppUserId { get; set; }
         public List<int> TagDefinitionIds { get; set; } = new();
         public SourceType SourceType { get; set; } = SourceType.Official;
         public string? Alias { get; set; }
@@ -509,6 +527,7 @@
     private sealed record RarityDto(int RarityDefinitionId, int GameSystemId, string Name, string Slug);
     private sealed record CurrencyDto(int CurrencyDefinitionId, int GameSystemId, string Name, string Code);
     private sealed record SourceMaterialDto(int SourceMaterialId, int GameSystemId, string Code, string Title, string? Publisher, bool IsOfficial);
+    private sealed record UserOwnerDto(int AppUserId, string Username, string Email);
     private sealed record TagDto(int TagDefinitionId, int GameSystemId, string Name, string Slug);
-    private sealed record ItemDto(int ItemId, int GameSystemId, string Name, string Slug, string? Alias, int? ItemTypeDefinitionId, int? RarityDefinitionId, string? Description, decimal? CostAmount, int? CurrencyDefinitionId, string? CostCurrency, decimal? Weight, int Quantity, string? Tags, string? Effect, bool RequiresAttunement, string? AttunementRequirement, string? DamageDice, string? DamageType, string? VersatileDamageDice, int? ArmorClass, int? StrengthRequirement, bool StealthDisadvantage, int? RangeNormal, int? RangeLong, int? SourceMaterialId, string? SourceBook, int? SourcePage, bool IsConsumable, int? ChargesCurrent, int? ChargesMax, string? RechargeRule, int? UsesPerDay, string? ArmorCategory, bool WeaponPropertyLight, bool WeaponPropertyHeavy, bool WeaponPropertyFinesse, bool WeaponPropertyThrown, bool WeaponPropertyTwoHanded, bool WeaponPropertyLoading, bool WeaponPropertyReach, bool WeaponPropertyAmmunition, List<int>? TagDefinitionIds, List<string>? TagNames, SourceType SourceType);
+    private sealed record ItemDto(int ItemId, int GameSystemId, string Name, string Slug, string? Alias, int? ItemTypeDefinitionId, int? OwnerAppUserId, int? RarityDefinitionId, string? Description, decimal? CostAmount, int? CurrencyDefinitionId, string? CostCurrency, decimal? Weight, int Quantity, string? Tags, string? Effect, bool RequiresAttunement, string? AttunementRequirement, string? DamageDice, string? DamageType, string? VersatileDamageDice, int? ArmorClass, int? StrengthRequirement, bool StealthDisadvantage, int? RangeNormal, int? RangeLong, int? SourceMaterialId, string? SourceBook, int? SourcePage, bool IsConsumable, int? ChargesCurrent, int? ChargesMax, string? RechargeRule, int? UsesPerDay, string? ArmorCategory, bool WeaponPropertyLight, bool WeaponPropertyHeavy, bool WeaponPropertyFinesse, bool WeaponPropertyThrown, bool WeaponPropertyTwoHanded, bool WeaponPropertyLoading, bool WeaponPropertyReach, bool WeaponPropertyAmmunition, List<int>? TagDefinitionIds, List<string>? TagNames, SourceType SourceType);
 }
