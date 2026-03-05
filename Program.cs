@@ -292,6 +292,7 @@ using (var scope = app.Services.CreateScope())
     try { await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS IX_AppUsers_Email_Unique_Active ON AppUsers (Email) WHERE DateDeletedUtc IS NULL;"); } catch (SqliteException) { }
     try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE AppUsers ADD COLUMN IsSystemAccount INTEGER NOT NULL DEFAULT 0;"); } catch (SqliteException) { }
     try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE AppUsers ADD COLUMN MustChangePassword INTEGER NOT NULL DEFAULT 0;"); } catch (SqliteException) { }
+    try { await db.Database.ExecuteSqlRawAsync("UPDATE AppUsers SET Role='Users' WHERE DateDeletedUtc IS NULL AND Role IS NOT NULL AND Role NOT IN ('Admin','Users');"); } catch (SqliteException) { }
 
     await EnsureSeedAdminAccountAsync(db);
     await SeedStarterDataAsync(db, app.Environment.ContentRootPath);
@@ -315,7 +316,7 @@ api.MapPost("/auth/register", async (RegisterRequest req, AppDbContext db) =>
     if (exists) return Results.BadRequest("Email is already registered.");
 
     var userCount = await db.AppUsers.CountAsync(u => u.DateDeletedUtc == null);
-    var role = userCount == 0 ? "Admin" : "Viewer";
+    var role = userCount == 0 ? "Admin" : "Users";
 
     var now = DateTime.UtcNow;
     var (hash, salt) = HashPassword(req.Password);
@@ -411,6 +412,42 @@ api.MapGet("/auth/me", (HttpContext http) =>
     });
 }).WithTags("Auth");
 
+
+
+api.MapGet("/admin/users", async (AppDbContext db) =>
+    await db.AppUsers
+        .Where(u => u.DateDeletedUtc == null)
+        .OrderBy(u => u.Email)
+        .Select(u => new { u.AppUserId, u.Email, u.Role, u.IsActive, u.IsSystemAccount, u.MustChangePassword, u.DateCreatedUtc, u.DateModifiedUtc })
+        .ToListAsync())
+    .WithTags("Admin");
+
+api.MapGet("/admin/users/{appUserId:int}", async (int appUserId, AppDbContext db) =>
+{
+    var u = await db.AppUsers.FirstOrDefaultAsync(x => x.AppUserId == appUserId && x.DateDeletedUtc == null);
+    return u is null ? Results.NotFound() : Results.Ok(new { u.AppUserId, u.Email, u.Role, u.IsActive, u.IsSystemAccount, u.MustChangePassword });
+}).WithTags("Admin");
+
+api.MapPut("/admin/users/{appUserId:int}", async (int appUserId, UpdateUserAdminRequest req, AppDbContext db) =>
+{
+    var u = await db.AppUsers.FirstOrDefaultAsync(x => x.AppUserId == appUserId && x.DateDeletedUtc == null);
+    if (u is null) return Results.NotFound();
+
+    var role = (req.Role ?? "").Trim();
+    if (role != "Admin" && role != "Users") return Results.BadRequest("Role must be Admin or Users.");
+
+    if (u.IsSystemAccount)
+    {
+        if (role != "Admin") return Results.BadRequest("System account role cannot be changed.");
+        if (!req.IsActive) return Results.BadRequest("System account cannot be deactivated.");
+    }
+
+    u.Role = role;
+    u.IsActive = req.IsActive;
+    u.DateModifiedUtc = DateTime.UtcNow;
+    await db.SaveChangesAsync();
+    return Results.Ok(new { u.AppUserId, u.Email, u.Role, u.IsActive, u.IsSystemAccount });
+}).WithTags("Admin");
 
 api.MapGet("/notes", async (AppDbContext db) =>
     await db.Notes.Where(n => n.DateDeletedUtc == null).OrderBy(n => n.NoteId).ToListAsync())
@@ -2446,6 +2483,7 @@ public sealed class AppUser
 public sealed record RegisterRequest(string Email, string Password);
 public sealed record LoginRequest(string Email, string Password);
 public sealed record ChangePasswordRequest(string CurrentPassword, string NewPassword);
+public sealed record UpdateUserAdminRequest(string Role, bool IsActive);
 
 public sealed class SourceMaterial
 {

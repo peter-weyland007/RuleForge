@@ -1,0 +1,71 @@
+@page "/admin/users/{AppUserId:int}/edit"
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject NavigationManager Nav
+
+<PageTitle>Edit User</PageTitle>
+
+<MudStack Spacing="3">
+    <MudText Typo="Typo.h4">Edit User</MudText>
+
+    <MudPaper Class="pa-4" Outlined="true">
+        <MudGrid>
+            <MudItem xs="12" md="6"><MudTextField Value="@model.Email" Label="Email" Variant="Variant.Outlined" Disabled="true" /></MudItem>
+            <MudItem xs="12" md="3">
+                <MudSelect T="string" @bind-Value="model.Role" Label="Role" Variant="Variant.Outlined" Disabled="@model.IsSystemAccount">
+                    <MudSelectItem Value="@("Admin")">Admin</MudSelectItem>
+                    <MudSelectItem Value="@("Users")">Users</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="3"><MudCheckBox @bind-Value="model.IsActive" Label="Active" Disabled="@model.IsSystemAccount" /></MudItem>
+            <MudItem xs="12" md="6"><MudCheckBox @bind-Value="model.IsSystemAccount" Label="System Account" Disabled="true" /></MudItem>
+            <MudItem xs="12" md="6"><MudCheckBox @bind-Value="model.MustChangePassword" Label="Must Change Password" Disabled="true" /></MudItem>
+
+            <MudItem xs="12">
+                <MudStack Row="true" Spacing="2">
+                    <MudButtonGroup Variant="Variant.Filled" Color="Color.Primary">
+                        <MudButton OnClick="Save">Save</MudButton>
+                        <MudButton Href="/admin/users" Color="Color.Secondary">Cancel</MudButton>
+                    </MudButtonGroup>
+                </MudStack>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+</MudStack>
+
+@code {
+    [Parameter] public int AppUserId { get; set; }
+
+    private FormModel model = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var dto = await Http.GetFromJsonAsync<UserDto>(Nav.ToAbsoluteUri($"/api/admin/users/{AppUserId}"));
+        if (dto is null) { Nav.NavigateTo("/admin/users"); return; }
+        model = new FormModel
+        {
+            Email = dto.Email,
+            Role = dto.Role,
+            IsActive = dto.IsActive,
+            IsSystemAccount = dto.IsSystemAccount,
+            MustChangePassword = dto.MustChangePassword
+        };
+    }
+
+    private async Task Save()
+    {
+        var res = await Http.PutAsJsonAsync(Nav.ToAbsoluteUri($"/api/admin/users/{AppUserId}"), new { Role = model.Role, IsActive = model.IsActive });
+        if (res.IsSuccessStatusCode) Nav.NavigateTo("/admin/users");
+    }
+
+    private sealed class FormModel
+    {
+        public string Email { get; set; } = string.Empty;
+        public string Role { get; set; } = "Users";
+        public bool IsActive { get; set; } = true;
+        public bool IsSystemAccount { get; set; }
+        public bool MustChangePassword { get; set; }
+    }
+
+    private sealed record UserDto(int AppUserId, string Email, string Role, bool IsActive, bool IsSystemAccount, bool MustChangePassword);
+}

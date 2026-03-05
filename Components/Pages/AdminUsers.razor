@@ -1,0 +1,38 @@
+@page "/admin/users"
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject NavigationManager Nav
+
+<PageTitle>Admin Users</PageTitle>
+
+<MudStack Spacing="3">
+    <MudText Typo="Typo.h4">Admin · Users</MudText>
+    <MudText Typo="Typo.body2">Manage user accounts and roles (Admin / Users).</MudText>
+
+    <MudTable Items="rows" Dense="true" Hover="true">
+        <HeaderContent>
+            <MudTh>Email</MudTh><MudTh>Role</MudTh><MudTh>Active</MudTh><MudTh>System</MudTh><MudTh>Must Change Password</MudTh><MudTh></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>@context.Email</MudTd>
+            <MudTd>@context.Role</MudTd>
+            <MudTd>@(context.IsActive ? "Yes" : "No")</MudTd>
+            <MudTd>@(context.IsSystemAccount ? "Yes" : "No")</MudTd>
+            <MudTd>@(context.MustChangePassword ? "Yes" : "No")</MudTd>
+            <MudTd>
+                <MudIconButton Href="@($"/admin/users/{context.AppUserId}/edit")" Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" />
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+</MudStack>
+
+@code {
+    private List<UserDto> rows = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        rows = await Http.GetFromJsonAsync<List<UserDto>>(Nav.ToAbsoluteUri("/api/admin/users")) ?? new();
+    }
+
+    private sealed record UserDto(int AppUserId, string Email, string Role, bool IsActive, bool IsSystemAccount, bool MustChangePassword);
+}
