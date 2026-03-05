@@ -2,6 +2,7 @@
 @using System.Net.Http.Json
 @inject HttpClient Http
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
@@ -46,8 +47,19 @@
     private async Task Load()
     {
         loading = true;
-        rows = await Http.GetFromJsonAsync<List<DeletedGameSystemDto>>(Nav.ToAbsoluteUri("/api/admin/game-systems/deleted")) ?? new();
-        loading = false;
+        try
+        {
+            rows = await JS.InvokeAsync<List<DeletedGameSystemDto>>("ruleforgeAuth.adminDeletedGameSystems") ?? new();
+        }
+        catch (Exception ex)
+        {
+            rows = new();
+            Snackbar.Add($"Load failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            loading = false;
+        }
     }
 
     private async Task ConfirmPurge(int id, string name)
@@ -64,15 +76,15 @@
 
     private async Task Purge(int id)
     {
-        var res = await Http.DeleteAsync(Nav.ToAbsoluteUri($"/api/admin/game-systems/{id}/purge"));
-        if (res.IsSuccessStatusCode)
+        try
         {
+            await JS.InvokeAsync<object>("ruleforgeAuth.adminPurgeGameSystem", id);
             Snackbar.Add("Purged permanently.", Severity.Success);
             await Load();
         }
-        else
+        catch (Exception ex)
         {
-            Snackbar.Add("Purge failed.", Severity.Error);
+            Snackbar.Add($"Purge failed: {ex.Message}", Severity.Error);
         }
     }
 

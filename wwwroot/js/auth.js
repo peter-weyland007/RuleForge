@@ -199,4 +199,19 @@ window.ruleforgeAuth = {
     if (!res.ok) throw new Error(text || 'Failed to load friends');
     return text ? JSON.parse(text) : [];
   }
+,
+
+  async adminDeletedGameSystems() {
+    const res = await fetch('/api/admin/game-systems/deleted', { credentials: 'include' });
+    const text = await res.text();
+    if (!res.ok) throw new Error(text || 'Failed to load deleted game systems');
+    return text ? JSON.parse(text) : [];
+  },
+
+  async adminPurgeGameSystem(id) {
+    const res = await fetch(`/api/admin/game-systems/${id}/purge`, { method: 'DELETE', credentials: 'include' });
+    const text = await res.text();
+    if (!res.ok) throw new Error(text || 'Failed to purge game system');
+    return text ? JSON.parse(text) : {};
+  }
 };
