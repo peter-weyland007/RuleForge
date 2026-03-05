@@ -138,6 +138,19 @@ using (var scope = app.Services.CreateScope())
         await db.SaveChangesAsync();
 
     await db.Database.ExecuteSqlRawAsync("""
+        CREATE TABLE IF NOT EXISTS Campaigns (
+            CampaignId INTEGER PRIMARY KEY AUTOINCREMENT,
+            Title TEXT NOT NULL,
+            Description TEXT NULL,
+            DateCreatedUtc TEXT NOT NULL,
+            DateModifiedUtc TEXT NOT NULL,
+            DateDeletedUtc TEXT NULL
+        );
+    """);
+
+    try { await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS IX_Campaigns_Title_Unique_Active ON Campaigns (Title) WHERE DateDeletedUtc IS NULL;"); } catch (SqliteException) { }
+
+    await db.Database.ExecuteSqlRawAsync("""
         CREATE TABLE IF NOT EXISTS ItemTypeDefinitions (
             ItemTypeDefinitionId INTEGER PRIMARY KEY AUTOINCREMENT,
             GameSystemId INTEGER NOT NULL,
@@ -538,6 +551,68 @@ api.MapPut("/admin/users/{appUserId:int}", async (int appUserId, UpdateUserAdmin
     await db.SaveChangesAsync();
     return Results.Ok(new { u.AppUserId, u.Email, u.Role, u.IsActive, u.IsSystemAccount });
 }).WithTags("Admin");
+
+
+api.MapGet("/campaigns", async (AppDbContext db) =>
+    await db.Campaigns
+        .Where(c => c.DateDeletedUtc == null)
+        .OrderBy(c => c.Title)
+        .ToListAsync())
+    .WithTags("Campaigns");
+
+api.MapGet("/campaigns/{campaignId:int}", async (int campaignId, AppDbContext db) =>
+{
+    var row = await db.Campaigns.FirstOrDefaultAsync(c => c.CampaignId == campaignId && c.DateDeletedUtc == null);
+    return row is null ? Results.NotFound() : Results.Ok(row);
+}).WithTags("Campaigns");
+
+api.MapPost("/campaigns", async (UpsertCampaignRequest req, AppDbContext db) =>
+{
+    if (string.IsNullOrWhiteSpace(req.Title)) return Results.BadRequest("Title is required.");
+    var title = ToTitleCase(req.Title.Trim());
+
+    var dup = await db.Campaigns.AnyAsync(c => c.DateDeletedUtc == null && c.Title == title);
+    if (dup) return Results.BadRequest("Campaign title already exists.");
+
+    var now = DateTime.UtcNow;
+    var row = new Campaign
+    {
+        Title = title,
+        Description = string.IsNullOrWhiteSpace(req.Description) ? null : req.Description.Trim(),
+        DateCreatedUtc = now,
+        DateModifiedUtc = now
+    };
+    db.Campaigns.Add(row);
+    await db.SaveChangesAsync();
+    return Results.Ok(row);
+}).WithTags("Campaigns");
+
+api.MapPut("/campaigns/{campaignId:int}", async (int campaignId, UpsertCampaignRequest req, AppDbContext db) =>
+{
+    var row = await db.Campaigns.FirstOrDefaultAsync(c => c.CampaignId == campaignId && c.DateDeletedUtc == null);
+    if (row is null) return Results.NotFound();
+    if (string.IsNullOrWhiteSpace(req.Title)) return Results.BadRequest("Title is required.");
+
+    var title = ToTitleCase(req.Title.Trim());
+    var dup = await db.Campaigns.AnyAsync(c => c.DateDeletedUtc == null && c.Title == title && c.CampaignId != campaignId);
+    if (dup) return Results.BadRequest("Campaign title already exists.");
+
+    row.Title = title;
+    row.Description = string.IsNullOrWhiteSpace(req.Description) ? null : req.Description.Trim();
+    row.DateModifiedUtc = DateTime.UtcNow;
+    await db.SaveChangesAsync();
+    return Results.Ok(row);
+}).WithTags("Campaigns");
+
+api.MapDelete("/campaigns/{campaignId:int}", async (int campaignId, AppDbContext db) =>
+{
+    var row = await db.Campaigns.FirstOrDefaultAsync(c => c.CampaignId == campaignId && c.DateDeletedUtc == null);
+    if (row is null) return Results.NotFound();
+    row.DateDeletedUtc = DateTime.UtcNow;
+    row.DateModifiedUtc = DateTime.UtcNow;
+    await db.SaveChangesAsync();
+    return Results.NoContent();
+}).WithTags("Campaigns");
 
 api.MapGet("/notes", async (AppDbContext db) =>
     await db.Notes.Where(n => n.DateDeletedUtc == null).OrderBy(n => n.NoteId).ToListAsync())
@@ -2369,6 +2444,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<TagDefinition> TagDefinitions => Set<TagDefinition>();
     public DbSet<ItemTag> ItemTags => Set<ItemTag>();
     public DbSet<AppUser> AppUsers => Set<AppUser>();
+    public DbSet<Campaign> Campaigns => Set<Campaign>();
 }
 
 public sealed class Note
@@ -2606,6 +2682,18 @@ public sealed record MergeGameSystemsRequest(int FromGameSystemId, int ToGameSys
 public sealed record ReassignOrphansRequest(int FromGameSystemId, int ToGameSystemId);
 public sealed record ReassignOneOrphanRequest(string Kind, int Id, int ToGameSystemId);
 
+
+public sealed class Campaign
+{
+    public int CampaignId { get; set; }
+    public string Title { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public DateTime DateCreatedUtc { get; set; }
+    public DateTime DateModifiedUtc { get; set; }
+    public DateTime? DateDeletedUtc { get; set; }
+}
+
+public sealed record UpsertCampaignRequest(string Title, string? Description);
 
 public sealed class AppUser
 {

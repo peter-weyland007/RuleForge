@@ -1,0 +1,39 @@
+@page "/campaigns"
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject NavigationManager Nav
+
+<PageTitle>Campaigns</PageTitle>
+
+<MudStack Spacing="3">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+        <MudText Typo="Typo.h4">Campaigns</MudText>
+        <MudButton Href="/campaigns/new" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">New Campaign</MudButton>
+    </MudStack>
+
+    <MudTable Items="rows" Dense="true" Hover="true">
+        <HeaderContent>
+            <MudTh>Title</MudTh>
+            <MudTh>Description</MudTh>
+            <MudTh></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>@context.Title</MudTd>
+            <MudTd>@context.Description</MudTd>
+            <MudTd>
+                <MudIconButton Href="@($"/campaigns/{context.CampaignId}/edit")" Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" />
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+</MudStack>
+
+@code {
+    private List<CampaignDto> rows = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        rows = await Http.GetFromJsonAsync<List<CampaignDto>>(Nav.ToAbsoluteUri("/api/campaigns")) ?? new();
+    }
+
+    private sealed record CampaignDto(int CampaignId, string Title, string? Description);
+}
