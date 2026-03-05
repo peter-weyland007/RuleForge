@@ -836,6 +836,61 @@ api.MapGet("/users", async (AppDbContext db) =>
         .ToListAsync())
     .WithTags("Users");
 
+
+api.MapGet("/users/{username}/summary", async (string username, AppDbContext db) =>
+{
+    var uname = username.Trim().ToLowerInvariant();
+    var user = await db.AppUsers
+        .Where(x => x.DateDeletedUtc == null && x.IsActive && x.Username == uname)
+        .Select(x => new { x.AppUserId, x.Username, x.Email, x.Role })
+        .FirstOrDefaultAsync();
+
+    if (user is null) return Results.NotFound();
+
+    var ownerCampaigns = await db.Campaigns
+        .Where(c => c.DateDeletedUtc == null && c.OwnerAppUserId == user.AppUserId)
+        .OrderBy(c => c.Title)
+        .Select(c => new { c.CampaignId, c.Title, Relationship = "Owner" })
+        .ToListAsync();
+
+    var collaboratorCampaigns = await db.CampaignCollaborators
+        .Where(cc => cc.DateDeletedUtc == null && cc.AppUserId == user.AppUserId)
+        .Join(db.Campaigns.Where(c => c.DateDeletedUtc == null), cc => cc.CampaignId, c => c.CampaignId,
+            (cc, c) => new { c.CampaignId, c.Title, Relationship = "Collaborator" })
+        .OrderBy(x => x.Title)
+        .ToListAsync();
+
+    var playerCampaigns = await db.CampaignPlayers
+        .Where(cp => cp.DateDeletedUtc == null && cp.AppUserId == user.AppUserId)
+        .Join(db.Campaigns.Where(c => c.DateDeletedUtc == null), cp => cp.CampaignId, c => c.CampaignId,
+            (cp, c) => new { c.CampaignId, c.Title, Relationship = "Player" })
+        .OrderBy(x => x.Title)
+        .ToListAsync();
+
+    var campaigns = ownerCampaigns
+        .Concat(collaboratorCampaigns)
+        .Concat(playerCampaigns)
+        .GroupBy(x => x.CampaignId)
+        .Select(g => new { g.Key, g.First().Title, Relationships = g.Select(x => x.Relationship).Distinct().ToList() })
+        .OrderBy(x => x.Title)
+        .ToList();
+
+    var items = await db.Items
+        .Where(i => i.DateDeletedUtc == null && i.OwnerAppUserId == user.AppUserId)
+        .OrderBy(i => i.Name)
+        .Select(i => new { i.ItemId, i.Name, i.Slug, Relationship = "Owner" })
+        .ToListAsync();
+
+    return Results.Ok(new
+    {
+        user,
+        campaignCount = campaigns.Count,
+        itemCount = items.Count,
+        campaigns,
+        items
+    });
+}).WithTags("Users");
+
 api.MapGet("/users/{username}", async (string username, AppDbContext db) =>
 {
     var u = await db.AppUsers

@@ -5,10 +5,10 @@
 
 <PageTitle>User Profile</PageTitle>
 
-<MudStack Spacing="3" Style="max-width:700px;">
+<MudStack Spacing="3" Style="max-width:900px;">
     <MudText Typo="Typo.h4">User Profile</MudText>
 
-    @if (user is null)
+    @if (summary is null)
     {
         <MudAlert Severity="Severity.Warning">User not found.</MudAlert>
     }
@@ -16,22 +16,72 @@
     {
         <MudPaper Class="pa-4" Outlined="true">
             <MudGrid>
-                <MudItem xs="12" md="4"><MudText Typo="Typo.caption">Username</MudText><MudText Typo="Typo.body1">@user.Username</MudText></MudItem>
-                <MudItem xs="12" md="4"><MudText Typo="Typo.caption">Email</MudText><MudText Typo="Typo.body1">@user.Email</MudText></MudItem>
-                <MudItem xs="12" md="4"><MudText Typo="Typo.caption">Role</MudText><MudText Typo="Typo.body1">@user.Role</MudText></MudItem>
+                <MudItem xs="12" md="4"><MudText Typo="Typo.caption">Username</MudText><MudText Typo="Typo.body1">@summary.user.Username</MudText></MudItem>
+                <MudItem xs="12" md="4"><MudText Typo="Typo.caption">Campaigns</MudText><MudText Typo="Typo.body1">@summary.campaignCount</MudText></MudItem>
+                <MudItem xs="12" md="4"><MudText Typo="Typo.caption">Items</MudText><MudText Typo="Typo.body1">@summary.itemCount</MudText></MudItem>
             </MudGrid>
+        </MudPaper>
+
+        <MudPaper Class="pa-4" Outlined="true">
+            <MudText Typo="Typo.h6" Class="mb-2">Campaigns (@summary.campaignCount)</MudText>
+            @if (summary.campaigns.Count == 0)
+            {
+                <MudText Typo="Typo.body2">No campaigns yet.</MudText>
+            }
+            else
+            {
+                <MudList Dense="true">
+                    @foreach (var c in summary.campaigns)
+                    {
+                        <MudListItem>
+                            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Style="width:100%">
+                                <MudLink Href="@($"/campaigns/{c.Key}/edit")">@c.Title</MudLink>
+                                @foreach (var rel in c.Relationships)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@rel</MudChip>
+                                }
+                            </MudStack>
+                        </MudListItem>
+                    }
+                </MudList>
+            }
+        </MudPaper>
+
+        <MudPaper Class="pa-4" Outlined="true">
+            <MudText Typo="Typo.h6" Class="mb-2">Items (@summary.itemCount)</MudText>
+            @if (summary.items.Count == 0)
+            {
+                <MudText Typo="Typo.body2">No items yet.</MudText>
+            }
+            else
+            {
+                <MudList Dense="true">
+                    @foreach (var i in summary.items)
+                    {
+                        <MudListItem>
+                            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Style="width:100%">
+                                <MudLink Href="@($"/items/{i.ItemId}/edit")">@i.Name</MudLink>
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@i.Relationship</MudChip>
+                            </MudStack>
+                        </MudListItem>
+                    }
+                </MudList>
+            }
         </MudPaper>
     }
 </MudStack>
 
 @code {
     [Parameter] public string Username { get; set; } = string.Empty;
-    private UserDto? user;
+    private UserSummaryDto? summary;
 
     protected override async Task OnParametersSetAsync()
     {
-        user = await Http.GetFromJsonAsync<UserDto>(Nav.ToAbsoluteUri($"/api/users/{Username}"));
+        summary = await Http.GetFromJsonAsync<UserSummaryDto>(Nav.ToAbsoluteUri($"/api/users/{Username}/summary"));
     }
 
     private sealed record UserDto(int AppUserId, string Username, string Email, string Role);
+    private sealed record CampaignLinkDto(int Key, string Title, List<string> Relationships);
+    private sealed record ItemLinkDto(int ItemId, string Name, string Slug, string Relationship);
+    private sealed record UserSummaryDto(UserDto user, int campaignCount, int itemCount, List<CampaignLinkDto> campaigns, List<ItemLinkDto> items);
 }
