@@ -6,13 +6,23 @@
 
 <PageTitle>Item Form</PageTitle>
 
-<MudStack Spacing="3">
+<style>
+    .rf-shell { max-width: 1240px; margin: 0 auto; }
+    .rf-title-chip { letter-spacing: .02em; font-weight: 700; }
+    .rf-section { border-left: 4px solid var(--mud-palette-primary); }
+    .rf-section--economy { border-left-color: var(--mud-palette-info); }
+    .rf-section--combat { border-left-color: var(--mud-palette-warning); }
+    .rf-section--magic { border-left-color: var(--mud-palette-secondary); }
+    .rf-section--tags { border-left-color: var(--mud-palette-success); }
+</style>
+
+<MudStack Spacing="3" Class="rf-shell">
     <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
         <MudText Typo="Typo.h4">@(_isEdit ? "Edit Item" : "Create Item")</MudText>
-        <MudChip T="string" Color="Color.Primary" Variant="Variant.Filled" Size="Size.Small">RuleForge Item Builder</MudChip>
+        <MudChip T="string" Color="Color.Primary" Variant="Variant.Filled" Size="Size.Small" Class="rf-title-chip">RuleForge Item Builder</MudChip>
     </MudStack>
 
-    <MudPaper Class="pa-4" Outlined="true">
+    <MudPaper Class="pa-4 rf-section" Outlined="true">
         <MudText Typo="Typo.subtitle1" Class="mb-3">Identity & Classification</MudText>
         <MudGrid>
             <MudItem xs="12" md="3">
@@ -60,7 +70,7 @@
         </MudStack>
     </MudPaper>
 
-    <MudPaper Class="pa-4" Outlined="true">
+    <MudPaper Class="pa-4 rf-section rf-section--economy" Outlined="true">
         <MudText Typo="Typo.subtitle1" Class="mb-3">Economy & Source</MudText>
         <MudGrid>
             <MudItem xs="12" md="3"><MudNumericField T="decimal?" @bind-Value="model.CostAmount" Label="Cost" Variant="Variant.Outlined" /></MudItem>
@@ -74,7 +84,7 @@
         </MudGrid>
     </MudPaper>
 
-        <MudPaper Class="pa-4" Outlined="true">
+        <MudPaper Class="pa-4 rf-section rf-section--combat" Outlined="true">
         <MudText Typo="Typo.subtitle1" Class="mb-1">Combat Profile</MudText>
         <MudText Typo="Typo.caption" Class="mb-3">Only relevant fields for the selected type are shown.</MudText>
         <MudGrid>
@@ -128,7 +138,7 @@
         </MudGrid>
     </MudPaper>
 
-    <MudPaper Class="pa-4" Outlined="true">
+    <MudPaper Class="pa-4 rf-section rf-section--magic" Outlined="true">
         <MudText Typo="Typo.subtitle1" Class="mb-1">Magic & Attunement</MudText>
         <MudText Typo="Typo.caption" Class="mb-3">Use for potions, scrolls, rings, wands, rods, staffs, and wondrous items.</MudText>
         <MudGrid>
@@ -168,7 +178,7 @@
         </MudGrid>
     </MudPaper>
 
-    <MudPaper Class="pa-4" Outlined="true">
+    <MudPaper Class="pa-4 rf-section rf-section--tags" Outlined="true">
         <MudText Typo="Typo.subtitle1" Class="mb-3">Tags & Notes</MudText>
         <MudGrid>
             <MudItem xs="12" md="6">
