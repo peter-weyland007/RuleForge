@@ -499,18 +499,21 @@
             model.Alias
         );
 
-        HttpResponseMessage res = _isEdit
-            ? await Http.PutAsJsonAsync(Nav.ToAbsoluteUri($"/api/items/{ItemId!.Value}"), req)
-            : await Http.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/items"), req);
-
-        if (res.IsSuccessStatusCode)
+        try
         {
+            if (_isEdit)
+                await JS.InvokeAsync<object>("ruleforgeAuth.itemUpdate", ItemId!.Value, req);
+            else
+                await JS.InvokeAsync<object>("ruleforgeAuth.itemCreate", req);
+
             Nav.NavigateTo("/items");
             return;
         }
-
-        saveError = await res.Content.ReadAsStringAsync();
-        if (string.IsNullOrWhiteSpace(saveError)) saveError = "Save failed.";
+        catch (Exception ex)
+        {
+            saveError = ex.Message;
+            if (string.IsNullOrWhiteSpace(saveError)) saveError = "Save failed.";
+        }
     }
 
     private sealed class FormModel

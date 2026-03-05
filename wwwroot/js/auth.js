@@ -126,4 +126,29 @@ window.ruleforgeAuth = {
     if (!res.ok) throw new Error(text || 'Failed to update campaign');
     return text ? JSON.parse(text) : {};
   }
+,
+
+  async itemCreate(payload) {
+    const res = await fetch('/api/items', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload)
+    });
+    const text = await res.text();
+    if (!res.ok) throw new Error(text || `Create failed (${res.status})`);
+    return text ? JSON.parse(text) : {};
+  },
+
+  async itemUpdate(id, payload) {
+    const res = await fetch(`/api/items/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload)
+    });
+    const text = await res.text();
+    if (!res.ok) throw new Error(text || `Update failed (${res.status})`);
+    return text ? JSON.parse(text) : {};
+  }
 };
