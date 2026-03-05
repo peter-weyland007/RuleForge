@@ -213,6 +213,42 @@ using (var scope = app.Services.CreateScope())
     try { await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS IX_CampaignPlayers_Unique_Active ON CampaignPlayers (CampaignId, AppUserId) WHERE DateDeletedUtc IS NULL;"); } catch (SqliteException) { }
 
     await db.Database.ExecuteSqlRawAsync("""
+        CREATE TABLE IF NOT EXISTS Creatures (
+            CreatureId INTEGER PRIMARY KEY AUTOINCREMENT,
+            GameSystemId INTEGER NOT NULL,
+            Name TEXT NOT NULL,
+            Slug TEXT NOT NULL,
+            Alias TEXT NULL,
+            CreatureType TEXT NULL,
+            Size TEXT NULL,
+            Alignment TEXT NULL,
+            ArmorClass INTEGER NULL,
+            HitPoints INTEGER NULL,
+            Speed TEXT NULL,
+            Strength INTEGER NULL,
+            Dexterity INTEGER NULL,
+            Constitution INTEGER NULL,
+            Intelligence INTEGER NULL,
+            Wisdom INTEGER NULL,
+            Charisma INTEGER NULL,
+            ChallengeRating TEXT NULL,
+            ProficiencyBonus INTEGER NULL,
+            Description TEXT NULL,
+            Traits TEXT NULL,
+            Actions TEXT NULL,
+            SourceType INTEGER NOT NULL,
+            OwnerAppUserId INTEGER NULL,
+            SourceMaterialId INTEGER NULL,
+            CampaignId INTEGER NULL,
+            SourcePage INTEGER NULL,
+            DateCreatedUtc TEXT NOT NULL,
+            DateModifiedUtc TEXT NOT NULL,
+            DateDeletedUtc TEXT NULL
+        );
+    """);
+    try { await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS IX_Creatures_System_Slug_Unique_Active ON Creatures (GameSystemId, Slug) WHERE DateDeletedUtc IS NULL;"); } catch (SqliteException) { }
+
+    await db.Database.ExecuteSqlRawAsync("""
         CREATE TABLE IF NOT EXISTS ItemTypeDefinitions (
             ItemTypeDefinitionId INTEGER PRIMARY KEY AUTOINCREMENT,
             GameSystemId INTEGER NOT NULL,
@@ -652,6 +688,202 @@ api.MapPut("/admin/users/{appUserId:int}", async (int appUserId, UpdateUserAdmin
     return Results.Ok(new { u.AppUserId, u.Email, u.Role, u.IsActive, u.IsSystemAccount });
 }).WithTags("Admin");
 
+
+
+api.MapGet("/creatures", async (int gameSystemId, AppDbContext db) =>
+    await db.Creatures
+        .Where(c => c.DateDeletedUtc == null && c.GameSystemId == gameSystemId)
+        .OrderBy(c => c.Name)
+        .Select(c => new
+        {
+            c.CreatureId, c.GameSystemId, c.Name, c.Slug, c.Alias, c.CreatureType, c.ChallengeRating,
+            c.SourceType, c.OwnerAppUserId, c.SourceMaterialId, c.CampaignId
+        })
+        .ToListAsync())
+    .WithTags("Creatures");
+
+api.MapGet("/creatures/{creatureId:int}", async (int creatureId, AppDbContext db) =>
+{
+    var row = await db.Creatures.FirstOrDefaultAsync(c => c.CreatureId == creatureId && c.DateDeletedUtc == null);
+    return row is null ? Results.NotFound() : Results.Ok(row);
+}).WithTags("Creatures");
+
+api.MapPost("/creatures", async (CreateCreatureRequest req, AppDbContext db, HttpContext http) =>
+{
+    if (string.IsNullOrWhiteSpace(req.Name)) return await LoggedBadRequestAsync(db, http, "Name is required.");
+    var gsExists = await db.GameSystems.AnyAsync(gs => gs.GameSystemId == req.GameSystemId && gs.DateDeletedUtc == null);
+    if (!gsExists) return await LoggedBadRequestAsync(db, http, "GameSystemId is invalid.");
+
+    if (req.SourceType == SourceType.Official)
+    {
+        if (!req.SourceMaterialId.HasValue) return await LoggedBadRequestAsync(db, http, "Official creatures require SourceMaterialId.");
+        if (req.CampaignId.HasValue) return await LoggedBadRequestAsync(db, http, "Official creatures cannot use CampaignId.");
+    }
+    else if (req.SourceMaterialId.HasValue && req.CampaignId.HasValue)
+    {
+        return await LoggedBadRequestAsync(db, http, "Use either SourceMaterialId or CampaignId, not both.");
+    }
+
+    if (req.SourceMaterialId.HasValue)
+    {
+        var sourceExists = await db.SourceMaterials.AnyAsync(sm => sm.SourceMaterialId == req.SourceMaterialId.Value && sm.GameSystemId == req.GameSystemId && sm.DateDeletedUtc == null);
+        if (!sourceExists) return await LoggedBadRequestAsync(db, http, "SourceMaterialId is invalid for this system.");
+    }
+
+    if (req.CampaignId.HasValue)
+    {
+        var idRaw = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(idRaw, out var currentUserId)) return Results.Unauthorized();
+        var allowed = await db.Campaigns.AnyAsync(c => c.CampaignId == req.CampaignId.Value && c.DateDeletedUtc == null &&
+            (c.OwnerAppUserId == currentUserId || db.CampaignCollaborators.Any(cc => cc.CampaignId == c.CampaignId && cc.AppUserId == currentUserId && cc.DateDeletedUtc == null)));
+        if (!allowed) return await LoggedBadRequestAsync(db, http, "CampaignId is invalid or inaccessible.");
+    }
+
+    int? ownerUserId = null;
+    if (req.SourceType != SourceType.Official)
+    {
+        if (req.OwnerAppUserId.HasValue)
+        {
+            var ownerExists = await db.AppUsers.AnyAsync(u => u.DateDeletedUtc == null && u.IsActive && u.AppUserId == req.OwnerAppUserId.Value);
+            if (!ownerExists) return await LoggedBadRequestAsync(db, http, "OwnerAppUserId is invalid.");
+            ownerUserId = req.OwnerAppUserId.Value;
+        }
+        else
+        {
+            var idRaw = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (int.TryParse(idRaw, out var currentUserId)) ownerUserId = currentUserId;
+        }
+    }
+
+    var now = DateTime.UtcNow;
+    var title = ToTitleCase(req.Name.Trim());
+    var slug = await GenerateUniqueCreatureSlugAsync(db, req.GameSystemId, Slugify(title));
+    var row = new Creature
+    {
+        GameSystemId = req.GameSystemId,
+        Name = title,
+        Slug = slug,
+        Alias = req.Alias,
+        CreatureType = req.CreatureType,
+        Size = req.Size,
+        Alignment = req.Alignment,
+        ArmorClass = req.ArmorClass,
+        HitPoints = req.HitPoints,
+        Speed = req.Speed,
+        Strength = req.Strength,
+        Dexterity = req.Dexterity,
+        Constitution = req.Constitution,
+        Intelligence = req.Intelligence,
+        Wisdom = req.Wisdom,
+        Charisma = req.Charisma,
+        ChallengeRating = req.ChallengeRating,
+        ProficiencyBonus = req.ProficiencyBonus,
+        Description = req.Description,
+        Traits = req.Traits,
+        Actions = req.Actions,
+        SourceType = req.SourceType,
+        OwnerAppUserId = ownerUserId,
+        SourceMaterialId = req.SourceMaterialId,
+        CampaignId = req.SourceType == SourceType.Official ? null : req.CampaignId,
+        SourcePage = req.SourcePage,
+        DateCreatedUtc = now,
+        DateModifiedUtc = now
+    };
+    db.Creatures.Add(row);
+    await db.SaveChangesAsync();
+    return Results.Ok(row);
+}).WithTags("Creatures");
+
+api.MapPut("/creatures/{creatureId:int}", async (int creatureId, CreateCreatureRequest req, AppDbContext db, HttpContext http) =>
+{
+    var row = await db.Creatures.FirstOrDefaultAsync(c => c.CreatureId == creatureId && c.DateDeletedUtc == null);
+    if (row is null) return Results.NotFound();
+    if (string.IsNullOrWhiteSpace(req.Name)) return await LoggedBadRequestAsync(db, http, "Name is required.");
+
+    if (req.SourceType == SourceType.Official)
+    {
+        if (!req.SourceMaterialId.HasValue) return await LoggedBadRequestAsync(db, http, "Official creatures require SourceMaterialId.");
+        if (req.CampaignId.HasValue) return await LoggedBadRequestAsync(db, http, "Official creatures cannot use CampaignId.");
+    }
+    else if (req.SourceMaterialId.HasValue && req.CampaignId.HasValue)
+    {
+        return await LoggedBadRequestAsync(db, http, "Use either SourceMaterialId or CampaignId, not both.");
+    }
+
+    if (req.SourceMaterialId.HasValue)
+    {
+        var sourceExists = await db.SourceMaterials.AnyAsync(sm => sm.SourceMaterialId == req.SourceMaterialId.Value && sm.GameSystemId == req.GameSystemId && sm.DateDeletedUtc == null);
+        if (!sourceExists) return await LoggedBadRequestAsync(db, http, "SourceMaterialId is invalid for this system.");
+    }
+
+    if (req.CampaignId.HasValue)
+    {
+        var idRaw = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(idRaw, out var currentUserId)) return Results.Unauthorized();
+        var allowed = await db.Campaigns.AnyAsync(c => c.CampaignId == req.CampaignId.Value && c.DateDeletedUtc == null &&
+            (c.OwnerAppUserId == currentUserId || db.CampaignCollaborators.Any(cc => cc.CampaignId == c.CampaignId && cc.AppUserId == currentUserId && cc.DateDeletedUtc == null)));
+        if (!allowed) return await LoggedBadRequestAsync(db, http, "CampaignId is invalid or inaccessible.");
+    }
+
+    int? ownerUserId = row.OwnerAppUserId;
+    if (req.SourceType == SourceType.Official)
+    {
+        ownerUserId = null;
+    }
+    else
+    {
+        if (req.OwnerAppUserId.HasValue)
+        {
+            var ownerExists = await db.AppUsers.AnyAsync(u => u.DateDeletedUtc == null && u.IsActive && u.AppUserId == req.OwnerAppUserId.Value);
+            if (!ownerExists) return await LoggedBadRequestAsync(db, http, "OwnerAppUserId is invalid.");
+            ownerUserId = req.OwnerAppUserId.Value;
+        }
+        else if (!ownerUserId.HasValue)
+        {
+            var idRaw = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (int.TryParse(idRaw, out var currentUserId)) ownerUserId = currentUserId;
+        }
+    }
+
+    row.GameSystemId = req.GameSystemId;
+    row.Name = ToTitleCase(req.Name.Trim());
+    row.Alias = req.Alias;
+    row.CreatureType = req.CreatureType;
+    row.Size = req.Size;
+    row.Alignment = req.Alignment;
+    row.ArmorClass = req.ArmorClass;
+    row.HitPoints = req.HitPoints;
+    row.Speed = req.Speed;
+    row.Strength = req.Strength;
+    row.Dexterity = req.Dexterity;
+    row.Constitution = req.Constitution;
+    row.Intelligence = req.Intelligence;
+    row.Wisdom = req.Wisdom;
+    row.Charisma = req.Charisma;
+    row.ChallengeRating = req.ChallengeRating;
+    row.ProficiencyBonus = req.ProficiencyBonus;
+    row.Description = req.Description;
+    row.Traits = req.Traits;
+    row.Actions = req.Actions;
+    row.SourceType = req.SourceType;
+    row.OwnerAppUserId = ownerUserId;
+    row.SourceMaterialId = req.SourceMaterialId;
+    row.CampaignId = req.SourceType == SourceType.Official ? null : req.CampaignId;
+    row.SourcePage = req.SourcePage;
+    row.DateModifiedUtc = DateTime.UtcNow;
+    await db.SaveChangesAsync();
+    return Results.Ok(row);
+}).WithTags("Creatures");
+
+api.MapDelete("/creatures/{creatureId:int}", async (int creatureId, AppDbContext db) =>
+{
+    var row = await db.Creatures.FirstOrDefaultAsync(c => c.CreatureId == creatureId && c.DateDeletedUtc == null);
+    if (row is null) return Results.NotFound();
+    row.DateDeletedUtc = DateTime.UtcNow;
+    row.DateModifiedUtc = DateTime.UtcNow;
+    await db.SaveChangesAsync();
+    return Results.NoContent();
+}).WithTags("Creatures");
 
 api.MapGet("/campaigns/accessible", async (AppDbContext db, HttpContext http) =>
 {
@@ -2296,6 +2528,19 @@ static async Task<string> GenerateUniqueItemTypeSlugAsync(AppDbContext db, int g
 
 
 
+
+static async Task<string> GenerateUniqueCreatureSlugAsync(AppDbContext db, int gameSystemId, string baseSlug)
+{
+    var slug = string.IsNullOrWhiteSpace(baseSlug) ? "creature" : baseSlug;
+    var candidate = slug;
+    var i = 2;
+    while (await db.Creatures.AnyAsync(c => c.DateDeletedUtc == null && c.GameSystemId == gameSystemId && c.Slug == candidate))
+    {
+        candidate = $"{slug}-{i++}";
+    }
+    return candidate;
+}
+
 static async Task<string> GenerateUniqueTagSlugAsync(AppDbContext db, int gameSystemId, string baseSlug)
 {
     var root = string.IsNullOrWhiteSpace(baseSlug) ? "tag" : baseSlug;
@@ -2944,6 +3189,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<AppError> AppErrors => Set<AppError>();
     public DbSet<FriendRequest> FriendRequests => Set<FriendRequest>();
     public DbSet<Friend> Friends => Set<Friend>();
+    public DbSet<Creature> Creatures => Set<Creature>();
 }
 
 public sealed class Note
@@ -3214,6 +3460,42 @@ public sealed class AppError
     public string? StackTrace { get; set; }
     public DateTime DateCreatedUtc { get; set; }
 }
+
+public sealed class Creature
+{
+    public int CreatureId { get; set; }
+    public int GameSystemId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Slug { get; set; } = string.Empty;
+    public string? Alias { get; set; }
+    public string? CreatureType { get; set; }
+    public string? Size { get; set; }
+    public string? Alignment { get; set; }
+    public int? ArmorClass { get; set; }
+    public int? HitPoints { get; set; }
+    public string? Speed { get; set; }
+    public int? Strength { get; set; }
+    public int? Dexterity { get; set; }
+    public int? Constitution { get; set; }
+    public int? Intelligence { get; set; }
+    public int? Wisdom { get; set; }
+    public int? Charisma { get; set; }
+    public string? ChallengeRating { get; set; }
+    public int? ProficiencyBonus { get; set; }
+    public string? Description { get; set; }
+    public string? Traits { get; set; }
+    public string? Actions { get; set; }
+    public SourceType SourceType { get; set; } = SourceType.Official;
+    public int? OwnerAppUserId { get; set; }
+    public int? SourceMaterialId { get; set; }
+    public int? CampaignId { get; set; }
+    public int? SourcePage { get; set; }
+    public DateTime DateCreatedUtc { get; set; }
+    public DateTime DateModifiedUtc { get; set; }
+    public DateTime? DateDeletedUtc { get; set; }
+}
+
+public sealed record CreateCreatureRequest(int GameSystemId, string Name, string? Alias = null, string? CreatureType = null, string? Size = null, string? Alignment = null, int? ArmorClass = null, int? HitPoints = null, string? Speed = null, int? Strength = null, int? Dexterity = null, int? Constitution = null, int? Intelligence = null, int? Wisdom = null, int? Charisma = null, string? ChallengeRating = null, int? ProficiencyBonus = null, string? Description = null, string? Traits = null, string? Actions = null, SourceType SourceType = SourceType.Official, int? OwnerAppUserId = null, int? SourceMaterialId = null, int? CampaignId = null, int? SourcePage = null);
 
 public sealed class Campaign
 {

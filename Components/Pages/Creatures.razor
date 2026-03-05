@@ -1,0 +1,62 @@
+@page "/creatures"
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject NavigationManager Nav
+@using Microsoft.AspNetCore.Components.Authorization
+
+<PageTitle>Creatures</PageTitle>
+
+<MudStack Spacing="3">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+        <MudText Typo="Typo.h4">Bestiary</MudText>
+        <AuthorizeView Context="auth"><Authorized><MudButton Href="/creatures/new" StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled">Create Creature</MudButton></Authorized></AuthorizeView>
+    </MudStack>
+
+    <MudPaper Class="pa-4" Outlined="true">
+        <MudSelect T="int" Value="selectedSystemId" ValueChanged="OnSystemChanged" Label="Game System" Variant="Variant.Outlined">
+            @foreach (var s in systems) { <MudSelectItem Value="@s.GameSystemId">@s.Name</MudSelectItem> }
+        </MudSelect>
+    </MudPaper>
+
+    <MudTable Items="rows" Dense="true" Hover="true">
+        <HeaderContent>
+            <MudTh>Name</MudTh><MudTh>Type</MudTh><MudTh>CR</MudTh><MudTh>Source</MudTh>
+            <AuthorizeView Context="auth"><Authorized><MudTh></MudTh></Authorized></AuthorizeView>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>@context.Name</MudTd>
+            <MudTd>@context.CreatureType</MudTd>
+            <MudTd>@context.ChallengeRating</MudTd>
+            <MudTd>@context.SourceType</MudTd>
+            <AuthorizeView Context="auth"><Authorized><MudTd><MudIconButton Href="@($"/creatures/{context.CreatureId}/edit")" Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" /></MudTd></Authorized></AuthorizeView>
+        </RowTemplate>
+    </MudTable>
+</MudStack>
+
+@code {
+    private List<GameSystemDto> systems = new();
+    private List<CreatureRowDto> rows = new();
+    private int selectedSystemId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        systems = await Http.GetFromJsonAsync<List<GameSystemDto>>(Nav.ToAbsoluteUri("/api/game-systems")) ?? new();
+        selectedSystemId = systems.FirstOrDefault()?.GameSystemId ?? 0;
+        await Load();
+    }
+
+    private async Task OnSystemChanged(int id)
+    {
+        selectedSystemId = id;
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        if (selectedSystemId <= 0) { rows = new(); return; }
+        rows = await Http.GetFromJsonAsync<List<CreatureRowDto>>(Nav.ToAbsoluteUri($"/api/creatures?gameSystemId={selectedSystemId}")) ?? new();
+    }
+
+    private sealed record GameSystemDto(int GameSystemId, string Name);
+    private sealed record CreatureRowDto(int CreatureId, int GameSystemId, string Name, string Slug, string? Alias, string? CreatureType, string? ChallengeRating, SourceType SourceType, int? OwnerAppUserId, int? SourceMaterialId, int? CampaignId);
+}

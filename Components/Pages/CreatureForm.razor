@@ -1,0 +1,224 @@
+@page "/creatures/new"
+@page "/creatures/{CreatureId:int}/edit"
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>@(_isEdit ? "Edit Creature" : "Create Creature")</PageTitle>
+
+<MudStack Spacing="3" Style="max-width:1100px; margin: 0 auto;">
+    <MudText Typo="Typo.h4">@(_isEdit ? "Edit Creature" : "Create Creature")</MudText>
+
+    <MudPaper Class="pa-4" Outlined="true">
+        <MudGrid>
+            <MudItem xs="12" md="3"><MudSelect T="int" @bind-Value="model.GameSystemId" Label="Game System" Variant="Variant.Outlined">@foreach (var s in systems){<MudSelectItem Value="@s.GameSystemId">@s.Name</MudSelectItem>}</MudSelect></MudItem>
+            <MudItem xs="12" md="3"><MudTextField @bind-Value="model.Name" Label="Name" Variant="Variant.Outlined" Required="true" /></MudItem>
+            <MudItem xs="12" md="2"><MudTextField @bind-Value="model.Alias" Label="Alias" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" md="2"><MudTextField @bind-Value="model.CreatureType" Label="Type" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" md="2"><MudTextField @bind-Value="model.Size" Label="Size" Variant="Variant.Outlined" /></MudItem>
+
+            <MudItem xs="12" md="3"><MudTextField @bind-Value="model.Alignment" Label="Alignment" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="model.ArmorClass" Label="Armor Class" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="model.HitPoints" Label="Hit Points" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" md="2"><MudTextField @bind-Value="model.Speed" Label="Speed" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" md="3"><MudTextField @bind-Value="model.ChallengeRating" Label="Challenge Rating" Variant="Variant.Outlined" /></MudItem>
+
+            <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="model.Strength" Label="STR" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="model.Dexterity" Label="DEX" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="model.Constitution" Label="CON" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="model.Intelligence" Label="INT" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="model.Wisdom" Label="WIS" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="model.Charisma" Label="CHA" Variant="Variant.Outlined" /></MudItem>
+
+            <MudItem xs="12" md="3"><MudSelect T="SourceType" @bind-Value="model.SourceType" Label="Source Type" Variant="Variant.Outlined"><MudSelectItem Value="SourceType.Official">Official</MudSelectItem><MudSelectItem Value="SourceType.ThirdParty">Third Party</MudSelectItem><MudSelectItem Value="SourceType.Homebrew">Homebrew</MudSelectItem></MudSelect></MudItem>
+            @if (model.SourceType == SourceType.Official)
+            {
+                <MudItem xs="12" md="6"><MudSelect T="int?" @bind-Value="model.SourceMaterialId" Label="Official Source Material" Variant="Variant.Outlined"><MudSelectItem Value="@((int?)null)">(select source)</MudSelectItem>@foreach (var sm in sourceMaterials){<MudSelectItem Value="@((int?)sm.SourceMaterialId)">@($"{sm.Code} — {sm.Title}")</MudSelectItem>}</MudSelect></MudItem>
+                <MudItem xs="12" md="3"><MudNumericField T="int?" @bind-Value="model.SourcePage" Label="Source Page" Variant="Variant.Outlined" /></MudItem>
+            }
+            else
+            {
+                <MudItem xs="12" md="6"><MudSelect T="int?" @bind-Value="model.CampaignId" Label="Campaign Source" Variant="Variant.Outlined"><MudSelectItem Value="@((int?)null)">(none)</MudSelectItem>@foreach (var c in campaigns){<MudSelectItem Value="@((int?)c.CampaignId)">@c.Title</MudSelectItem>}</MudSelect></MudItem>
+                <MudItem xs="12" md="3"><MudSelect T="int?" @bind-Value="model.OwnerAppUserId" Label="Owner" Variant="Variant.Outlined"><MudSelectItem Value="@((int?)null)">(auto/current user)</MudSelectItem>@foreach (var o in owners){<MudSelectItem Value="@((int?)o.AppUserId)">@($"{o.Username} ({o.Email})")</MudSelectItem>}</MudSelect></MudItem>
+            }
+
+            <MudItem xs="12"><MudTextField @bind-Value="model.Description" Label="Description" Variant="Variant.Outlined" Lines="4" /></MudItem>
+            <MudItem xs="12"><MudTextField @bind-Value="model.Traits" Label="Traits (markdown/text)" Variant="Variant.Outlined" Lines="6" /></MudItem>
+            <MudItem xs="12"><MudTextField @bind-Value="model.Actions" Label="Actions (markdown/text)" Variant="Variant.Outlined" Lines="8" /></MudItem>
+
+            @if (!string.IsNullOrWhiteSpace(saveError))
+            {
+                <MudItem xs="12"><MudAlert Severity="Severity.Error">@saveError</MudAlert></MudItem>
+            }
+
+            <MudItem xs="12">
+                <MudStack Row="true" Spacing="2" Justify="Justify.FlexEnd">
+                    <MudButton Href="/creatures" Variant="Variant.Outlined">Cancel</MudButton>
+                    <MudButton OnClick="Save" Variant="Variant.Filled" Color="Color.Primary">Save Creature</MudButton>
+                </MudStack>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+</MudStack>
+
+@code {
+    [Parameter] public int? CreatureId { get; set; }
+    private bool _isEdit => CreatureId.HasValue;
+
+    private List<GameSystemDto> systems = new();
+    private List<SourceMaterialDto> sourceMaterials = new();
+    private List<CampaignLiteDto> campaigns = new();
+    private List<UserOwnerDto> owners = new();
+    private FormModel model = new();
+    private string? saveError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        systems = await Http.GetFromJsonAsync<List<GameSystemDto>>(Nav.ToAbsoluteUri("/api/game-systems")) ?? new();
+        model.GameSystemId = systems.FirstOrDefault()?.GameSystemId ?? 0;
+        await LoadLookups();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!_isEdit) return;
+        var dto = await Http.GetFromJsonAsync<CreatureDto>(Nav.ToAbsoluteUri($"/api/creatures/{CreatureId!.Value}"));
+        if (dto is null) { Nav.NavigateTo("/creatures"); return; }
+        model = new FormModel
+        {
+            GameSystemId = dto.GameSystemId,
+            Name = dto.Name,
+            Alias = dto.Alias,
+            CreatureType = dto.CreatureType,
+            Size = dto.Size,
+            Alignment = dto.Alignment,
+            ArmorClass = dto.ArmorClass,
+            HitPoints = dto.HitPoints,
+            Speed = dto.Speed,
+            Strength = dto.Strength,
+            Dexterity = dto.Dexterity,
+            Constitution = dto.Constitution,
+            Intelligence = dto.Intelligence,
+            Wisdom = dto.Wisdom,
+            Charisma = dto.Charisma,
+            ChallengeRating = dto.ChallengeRating,
+            ProficiencyBonus = dto.ProficiencyBonus,
+            Description = dto.Description,
+            Traits = dto.Traits,
+            Actions = dto.Actions,
+            SourceType = dto.SourceType,
+            OwnerAppUserId = dto.OwnerAppUserId,
+            SourceMaterialId = dto.SourceMaterialId,
+            CampaignId = dto.CampaignId,
+            SourcePage = dto.SourcePage
+        };
+        await LoadLookups();
+    }
+
+    private async Task LoadLookups()
+    {
+        sourceMaterials = await Http.GetFromJsonAsync<List<SourceMaterialDto>>(Nav.ToAbsoluteUri($"/api/source-materials?gameSystemId={model.GameSystemId}")) ?? new();
+        owners = await Http.GetFromJsonAsync<List<UserOwnerDto>>(Nav.ToAbsoluteUri("/api/users")) ?? new();
+        try { campaigns = await JS.InvokeAsync<List<CampaignLiteDto>>("ruleforgeAuth.campaignsAccessible") ?? new(); } catch { campaigns = new(); }
+    }
+
+    private async Task Save()
+    {
+        saveError = null;
+        if (string.IsNullOrWhiteSpace(model.Name) || model.GameSystemId <= 0) return;
+
+        NormalizeSourceByType();
+
+        var req = new
+        {
+            model.GameSystemId,
+            model.Name,
+            model.Alias,
+            model.CreatureType,
+            model.Size,
+            model.Alignment,
+            model.ArmorClass,
+            model.HitPoints,
+            model.Speed,
+            model.Strength,
+            model.Dexterity,
+            model.Constitution,
+            model.Intelligence,
+            model.Wisdom,
+            model.Charisma,
+            model.ChallengeRating,
+            model.ProficiencyBonus,
+            model.Description,
+            model.Traits,
+            model.Actions,
+            model.SourceType,
+            model.OwnerAppUserId,
+            model.SourceMaterialId,
+            model.CampaignId,
+            model.SourcePage
+        };
+
+        HttpResponseMessage res = _isEdit
+            ? await Http.PutAsJsonAsync(Nav.ToAbsoluteUri($"/api/creatures/{CreatureId!.Value}"), req)
+            : await Http.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/creatures"), req);
+
+        if (res.IsSuccessStatusCode)
+        {
+            Nav.NavigateTo("/creatures");
+            return;
+        }
+
+        saveError = await res.Content.ReadAsStringAsync();
+        if (string.IsNullOrWhiteSpace(saveError)) saveError = "Save failed.";
+    }
+
+    private void NormalizeSourceByType()
+    {
+        if (model.SourceType == SourceType.Official)
+        {
+            model.CampaignId = null;
+            model.OwnerAppUserId = null;
+        }
+        else
+        {
+            model.SourceMaterialId = null;
+            model.SourcePage = null;
+        }
+    }
+
+    private sealed class FormModel
+    {
+        public int GameSystemId { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? Alias { get; set; }
+        public string? CreatureType { get; set; }
+        public string? Size { get; set; }
+        public string? Alignment { get; set; }
+        public int? ArmorClass { get; set; }
+        public int? HitPoints { get; set; }
+        public string? Speed { get; set; }
+        public int? Strength { get; set; }
+        public int? Dexterity { get; set; }
+        public int? Constitution { get; set; }
+        public int? Intelligence { get; set; }
+        public int? Wisdom { get; set; }
+        public int? Charisma { get; set; }
+        public string? ChallengeRating { get; set; }
+        public int? ProficiencyBonus { get; set; }
+        public string? Description { get; set; }
+        public string? Traits { get; set; }
+        public string? Actions { get; set; }
+        public SourceType SourceType { get; set; } = SourceType.Official;
+        public int? OwnerAppUserId { get; set; }
+        public int? SourceMaterialId { get; set; }
+        public int? CampaignId { get; set; }
+        public int? SourcePage { get; set; }
+    }
+
+    private sealed record GameSystemDto(int GameSystemId, string Name);
+    private sealed record SourceMaterialDto(int SourceMaterialId, int GameSystemId, string Code, string Title, string? Publisher, bool IsOfficial);
+    private sealed record UserOwnerDto(int AppUserId, string Username, string Email);
+    private sealed record CampaignLiteDto(int CampaignId, string Title, string? Description);
+    private sealed record CreatureDto(int CreatureId, int GameSystemId, string Name, string Slug, string? Alias, string? CreatureType, string? Size, string? Alignment, int? ArmorClass, int? HitPoints, string? Speed, int? Strength, int? Dexterity, int? Constitution, int? Intelligence, int? Wisdom, int? Charisma, string? ChallengeRating, int? ProficiencyBonus, string? Description, string? Traits, string? Actions, SourceType SourceType, int? OwnerAppUserId, int? SourceMaterialId, int? CampaignId, int? SourcePage);
+}
