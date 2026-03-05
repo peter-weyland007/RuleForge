@@ -158,6 +158,7 @@ using (var scope = app.Services.CreateScope())
             Slug TEXT NOT NULL,
             Alias TEXT NULL,
             ItemTypeDefinitionId INTEGER NULL,
+            OwnerAppUserId INTEGER NULL,
             Description TEXT NULL,
             Rarity TEXT NULL,
             CostAmount REAL NULL,
@@ -860,6 +861,7 @@ api.MapGet("/items/{itemId:int}", async (int itemId, AppDbContext db) =>
         row.Slug,
         row.Alias,
         row.ItemTypeDefinitionId,
+        row.OwnerAppUserId,
         row.RarityDefinitionId,
         row.Description,
         row.CostAmount,
@@ -914,7 +916,7 @@ api.MapGet("/items", async (int gameSystemId, AppDbContext db) =>
     var tags = await db.TagDefinitions.Where(t => t.DateDeletedUtc == null && tagIds.Contains(t.TagDefinitionId)).ToListAsync();
 
     var outRows = items.Select(i => new {
-        i.ItemId,i.GameSystemId,i.Name,i.Slug,i.Alias,i.ItemTypeDefinitionId,i.RarityDefinitionId,i.Description,
+        i.ItemId,i.GameSystemId,i.Name,i.Slug,i.Alias,i.ItemTypeDefinitionId,i.OwnerAppUserId,i.RarityDefinitionId,i.Description,
         i.CostAmount,i.CurrencyDefinitionId,i.CostCurrency,i.Weight,i.Quantity,i.Tags,
         i.DamageDice,i.DamageType,i.VersatileDamageDice,i.ArmorClass,i.StrengthRequirement,i.StealthDisadvantage,i.RangeNormal,i.RangeLong,i.SourceMaterialId,i.SourceBook,i.SourcePage,
         i.IsConsumable,i.ChargesCurrent,i.ChargesMax,i.RechargeRule,i.UsesPerDay,
@@ -927,7 +929,7 @@ api.MapGet("/items", async (int gameSystemId, AppDbContext db) =>
     return Results.Ok(outRows);
 }).WithTags("Items");
 
-api.MapPost("/items", async (CreateItemRequest req, AppDbContext db) =>
+api.MapPost("/items", async (CreateItemRequest req, AppDbContext db, HttpContext http) =>
 {
     var gsExists = await db.GameSystems.AnyAsync(gs => gs.GameSystemId == req.GameSystemId && gs.DateDeletedUtc == null);
     if (!gsExists) return Results.BadRequest("GameSystemId is invalid.");
@@ -964,6 +966,14 @@ api.MapPost("/items", async (CreateItemRequest req, AppDbContext db) =>
     var typeValidationError = ValidateItemRequestByType(req, itemTypeName);
     if (typeValidationError is not null) return Results.BadRequest(typeValidationError);
 
+    int? ownerUserId = null;
+    if (req.SourceType != SourceType.Official)
+    {
+        var idRaw = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(idRaw, out var currentUserId)) return Results.Unauthorized();
+        ownerUserId = currentUserId;
+    }
+
     var now = DateTime.UtcNow;
     var slug = await GenerateUniqueItemSlugAsync(db, req.GameSystemId, Slugify(req.Name));
     var row = new Item
@@ -973,6 +983,7 @@ api.MapPost("/items", async (CreateItemRequest req, AppDbContext db) =>
         Slug = slug,
         Alias = string.IsNullOrWhiteSpace(req.Alias) ? string.Empty : req.Alias.Trim(),
         ItemTypeDefinitionId = req.ItemTypeDefinitionId,
+        OwnerAppUserId = ownerUserId,
         Description = req.Description,
         RarityDefinitionId = req.RarityDefinitionId,
         CostAmount = req.CostAmount,
@@ -1027,7 +1038,7 @@ api.MapPost("/items", async (CreateItemRequest req, AppDbContext db) =>
     return Results.Ok(row);
 }).WithTags("Items");
 
-api.MapPut("/items/{itemId:int}", async (int itemId, CreateItemRequest req, AppDbContext db) =>
+api.MapPut("/items/{itemId:int}", async (int itemId, CreateItemRequest req, AppDbContext db, HttpContext http) =>
 {
     var row = await db.Items.FirstOrDefaultAsync(x => x.ItemId == itemId && x.DateDeletedUtc == null);
     if (row is null) return Results.NotFound();
@@ -1067,6 +1078,18 @@ api.MapPut("/items/{itemId:int}", async (int itemId, CreateItemRequest req, AppD
     var typeValidationError = ValidateItemRequestByType(req, itemTypeName);
     if (typeValidationError is not null) return Results.BadRequest(typeValidationError);
 
+    int? ownerUserId = row.OwnerAppUserId;
+    if (req.SourceType == SourceType.Official)
+    {
+        ownerUserId = null;
+    }
+    else if (!ownerUserId.HasValue)
+    {
+        var idRaw = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(idRaw, out var currentUserId)) return Results.Unauthorized();
+        ownerUserId = currentUserId;
+    }
+
     var newName = ToTitleCase(req.Name);
     var nameChanged = !string.Equals(row.Name, newName, StringComparison.Ordinal);
 
@@ -1078,6 +1101,7 @@ api.MapPut("/items/{itemId:int}", async (int itemId, CreateItemRequest req, AppD
     }
     row.Alias = string.IsNullOrWhiteSpace(req.Alias) ? string.Empty : req.Alias.Trim();
     row.ItemTypeDefinitionId = req.ItemTypeDefinitionId;
+    row.OwnerAppUserId = ownerUserId;
     row.RarityDefinitionId = req.RarityDefinitionId;
     row.Description = req.Description;
     row.CostAmount = req.CostAmount;
@@ -2061,6 +2085,7 @@ static async Task SeedStarterDataAsync(AppDbContext db, string contentRootPath)
                 Slug = await GenerateUniqueItemSlugAsync(db, system.GameSystemId, desiredSlug),
                 Alias = i.Alias,
                 ItemTypeDefinitionId = itemTypeId,
+                OwnerAppUserId = null,
                 RarityDefinitionId = rarityId,
                 Description = i.Description,
                 CostAmount = i.CostAmount,
@@ -2108,6 +2133,7 @@ static async Task SeedStarterDataAsync(AppDbContext db, string contentRootPath)
             existingItem.Name = i.Name.Trim();
             existingItem.Alias = i.Alias;
             existingItem.ItemTypeDefinitionId = itemTypeId;
+            existingItem.OwnerAppUserId = null;
             existingItem.RarityDefinitionId = rarityId;
             existingItem.Description = i.Description;
             existingItem.CostAmount = i.CostAmount;
@@ -2482,6 +2508,7 @@ public sealed class Item
     public string Slug { get; set; } = string.Empty;
     public string? Alias { get; set; }
     public int? ItemTypeDefinitionId { get; set; }
+    public int? OwnerAppUserId { get; set; }
     public int? RarityDefinitionId { get; set; }
     public string? Description { get; set; }
     public string? Rarity { get; set; }
