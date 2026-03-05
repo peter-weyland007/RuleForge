@@ -1775,8 +1775,7 @@ static string? ValidateItemRequestByType(CreateItemRequest req, string? itemType
         if (string.IsNullOrWhiteSpace(req.ArmorCategory)) return "Armor/Shield items require ArmorCategory.";
     }
 
-    if (!isMagic && req.RequiresAttunement)
-        return "RequiresAttunement should only be used for magic-oriented items.";
+    // Attunement can apply to weapons/armor when magical; do not hard-block by type.
 
     return null;
 }
