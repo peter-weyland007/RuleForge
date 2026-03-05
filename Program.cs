@@ -441,19 +441,19 @@ var api = app.MapGroup("/api").WithTags("Core");
 api.MapGet("/health", () => Results.Ok(new { ok = true, service = "RuleForge", utc = DateTime.UtcNow }));
 
 
-api.MapPost("/auth/register", async (RegisterRequest req, AppDbContext db) =>
+api.MapPost("/auth/register", async (RegisterRequest req, AppDbContext db, HttpContext http) =>
 {
     if (string.IsNullOrWhiteSpace(req.Email) || string.IsNullOrWhiteSpace(req.Username) || string.IsNullOrWhiteSpace(req.Password))
-        return Results.BadRequest("Email, username, and password are required.");
+        return await LoggedBadRequestAsync(db, http, "Email, username, and password are required.");
 
     var email = req.Email.Trim().ToLowerInvariant();
     var username = req.Username.Trim().ToLowerInvariant();
-    if (req.Password.Length < 8) return Results.BadRequest("Password must be at least 8 characters.");
+    if (req.Password.Length < 8) return await LoggedBadRequestAsync(db, http, "Password must be at least 8 characters.");
 
     var exists = await db.AppUsers.AnyAsync(u => u.DateDeletedUtc == null && u.Email == email);
-    if (exists) return Results.BadRequest("Email is already registered.");
+    if (exists) return await LoggedBadRequestAsync(db, http, "Email is already registered.");
     var usernameExists = await db.AppUsers.AnyAsync(u => u.DateDeletedUtc == null && u.Username == username);
-    if (usernameExists) return Results.BadRequest("Username is already registered.");
+    if (usernameExists) return await LoggedBadRequestAsync(db, http, "Username is already registered.");
 
     var userCount = await db.AppUsers.CountAsync(u => u.DateDeletedUtc == null);
     var role = userCount == 0 ? "Admin" : "Users";
@@ -566,22 +566,22 @@ api.MapGet("/admin/users", async (AppDbContext db) =>
     .WithTags("Admin");
 
 
-api.MapPost("/admin/users", async (CreateUserAdminRequest req, AppDbContext db) =>
+api.MapPost("/admin/users", async (CreateUserAdminRequest req, AppDbContext db, HttpContext http) =>
 {
     if (string.IsNullOrWhiteSpace(req.Email) || string.IsNullOrWhiteSpace(req.Username) || string.IsNullOrWhiteSpace(req.Password))
-        return Results.BadRequest("Email, username, and password are required.");
+        return await LoggedBadRequestAsync(db, http, "Email, username, and password are required.");
 
     var email = req.Email.Trim().ToLowerInvariant();
     var username = req.Username.Trim().ToLowerInvariant();
-    if (req.Password.Length < 8) return Results.BadRequest("Password must be at least 8 characters.");
+    if (req.Password.Length < 8) return await LoggedBadRequestAsync(db, http, "Password must be at least 8 characters.");
 
     var role = (req.Role ?? "").Trim();
-    if (role != "Admin" && role != "Users") return Results.BadRequest("Role must be Admin or Users.");
+    if (role != "Admin" && role != "Users") return await LoggedBadRequestAsync(db, http, "Role must be Admin or Users.");
 
     var exists = await db.AppUsers.AnyAsync(u => u.DateDeletedUtc == null && u.Email == email);
-    if (exists) return Results.BadRequest("Email is already registered.");
+    if (exists) return await LoggedBadRequestAsync(db, http, "Email is already registered.");
     var usernameExists = await db.AppUsers.AnyAsync(u => u.DateDeletedUtc == null && u.Username == username);
-    if (usernameExists) return Results.BadRequest("Username is already registered.");
+    if (usernameExists) return await LoggedBadRequestAsync(db, http, "Username is already registered.");
 
     var (hash, salt) = HashPassword(req.Password);
     var now = DateTime.UtcNow;
@@ -610,18 +610,18 @@ api.MapGet("/admin/users/{appUserId:int}", async (int appUserId, AppDbContext db
     return u is null ? Results.NotFound() : Results.Ok(new { u.AppUserId, u.Email, u.Username, u.Role, u.IsActive, u.IsSystemAccount, u.MustChangePassword });
 }).WithTags("Admin");
 
-api.MapPut("/admin/users/{appUserId:int}", async (int appUserId, UpdateUserAdminRequest req, AppDbContext db) =>
+api.MapPut("/admin/users/{appUserId:int}", async (int appUserId, UpdateUserAdminRequest req, AppDbContext db, HttpContext http) =>
 {
     var u = await db.AppUsers.FirstOrDefaultAsync(x => x.AppUserId == appUserId && x.DateDeletedUtc == null);
     if (u is null) return Results.NotFound();
 
     var role = (req.Role ?? "").Trim();
-    if (role != "Admin" && role != "Users") return Results.BadRequest("Role must be Admin or Users.");
+    if (role != "Admin" && role != "Users") return await LoggedBadRequestAsync(db, http, "Role must be Admin or Users.");
 
     if (u.IsSystemAccount)
     {
-        if (role != "Admin") return Results.BadRequest("System account role cannot be changed.");
-        if (!req.IsActive) return Results.BadRequest("System account cannot be deactivated.");
+        if (role != "Admin") return await LoggedBadRequestAsync(db, http, "System account role cannot be changed.");
+        if (!req.IsActive) return await LoggedBadRequestAsync(db, http, "System account cannot be deactivated.");
     }
 
     u.Role = role;
@@ -691,11 +691,11 @@ api.MapGet("/campaigns/{campaignId:int}", async (int campaignId, AppDbContext db
 api.MapPost("/campaigns", async (UpsertCampaignRequest req, AppDbContext db, HttpContext http) =>
 {
     if (http.User?.Identity?.IsAuthenticated != true) return Results.Unauthorized();
-    if (string.IsNullOrWhiteSpace(req.Title)) return Results.BadRequest("Title is required.");
+    if (string.IsNullOrWhiteSpace(req.Title)) return await LoggedBadRequestAsync(db, http, "Title is required.");
     var title = ToTitleCase(req.Title.Trim());
 
     var dup = await db.Campaigns.AnyAsync(c => c.DateDeletedUtc == null && c.Title == title);
-    if (dup) return Results.BadRequest("Campaign title already exists.");
+    if (dup) return await LoggedBadRequestAsync(db, http, "Campaign title already exists.");
 
     int? ownerUserId = req.OwnerAppUserId;
     if (!ownerUserId.HasValue)
@@ -734,16 +734,16 @@ api.MapPut("/campaigns/{campaignId:int}", async (int campaignId, UpsertCampaignR
     if (http.User?.Identity?.IsAuthenticated != true) return Results.Unauthorized();
     var row = await db.Campaigns.FirstOrDefaultAsync(c => c.CampaignId == campaignId && c.DateDeletedUtc == null);
     if (row is null) return Results.NotFound();
-    if (string.IsNullOrWhiteSpace(req.Title)) return Results.BadRequest("Title is required.");
+    if (string.IsNullOrWhiteSpace(req.Title)) return await LoggedBadRequestAsync(db, http, "Title is required.");
 
     var title = ToTitleCase(req.Title.Trim());
     var dup = await db.Campaigns.AnyAsync(c => c.DateDeletedUtc == null && c.Title == title && c.CampaignId != campaignId);
-    if (dup) return Results.BadRequest("Campaign title already exists.");
+    if (dup) return await LoggedBadRequestAsync(db, http, "Campaign title already exists.");
 
     if (req.OwnerAppUserId.HasValue)
     {
         var ownerExists = await db.AppUsers.AnyAsync(u => u.AppUserId == req.OwnerAppUserId.Value && u.DateDeletedUtc == null && u.IsActive);
-        if (!ownerExists) return Results.BadRequest("OwnerAppUserId is invalid.");
+        if (!ownerExists) return await LoggedBadRequestAsync(db, http, "OwnerAppUserId is invalid.");
     }
 
     row.Title = title;
@@ -1220,19 +1220,19 @@ api.MapPost("/items", async (CreateItemRequest req, AppDbContext db, HttpContext
     if (req.RarityDefinitionId.HasValue)
     {
         var rarityExists = await db.RarityDefinitions.AnyAsync(r => r.RarityDefinitionId == req.RarityDefinitionId.Value && r.GameSystemId == req.GameSystemId && r.DateDeletedUtc == null);
-        if (!rarityExists) return Results.BadRequest("RarityDefinitionId is invalid for this system.");
+        if (!rarityExists) return await LoggedBadRequestAsync(db, http, "RarityDefinitionId is invalid for this system.");
     }
 
     if (req.CurrencyDefinitionId.HasValue)
     {
         var currencyExists = await db.CurrencyDefinitions.AnyAsync(c => c.CurrencyDefinitionId == req.CurrencyDefinitionId.Value && c.GameSystemId == req.GameSystemId && c.DateDeletedUtc == null);
-        if (!currencyExists) return Results.BadRequest("CurrencyDefinitionId is invalid for this system.");
+        if (!currencyExists) return await LoggedBadRequestAsync(db, http, "CurrencyDefinitionId is invalid for this system.");
     }
 
     if (req.SourceMaterialId.HasValue)
     {
         var sourceExists = await db.SourceMaterials.AnyAsync(sm => sm.SourceMaterialId == req.SourceMaterialId.Value && sm.GameSystemId == req.GameSystemId && sm.DateDeletedUtc == null);
-        if (!sourceExists) return Results.BadRequest("SourceMaterialId is invalid for this system.");
+        if (!sourceExists) return await LoggedBadRequestAsync(db, http, "SourceMaterialId is invalid for this system.");
     }
 
     if (req.CampaignId.HasValue)
@@ -1242,31 +1242,27 @@ api.MapPost("/items", async (CreateItemRequest req, AppDbContext db, HttpContext
 
         var campaignAllowed = await db.Campaigns.AnyAsync(c => c.CampaignId == req.CampaignId.Value && c.DateDeletedUtc == null &&
             (c.OwnerAppUserId == currentUserId || db.CampaignCollaborators.Any(cc => cc.CampaignId == c.CampaignId && cc.AppUserId == currentUserId && cc.DateDeletedUtc == null)));
-        if (!campaignAllowed)
-        {
-            var errorUid = await LogHandledErrorAsync(db, http, "CampaignId is invalid or inaccessible.");
-            return Results.BadRequest($"CampaignId is invalid or inaccessible. Error ID: {errorUid}");
-        }
+        if (!campaignAllowed) return await LoggedBadRequestAsync(db, http, "CampaignId is invalid or inaccessible.");
     }
 
     // Source exclusivity
     if (req.SourceType == SourceType.Official)
     {
         if (!req.SourceMaterialId.HasValue)
-            return Results.BadRequest("Official items require SourceMaterialId.");
+            return await LoggedBadRequestAsync(db, http, "Official items require SourceMaterialId.");
         if (req.CampaignId.HasValue)
-            return Results.BadRequest("Official items cannot use CampaignId.");
+            return await LoggedBadRequestAsync(db, http, "Official items cannot use CampaignId.");
     }
     else
     {
         if (req.SourceMaterialId.HasValue && req.CampaignId.HasValue)
-            return Results.BadRequest("Use either SourceMaterialId or CampaignId, not both.");
+            return await LoggedBadRequestAsync(db, http, "Use either SourceMaterialId or CampaignId, not both.");
     }
 
     var validationError = ValidateItemRequest(req);
-    if (validationError is not null) return Results.BadRequest(validationError);
+    if (validationError is not null) return await LoggedBadRequestAsync(db, http, validationError);
     var typeValidationError = ValidateItemRequestByType(req, itemTypeName);
-    if (typeValidationError is not null) return Results.BadRequest(typeValidationError);
+    if (typeValidationError is not null) return await LoggedBadRequestAsync(db, http, typeValidationError);
 
     int? ownerUserId = null;
     if (req.SourceType != SourceType.Official)
@@ -1274,7 +1270,7 @@ api.MapPost("/items", async (CreateItemRequest req, AppDbContext db, HttpContext
         if (req.OwnerAppUserId.HasValue)
         {
             var ownerExists = await db.AppUsers.AnyAsync(u => u.DateDeletedUtc == null && u.IsActive && u.AppUserId == req.OwnerAppUserId.Value);
-            if (!ownerExists) return Results.BadRequest("OwnerAppUserId is invalid.");
+            if (!ownerExists) return await LoggedBadRequestAsync(db, http, "OwnerAppUserId is invalid.");
             ownerUserId = req.OwnerAppUserId.Value;
         }
         else
@@ -1369,19 +1365,19 @@ api.MapPut("/items/{itemId:int}", async (int itemId, CreateItemRequest req, AppD
     if (req.RarityDefinitionId.HasValue)
     {
         var rarityExists = await db.RarityDefinitions.AnyAsync(r => r.RarityDefinitionId == req.RarityDefinitionId.Value && r.GameSystemId == req.GameSystemId && r.DateDeletedUtc == null);
-        if (!rarityExists) return Results.BadRequest("RarityDefinitionId is invalid for this system.");
+        if (!rarityExists) return await LoggedBadRequestAsync(db, http, "RarityDefinitionId is invalid for this system.");
     }
 
     if (req.CurrencyDefinitionId.HasValue)
     {
         var currencyExists = await db.CurrencyDefinitions.AnyAsync(c => c.CurrencyDefinitionId == req.CurrencyDefinitionId.Value && c.GameSystemId == req.GameSystemId && c.DateDeletedUtc == null);
-        if (!currencyExists) return Results.BadRequest("CurrencyDefinitionId is invalid for this system.");
+        if (!currencyExists) return await LoggedBadRequestAsync(db, http, "CurrencyDefinitionId is invalid for this system.");
     }
 
     if (req.SourceMaterialId.HasValue)
     {
         var sourceExists = await db.SourceMaterials.AnyAsync(sm => sm.SourceMaterialId == req.SourceMaterialId.Value && sm.GameSystemId == req.GameSystemId && sm.DateDeletedUtc == null);
-        if (!sourceExists) return Results.BadRequest("SourceMaterialId is invalid for this system.");
+        if (!sourceExists) return await LoggedBadRequestAsync(db, http, "SourceMaterialId is invalid for this system.");
     }
 
     if (req.CampaignId.HasValue)
@@ -1391,31 +1387,27 @@ api.MapPut("/items/{itemId:int}", async (int itemId, CreateItemRequest req, AppD
 
         var campaignAllowed = await db.Campaigns.AnyAsync(c => c.CampaignId == req.CampaignId.Value && c.DateDeletedUtc == null &&
             (c.OwnerAppUserId == currentUserId || db.CampaignCollaborators.Any(cc => cc.CampaignId == c.CampaignId && cc.AppUserId == currentUserId && cc.DateDeletedUtc == null)));
-        if (!campaignAllowed)
-        {
-            var errorUid = await LogHandledErrorAsync(db, http, "CampaignId is invalid or inaccessible.");
-            return Results.BadRequest($"CampaignId is invalid or inaccessible. Error ID: {errorUid}");
-        }
+        if (!campaignAllowed) return await LoggedBadRequestAsync(db, http, "CampaignId is invalid or inaccessible.");
     }
 
     // Source exclusivity
     if (req.SourceType == SourceType.Official)
     {
         if (!req.SourceMaterialId.HasValue)
-            return Results.BadRequest("Official items require SourceMaterialId.");
+            return await LoggedBadRequestAsync(db, http, "Official items require SourceMaterialId.");
         if (req.CampaignId.HasValue)
-            return Results.BadRequest("Official items cannot use CampaignId.");
+            return await LoggedBadRequestAsync(db, http, "Official items cannot use CampaignId.");
     }
     else
     {
         if (req.SourceMaterialId.HasValue && req.CampaignId.HasValue)
-            return Results.BadRequest("Use either SourceMaterialId or CampaignId, not both.");
+            return await LoggedBadRequestAsync(db, http, "Use either SourceMaterialId or CampaignId, not both.");
     }
 
     var validationError = ValidateItemRequest(req);
-    if (validationError is not null) return Results.BadRequest(validationError);
+    if (validationError is not null) return await LoggedBadRequestAsync(db, http, validationError);
     var typeValidationError = ValidateItemRequestByType(req, itemTypeName);
-    if (typeValidationError is not null) return Results.BadRequest(typeValidationError);
+    if (typeValidationError is not null) return await LoggedBadRequestAsync(db, http, typeValidationError);
 
     int? ownerUserId = row.OwnerAppUserId;
     if (req.SourceType == SourceType.Official)
@@ -1427,7 +1419,7 @@ api.MapPut("/items/{itemId:int}", async (int itemId, CreateItemRequest req, AppD
         if (req.OwnerAppUserId.HasValue)
         {
             var ownerExists = await db.AppUsers.AnyAsync(u => u.DateDeletedUtc == null && u.IsActive && u.AppUserId == req.OwnerAppUserId.Value);
-            if (!ownerExists) return Results.BadRequest("OwnerAppUserId is invalid.");
+            if (!ownerExists) return await LoggedBadRequestAsync(db, http, "OwnerAppUserId is invalid.");
             ownerUserId = req.OwnerAppUserId.Value;
         }
         else if (!ownerUserId.HasValue)
@@ -2708,6 +2700,13 @@ static async Task SyncCampaignMembershipsAsync(AppDbContext db, int campaignId, 
         db.CampaignPlayers.Add(new CampaignPlayer { CampaignId = campaignId, AppUserId = uid, DateCreatedUtc = now });
 }
 
+
+
+static async Task<IResult> LoggedBadRequestAsync(AppDbContext db, HttpContext http, string message)
+{
+    var errorUid = await LogHandledErrorAsync(db, http, message);
+    return Results.BadRequest($"{message} Error ID: {errorUid}");
+}
 
 static async Task<string> LogHandledErrorAsync(AppDbContext db, HttpContext http, string message)
 {
