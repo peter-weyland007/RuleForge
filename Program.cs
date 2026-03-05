@@ -979,20 +979,16 @@ api.MapPost("/items", async (CreateItemRequest req, AppDbContext db, HttpContext
     int? ownerUserId = null;
     if (req.SourceType != SourceType.Official)
     {
-        var idRaw = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!int.TryParse(idRaw, out var currentUserId)) return Results.Unauthorized();
-        var isAdmin = string.Equals(http.User.FindFirstValue(ClaimTypes.Role), "Admin", StringComparison.OrdinalIgnoreCase);
-
         if (req.OwnerAppUserId.HasValue)
         {
             var ownerExists = await db.AppUsers.AnyAsync(u => u.DateDeletedUtc == null && u.IsActive && u.AppUserId == req.OwnerAppUserId.Value);
             if (!ownerExists) return Results.BadRequest("OwnerAppUserId is invalid.");
-            if (!isAdmin && req.OwnerAppUserId.Value != currentUserId) return Results.Forbid();
             ownerUserId = req.OwnerAppUserId.Value;
         }
         else
         {
-            ownerUserId = currentUserId;
+            var idRaw = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (int.TryParse(idRaw, out var currentUserId)) ownerUserId = currentUserId;
         }
     }
 
@@ -1107,23 +1103,16 @@ api.MapPut("/items/{itemId:int}", async (int itemId, CreateItemRequest req, AppD
     }
     else
     {
-        var idRaw = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!int.TryParse(idRaw, out var currentUserId)) return Results.Unauthorized();
-        var isAdmin = string.Equals(http.User.FindFirstValue(ClaimTypes.Role), "Admin", StringComparison.OrdinalIgnoreCase);
-
         if (req.OwnerAppUserId.HasValue)
         {
             var ownerExists = await db.AppUsers.AnyAsync(u => u.DateDeletedUtc == null && u.IsActive && u.AppUserId == req.OwnerAppUserId.Value);
             if (!ownerExists) return Results.BadRequest("OwnerAppUserId is invalid.");
-
-            var callerIsCurrentOwner = row.OwnerAppUserId.HasValue && row.OwnerAppUserId.Value == currentUserId;
-            if (!isAdmin && !callerIsCurrentOwner) return Results.Forbid();
-
             ownerUserId = req.OwnerAppUserId.Value;
         }
         else if (!ownerUserId.HasValue)
         {
-            ownerUserId = currentUserId;
+            var idRaw = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (int.TryParse(idRaw, out var currentUserId)) ownerUserId = currentUserId;
         }
     }
 
