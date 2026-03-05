@@ -1,0 +1,41 @@
+@page "/register"
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject NavigationManager Nav
+
+<PageTitle>Register</PageTitle>
+
+<MudStack Spacing="3" Style="max-width:460px; margin: 1rem auto;">
+    <MudText Typo="Typo.h4">Register</MudText>
+    <MudPaper Class="pa-4" Outlined="true">
+        <MudStack Spacing="2">
+            <MudTextField @bind-Value="email" Label="Email" Variant="Variant.Outlined" Required="true" />
+            <MudTextField @bind-Value="password" Label="Password" InputType="InputType.Password" Variant="Variant.Outlined" Required="true" HelperText="Minimum 8 characters" />
+            @if (!string.IsNullOrWhiteSpace(error))
+            {
+                <MudAlert Severity="Severity.Error" Dense="true">@error</MudAlert>
+            }
+            <MudButton OnClick="DoRegister" Variant="Variant.Filled" Color="Color.Primary">Create Account</MudButton>
+            <MudText Typo="Typo.body2">Already have an account? <MudLink Href="/login">Login</MudLink></MudText>
+        </MudStack>
+    </MudPaper>
+</MudStack>
+
+@code {
+    private string email = string.Empty;
+    private string password = string.Empty;
+    private string? error;
+
+    private async Task DoRegister()
+    {
+        error = null;
+        var res = await Http.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/auth/register"), new { Email = email, Password = password });
+        if (res.IsSuccessStatusCode)
+        {
+            Nav.NavigateTo("/login");
+            return;
+        }
+
+        error = await res.Content.ReadAsStringAsync();
+    }
+}

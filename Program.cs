@@ -1,5 +1,9 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Security.Claims;
+using System.Security.Cryptography;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication;
 using MudBlazor.Services;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -14,6 +18,17 @@ builder.Services.AddMudServices();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddHttpClient();
+
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options =>
+    {
+        options.Cookie.Name = "ruleforge.auth";
+        options.LoginPath = "/login";
+        options.AccessDeniedPath = "/";
+        options.SlidingExpiration = true;
+    });
+builder.Services.AddAuthorization();
+
 
 var dataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ruleforge");
 Directory.CreateDirectory(dataDir);
@@ -31,6 +46,8 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseStaticFiles();
+app.UseAuthentication();
+app.UseAuthorization();
 app.UseAntiforgery();
 
 app.UseSwagger();
@@ -256,6 +273,22 @@ using (var scope = app.Services.CreateScope())
     try { await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS IX_TagDefinitions_System_Slug_Unique_Active ON TagDefinitions (GameSystemId, Slug) WHERE DateDeletedUtc IS NULL;"); } catch (SqliteException) { }
     try { await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS IX_ItemTags_Item_Tag_Unique_Active ON ItemTags (ItemId, TagDefinitionId) WHERE DateDeletedUtc IS NULL;"); } catch (SqliteException) { }
 
+
+    await db.Database.ExecuteSqlRawAsync("""
+        CREATE TABLE IF NOT EXISTS AppUsers (
+            AppUserId INTEGER PRIMARY KEY AUTOINCREMENT,
+            Email TEXT NOT NULL,
+            PasswordHash TEXT NOT NULL,
+            PasswordSalt TEXT NOT NULL,
+            Role TEXT NOT NULL,
+            IsActive INTEGER NOT NULL DEFAULT 1,
+            DateCreatedUtc TEXT NOT NULL,
+            DateModifiedUtc TEXT NOT NULL,
+            DateDeletedUtc TEXT NULL
+        );
+    """);
+    try { await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS IX_AppUsers_Email_Unique_Active ON AppUsers (Email) WHERE DateDeletedUtc IS NULL;"); } catch (SqliteException) { }
+
     await SeedStarterDataAsync(db, app.Environment.ContentRootPath);
 
 }
@@ -263,6 +296,82 @@ using (var scope = app.Services.CreateScope())
 var api = app.MapGroup("/api").WithTags("Core");
 
 api.MapGet("/health", () => Results.Ok(new { ok = true, service = "RuleForge", utc = DateTime.UtcNow }));
+
+
+api.MapPost("/auth/register", async (RegisterRequest req, AppDbContext db) =>
+{
+    if (string.IsNullOrWhiteSpace(req.Email) || string.IsNullOrWhiteSpace(req.Password))
+        return Results.BadRequest("Email and password are required.");
+
+    var email = req.Email.Trim().ToLowerInvariant();
+    if (req.Password.Length < 8) return Results.BadRequest("Password must be at least 8 characters.");
+
+    var exists = await db.AppUsers.AnyAsync(u => u.DateDeletedUtc == null && u.Email == email);
+    if (exists) return Results.BadRequest("Email is already registered.");
+
+    var userCount = await db.AppUsers.CountAsync(u => u.DateDeletedUtc == null);
+    var role = userCount == 0 ? "Admin" : "Viewer";
+
+    var now = DateTime.UtcNow;
+    var (hash, salt) = HashPassword(req.Password);
+    var user = new AppUser
+    {
+        Email = email,
+        PasswordHash = hash,
+        PasswordSalt = salt,
+        Role = role,
+        IsActive = true,
+        DateCreatedUtc = now,
+        DateModifiedUtc = now
+    };
+    db.AppUsers.Add(user);
+    await db.SaveChangesAsync();
+
+    return Results.Ok(new { user.AppUserId, user.Email, user.Role, user.IsActive });
+}).WithTags("Auth");
+
+api.MapPost("/auth/login", async (LoginRequest req, AppDbContext db, HttpContext http) =>
+{
+    if (string.IsNullOrWhiteSpace(req.Email) || string.IsNullOrWhiteSpace(req.Password))
+        return Results.BadRequest("Email and password are required.");
+
+    var email = req.Email.Trim().ToLowerInvariant();
+    var user = await db.AppUsers.FirstOrDefaultAsync(u => u.DateDeletedUtc == null && u.Email == email);
+    if (user is null || !user.IsActive) return Results.Unauthorized();
+
+    if (!VerifyPassword(req.Password, user.PasswordHash, user.PasswordSalt)) return Results.Unauthorized();
+
+    var claims = new List<Claim>
+    {
+        new(ClaimTypes.NameIdentifier, user.AppUserId.ToString()),
+        new(ClaimTypes.Email, user.Email),
+        new(ClaimTypes.Role, user.Role),
+        new(ClaimTypes.Name, user.Email)
+    };
+    var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+    var principal = new ClaimsPrincipal(identity);
+    await http.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);
+
+    return Results.Ok(new { user.AppUserId, user.Email, user.Role });
+}).WithTags("Auth");
+
+api.MapPost("/auth/logout", async (HttpContext http) =>
+{
+    await http.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+    return Results.Ok(new { ok = true });
+}).WithTags("Auth");
+
+api.MapGet("/auth/me", (HttpContext http) =>
+{
+    if (http.User?.Identity?.IsAuthenticated != true) return Results.Unauthorized();
+    return Results.Ok(new
+    {
+        id = http.User.FindFirstValue(ClaimTypes.NameIdentifier),
+        email = http.User.FindFirstValue(ClaimTypes.Email),
+        role = http.User.FindFirstValue(ClaimTypes.Role)
+    });
+}).WithTags("Auth");
+
 
 api.MapGet("/notes", async (AppDbContext db) =>
     await db.Notes.Where(n => n.DateDeletedUtc == null).OrderBy(n => n.NoteId).ToListAsync())
@@ -1969,6 +2078,29 @@ static string? ValidateItemRequestByType(CreateItemRequest req, string? itemType
     return null;
 }
 
+
+static (string hash, string salt) HashPassword(string password)
+{
+    var saltBytes = RandomNumberGenerator.GetBytes(16);
+    var hashBytes = Rfc2898DeriveBytes.Pbkdf2(password, saltBytes, 100_000, HashAlgorithmName.SHA256, 32);
+    return (Convert.ToBase64String(hashBytes), Convert.ToBase64String(saltBytes));
+}
+
+static bool VerifyPassword(string password, string hashBase64, string saltBase64)
+{
+    try
+    {
+        var saltBytes = Convert.FromBase64String(saltBase64);
+        var expected = Convert.FromBase64String(hashBase64);
+        var actual = Rfc2898DeriveBytes.Pbkdf2(password, saltBytes, 100_000, HashAlgorithmName.SHA256, expected.Length);
+        return CryptographicOperations.FixedTimeEquals(actual, expected);
+    }
+    catch
+    {
+        return false;
+    }
+}
+
 public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
     public DbSet<Note> Notes => Set<Note>();
@@ -1980,6 +2112,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<SourceMaterial> SourceMaterials => Set<SourceMaterial>();
     public DbSet<TagDefinition> TagDefinitions => Set<TagDefinition>();
     public DbSet<ItemTag> ItemTags => Set<ItemTag>();
+    public DbSet<AppUser> AppUsers => Set<AppUser>();
 }
 
 public sealed class Note
@@ -2215,6 +2348,23 @@ public sealed record UpsertSourceMaterialRequest(int GameSystemId, string Code, 
 public sealed record MergeGameSystemsRequest(int FromGameSystemId, int ToGameSystemId);
 public sealed record ReassignOrphansRequest(int FromGameSystemId, int ToGameSystemId);
 public sealed record ReassignOneOrphanRequest(string Kind, int Id, int ToGameSystemId);
+
+
+public sealed class AppUser
+{
+    public int AppUserId { get; set; }
+    public string Email { get; set; } = string.Empty;
+    public string PasswordHash { get; set; } = string.Empty;
+    public string PasswordSalt { get; set; } = string.Empty;
+    public string Role { get; set; } = "Viewer";
+    public bool IsActive { get; set; } = true;
+    public DateTime DateCreatedUtc { get; set; }
+    public DateTime DateModifiedUtc { get; set; }
+    public DateTime? DateDeletedUtc { get; set; }
+}
+
+public sealed record RegisterRequest(string Email, string Password);
+public sealed record LoginRequest(string Email, string Password);
 
 public sealed class SourceMaterial
 {

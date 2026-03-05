@@ -1,0 +1,41 @@
+@page "/login"
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject NavigationManager Nav
+
+<PageTitle>Login</PageTitle>
+
+<MudStack Spacing="3" Style="max-width:460px; margin: 1rem auto;">
+    <MudText Typo="Typo.h4">Login</MudText>
+    <MudPaper Class="pa-4" Outlined="true">
+        <MudStack Spacing="2">
+            <MudTextField @bind-Value="email" Label="Email" Variant="Variant.Outlined" Required="true" />
+            <MudTextField @bind-Value="password" Label="Password" InputType="InputType.Password" Variant="Variant.Outlined" Required="true" />
+            @if (!string.IsNullOrWhiteSpace(error))
+            {
+                <MudAlert Severity="Severity.Error" Dense="true">@error</MudAlert>
+            }
+            <MudButton OnClick="DoLogin" Variant="Variant.Filled" Color="Color.Primary">Login</MudButton>
+            <MudText Typo="Typo.body2">Need an account? <MudLink Href="/register">Register</MudLink></MudText>
+        </MudStack>
+    </MudPaper>
+</MudStack>
+
+@code {
+    private string email = string.Empty;
+    private string password = string.Empty;
+    private string? error;
+
+    private async Task DoLogin()
+    {
+        error = null;
+        var res = await Http.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/auth/login"), new { Email = email, Password = password });
+        if (res.IsSuccessStatusCode)
+        {
+            Nav.NavigateTo("/");
+            return;
+        }
+
+        error = await res.Content.ReadAsStringAsync();
+    }
+}
