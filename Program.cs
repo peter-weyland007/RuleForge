@@ -422,6 +422,41 @@ api.MapGet("/admin/users", async (AppDbContext db) =>
         .ToListAsync())
     .WithTags("Admin");
 
+
+api.MapPost("/admin/users", async (CreateUserAdminRequest req, AppDbContext db) =>
+{
+    if (string.IsNullOrWhiteSpace(req.Email) || string.IsNullOrWhiteSpace(req.Password))
+        return Results.BadRequest("Email and password are required.");
+
+    var email = req.Email.Trim().ToLowerInvariant();
+    if (req.Password.Length < 8) return Results.BadRequest("Password must be at least 8 characters.");
+
+    var role = (req.Role ?? "").Trim();
+    if (role != "Admin" && role != "Users") return Results.BadRequest("Role must be Admin or Users.");
+
+    var exists = await db.AppUsers.AnyAsync(u => u.DateDeletedUtc == null && u.Email == email);
+    if (exists) return Results.BadRequest("Email is already registered.");
+
+    var (hash, salt) = HashPassword(req.Password);
+    var now = DateTime.UtcNow;
+    var user = new AppUser
+    {
+        Email = email,
+        PasswordHash = hash,
+        PasswordSalt = salt,
+        Role = role,
+        IsActive = req.IsActive,
+        IsSystemAccount = false,
+        MustChangePassword = req.MustChangePassword,
+        DateCreatedUtc = now,
+        DateModifiedUtc = now
+    };
+    db.AppUsers.Add(user);
+    await db.SaveChangesAsync();
+
+    return Results.Ok(new { user.AppUserId, user.Email, user.Role, user.IsActive, user.IsSystemAccount, user.MustChangePassword });
+}).WithTags("Admin");
+
 api.MapGet("/admin/users/{appUserId:int}", async (int appUserId, AppDbContext db) =>
 {
     var u = await db.AppUsers.FirstOrDefaultAsync(x => x.AppUserId == appUserId && x.DateDeletedUtc == null);
@@ -2484,6 +2519,7 @@ public sealed record RegisterRequest(string Email, string Password);
 public sealed record LoginRequest(string Email, string Password);
 public sealed record ChangePasswordRequest(string CurrentPassword, string NewPassword);
 public sealed record UpdateUserAdminRequest(string Role, bool IsActive);
+public sealed record CreateUserAdminRequest(string Email, string Password, string Role, bool IsActive = true, bool MustChangePassword = true);
 
 public sealed class SourceMaterial
 {
