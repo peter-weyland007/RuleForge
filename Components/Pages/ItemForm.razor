@@ -3,6 +3,7 @@
 @using System.Net.Http.Json
 @inject HttpClient Http
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>Item Form</PageTitle>
 
@@ -79,9 +80,16 @@
             <MudItem xs="12" md="2"><MudNumericField T="int" @bind-Value="model.Quantity" Label="Qty" Variant="Variant.Outlined" Min="1" /></MudItem>
             <MudItem xs="12" md="2"><MudSelect T="SourceType" @bind-Value="model.SourceType" Label="Source Type" Variant="Variant.Outlined"><MudSelectItem Value="SourceType.Official">Official</MudSelectItem><MudSelectItem Value="SourceType.ThirdParty">Third Party</MudSelectItem><MudSelectItem Value="SourceType.Homebrew">Homebrew</MudSelectItem></MudSelect></MudItem>
 
-            <MudItem xs="12" md="4"><MudSelect T="int?" @bind-Value="model.SourceMaterialId" Label="Source Material" Variant="Variant.Outlined"><MudSelectItem Value="@((int?)null)">(none)</MudSelectItem>@foreach (var sm in sourceMaterials){ <MudSelectItem Value="@((int?)sm.SourceMaterialId)">@($"{sm.Code} — {sm.Title}")</MudSelectItem> }</MudSelect></MudItem>
+            @if (model.SourceType == SourceType.Official)
+            {
+                <MudItem xs="12" md="8"><MudSelect T="int?" @bind-Value="model.SourceMaterialId" Label="Official Source Material" Variant="Variant.Outlined"><MudSelectItem Value="@((int?)null)">(select source)</MudSelectItem>@foreach (var sm in sourceMaterials){ <MudSelectItem Value="@((int?)sm.SourceMaterialId)">@($"{sm.Code} — {sm.Title}")</MudSelectItem> }</MudSelect></MudItem>
+            }
+            else
+            {
+                <MudItem xs="12" md="8"><MudSelect T="int?" @bind-Value="model.CampaignId" Label="Campaign Source" Variant="Variant.Outlined"><MudSelectItem Value="@((int?)null)">(none)</MudSelectItem>@foreach (var c in campaigns){ <MudSelectItem Value="@((int?)c.CampaignId)">@c.Title</MudSelectItem> }</MudSelect></MudItem>
+            }
             <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="model.SourcePage" Label="Source Page" Variant="Variant.Outlined" Min="1" /></MudItem>
-            <MudItem xs="12" md="3"><MudTextField @bind-Value="model.SourceBook" Label="Legacy Source Text" Variant="Variant.Outlined" Placeholder="optional" /></MudItem>
+            <MudItem xs="12" md="2"><MudTextField @bind-Value="model.SourceBook" Label="Legacy Source Text" Variant="Variant.Outlined" Placeholder="optional" /></MudItem>
 
             @if (model.SourceType != SourceType.Official)
             {
@@ -244,6 +252,7 @@
     private List<CurrencyDto> currencies = new();
     private List<SourceMaterialDto> sourceMaterials = new();
     private List<UserOwnerDto> owners = new();
+    private List<CampaignLiteDto> campaigns = new();
     private List<TagDto> tags = new();
     private FormModel model = new();
 
@@ -289,6 +298,7 @@
             RangeNormal = dto.RangeNormal,
             RangeLong = dto.RangeLong,
             SourceMaterialId = dto.SourceMaterialId,
+            CampaignId = dto.CampaignId,
             OwnerAppUserId = dto.OwnerAppUserId,
             SourceBook = dto.SourceBook,
             SourcePage = dto.SourcePage,
@@ -332,6 +342,7 @@
         currencies = await Http.GetFromJsonAsync<List<CurrencyDto>>(Nav.ToAbsoluteUri($"/api/currencies?gameSystemId={model.GameSystemId}")) ?? new();
         sourceMaterials = await Http.GetFromJsonAsync<List<SourceMaterialDto>>(Nav.ToAbsoluteUri($"/api/source-materials?gameSystemId={model.GameSystemId}")) ?? new();
         owners = await Http.GetFromJsonAsync<List<UserOwnerDto>>(Nav.ToAbsoluteUri("/api/users")) ?? new();
+        try { campaigns = await JS.InvokeAsync<List<CampaignLiteDto>>("ruleforgeAuth.campaignsList") ?? new(); } catch { campaigns = new(); }
         tags = await Http.GetFromJsonAsync<List<TagDto>>(Nav.ToAbsoluteUri($"/api/tags?gameSystemId={model.GameSystemId}")) ?? new();
     }
 
@@ -414,12 +425,25 @@
         }
     }
 
+    private void NormalizeSourceByType()
+    {
+        if (model.SourceType == SourceType.Official)
+        {
+            model.CampaignId = null;
+        }
+        else
+        {
+            model.SourceMaterialId = null;
+        }
+    }
+
     private async Task Save()
     {
         if (string.IsNullOrWhiteSpace(model.Name) || model.GameSystemId <= 0) return;
 
         model.TagDefinitionIds = selectedTagIds.ToList();
         NormalizeByType();
+        NormalizeSourceByType();
 
         var req = new CreateItemRequest(
             model.GameSystemId,
@@ -445,6 +469,7 @@
             model.RangeNormal,
             model.RangeLong,
             model.SourceMaterialId,
+            model.CampaignId,
             model.SourceBook,
             model.SourcePage,
             model.IsConsumable,
@@ -500,6 +525,7 @@
         public int? RangeNormal { get; set; }
         public int? RangeLong { get; set; }
         public int? SourceMaterialId { get; set; }
+        public int? CampaignId { get; set; }
         public string? SourceBook { get; set; }
         public int? SourcePage { get; set; }
         public bool IsConsumable { get; set; }
@@ -528,6 +554,7 @@
     private sealed record CurrencyDto(int CurrencyDefinitionId, int GameSystemId, string Name, string Code);
     private sealed record SourceMaterialDto(int SourceMaterialId, int GameSystemId, string Code, string Title, string? Publisher, bool IsOfficial);
     private sealed record UserOwnerDto(int AppUserId, string Username, string Email);
+    private sealed record CampaignLiteDto(int CampaignId, string Title, string? Description);
     private sealed record TagDto(int TagDefinitionId, int GameSystemId, string Name, string Slug);
-    private sealed record ItemDto(int ItemId, int GameSystemId, string Name, string Slug, string? Alias, int? ItemTypeDefinitionId, int? OwnerAppUserId, int? RarityDefinitionId, string? Description, decimal? CostAmount, int? CurrencyDefinitionId, string? CostCurrency, decimal? Weight, int Quantity, string? Tags, string? Effect, bool RequiresAttunement, string? AttunementRequirement, string? DamageDice, string? DamageType, string? VersatileDamageDice, int? ArmorClass, int? StrengthRequirement, bool StealthDisadvantage, int? RangeNormal, int? RangeLong, int? SourceMaterialId, string? SourceBook, int? SourcePage, bool IsConsumable, int? ChargesCurrent, int? ChargesMax, string? RechargeRule, int? UsesPerDay, string? ArmorCategory, bool WeaponPropertyLight, bool WeaponPropertyHeavy, bool WeaponPropertyFinesse, bool WeaponPropertyThrown, bool WeaponPropertyTwoHanded, bool WeaponPropertyLoading, bool WeaponPropertyReach, bool WeaponPropertyAmmunition, List<int>? TagDefinitionIds, List<string>? TagNames, SourceType SourceType);
+    private sealed record ItemDto(int ItemId, int GameSystemId, string Name, string Slug, string? Alias, int? ItemTypeDefinitionId, int? OwnerAppUserId, int? RarityDefinitionId, string? Description, decimal? CostAmount, int? CurrencyDefinitionId, string? CostCurrency, decimal? Weight, int Quantity, string? Tags, string? Effect, bool RequiresAttunement, string? AttunementRequirement, string? DamageDice, string? DamageType, string? VersatileDamageDice, int? ArmorClass, int? StrengthRequirement, bool StealthDisadvantage, int? RangeNormal, int? RangeLong, int? SourceMaterialId, int? CampaignId, string? SourceBook, int? SourcePage, bool IsConsumable, int? ChargesCurrent, int? ChargesMax, string? RechargeRule, int? UsesPerDay, string? ArmorCategory, bool WeaponPropertyLight, bool WeaponPropertyHeavy, bool WeaponPropertyFinesse, bool WeaponPropertyThrown, bool WeaponPropertyTwoHanded, bool WeaponPropertyLoading, bool WeaponPropertyReach, bool WeaponPropertyAmmunition, List<int>? TagDefinitionIds, List<string>? TagNames, SourceType SourceType);
 }

@@ -216,6 +216,7 @@ using (var scope = app.Services.CreateScope())
             RangeNormal INTEGER NULL,
             RangeLong INTEGER NULL,
             SourceMaterialId INTEGER NULL,
+            CampaignId INTEGER NULL,
             SourceBook TEXT NULL,
             SourcePage INTEGER NULL,
             IsConsumable INTEGER NOT NULL DEFAULT 0,
@@ -324,6 +325,7 @@ using (var scope = app.Services.CreateScope())
     """);
     try { await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS IX_SourceMaterials_System_Code_Unique_Active ON SourceMaterials (GameSystemId, Code) WHERE DateDeletedUtc IS NULL;"); } catch (SqliteException) { }
     try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Items ADD COLUMN SourceMaterialId INTEGER NULL;"); } catch (SqliteException) { }
+    try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Items ADD COLUMN CampaignId INTEGER NULL;"); } catch (SqliteException) { }
 
     await db.Database.ExecuteSqlRawAsync("""
         CREATE TABLE IF NOT EXISTS TagDefinitions (
@@ -577,6 +579,23 @@ api.MapPut("/admin/users/{appUserId:int}", async (int appUserId, UpdateUserAdmin
     return Results.Ok(new { u.AppUserId, u.Email, u.Role, u.IsActive, u.IsSystemAccount });
 }).WithTags("Admin");
 
+
+api.MapGet("/campaigns/accessible", async (AppDbContext db, HttpContext http) =>
+{
+    if (http.User?.Identity?.IsAuthenticated != true) return Results.Unauthorized();
+    var idRaw = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+    if (!int.TryParse(idRaw, out var userId)) return Results.Unauthorized();
+
+    var rows = await db.Campaigns
+        .Where(c => c.DateDeletedUtc == null &&
+               (c.OwnerAppUserId == userId ||
+                db.CampaignCollaborators.Any(cc => cc.CampaignId == c.CampaignId && cc.AppUserId == userId && cc.DateDeletedUtc == null)))
+        .OrderBy(c => c.Title)
+        .Select(c => new { c.CampaignId, c.Title, c.Description })
+        .ToListAsync();
+
+    return Results.Ok(rows);
+}).WithTags("Campaigns");
 
 api.MapGet("/campaigns", async (AppDbContext db) =>
     await db.Campaigns
@@ -1061,6 +1080,7 @@ api.MapGet("/items/{itemId:int}", async (int itemId, AppDbContext db) =>
         row.RangeNormal,
         row.RangeLong,
         row.SourceMaterialId,
+        row.CampaignId,
         row.SourceBook,
         row.SourcePage,
         row.IsConsumable,
@@ -1097,7 +1117,7 @@ api.MapGet("/items", async (int gameSystemId, AppDbContext db) =>
     var outRows = items.Select(i => new {
         i.ItemId,i.GameSystemId,i.Name,i.Slug,i.Alias,i.ItemTypeDefinitionId,i.OwnerAppUserId,i.RarityDefinitionId,i.Description,
         i.CostAmount,i.CurrencyDefinitionId,i.CostCurrency,i.Weight,i.Quantity,i.Tags,
-        i.DamageDice,i.DamageType,i.VersatileDamageDice,i.ArmorClass,i.StrengthRequirement,i.StealthDisadvantage,i.RangeNormal,i.RangeLong,i.SourceMaterialId,i.SourceBook,i.SourcePage,
+        i.DamageDice,i.DamageType,i.VersatileDamageDice,i.ArmorClass,i.StrengthRequirement,i.StealthDisadvantage,i.RangeNormal,i.RangeLong,i.SourceMaterialId,i.CampaignId,i.SourceBook,i.SourcePage,
         i.IsConsumable,i.ChargesCurrent,i.ChargesMax,i.RechargeRule,i.UsesPerDay,
         i.ArmorCategory,i.WeaponPropertyLight,i.WeaponPropertyHeavy,i.WeaponPropertyFinesse,i.WeaponPropertyThrown,i.WeaponPropertyTwoHanded,i.WeaponPropertyLoading,i.WeaponPropertyReach,i.WeaponPropertyAmmunition,
         i.SourceType,i.DateCreatedUtc,i.DateModifiedUtc,i.DateDeletedUtc,
@@ -1138,6 +1158,30 @@ api.MapPost("/items", async (CreateItemRequest req, AppDbContext db, HttpContext
     {
         var sourceExists = await db.SourceMaterials.AnyAsync(sm => sm.SourceMaterialId == req.SourceMaterialId.Value && sm.GameSystemId == req.GameSystemId && sm.DateDeletedUtc == null);
         if (!sourceExists) return Results.BadRequest("SourceMaterialId is invalid for this system.");
+    }
+
+    if (req.CampaignId.HasValue)
+    {
+        var idRaw = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(idRaw, out var currentUserId)) return Results.Unauthorized();
+
+        var campaignAllowed = await db.Campaigns.AnyAsync(c => c.CampaignId == req.CampaignId.Value && c.DateDeletedUtc == null &&
+            (c.OwnerAppUserId == currentUserId || db.CampaignCollaborators.Any(cc => cc.CampaignId == c.CampaignId && cc.AppUserId == currentUserId && cc.DateDeletedUtc == null)));
+        if (!campaignAllowed) return Results.BadRequest("CampaignId is invalid or inaccessible.");
+    }
+
+    // Source exclusivity
+    if (req.SourceType == SourceType.Official)
+    {
+        if (!req.SourceMaterialId.HasValue)
+            return Results.BadRequest("Official items require SourceMaterialId.");
+        if (req.CampaignId.HasValue)
+            return Results.BadRequest("Official items cannot use CampaignId.");
+    }
+    else
+    {
+        if (req.SourceMaterialId.HasValue && req.CampaignId.HasValue)
+            return Results.BadRequest("Use either SourceMaterialId or CampaignId, not both.");
     }
 
     var validationError = ValidateItemRequest(req);
@@ -1191,6 +1235,7 @@ api.MapPost("/items", async (CreateItemRequest req, AppDbContext db, HttpContext
         RangeNormal = req.RangeNormal,
         RangeLong = req.RangeLong,
         SourceMaterialId = req.SourceMaterialId,
+        CampaignId = req.SourceType == SourceType.Official ? null : req.CampaignId,
         SourceBook = string.IsNullOrWhiteSpace(req.SourceBook) ? null : req.SourceBook.Trim(),
         SourcePage = req.SourcePage,
         IsConsumable = req.IsConsumable,
@@ -1260,6 +1305,30 @@ api.MapPut("/items/{itemId:int}", async (int itemId, CreateItemRequest req, AppD
         if (!sourceExists) return Results.BadRequest("SourceMaterialId is invalid for this system.");
     }
 
+    if (req.CampaignId.HasValue)
+    {
+        var idRaw = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(idRaw, out var currentUserId)) return Results.Unauthorized();
+
+        var campaignAllowed = await db.Campaigns.AnyAsync(c => c.CampaignId == req.CampaignId.Value && c.DateDeletedUtc == null &&
+            (c.OwnerAppUserId == currentUserId || db.CampaignCollaborators.Any(cc => cc.CampaignId == c.CampaignId && cc.AppUserId == currentUserId && cc.DateDeletedUtc == null)));
+        if (!campaignAllowed) return Results.BadRequest("CampaignId is invalid or inaccessible.");
+    }
+
+    // Source exclusivity
+    if (req.SourceType == SourceType.Official)
+    {
+        if (!req.SourceMaterialId.HasValue)
+            return Results.BadRequest("Official items require SourceMaterialId.");
+        if (req.CampaignId.HasValue)
+            return Results.BadRequest("Official items cannot use CampaignId.");
+    }
+    else
+    {
+        if (req.SourceMaterialId.HasValue && req.CampaignId.HasValue)
+            return Results.BadRequest("Use either SourceMaterialId or CampaignId, not both.");
+    }
+
     var validationError = ValidateItemRequest(req);
     if (validationError is not null) return Results.BadRequest(validationError);
     var typeValidationError = ValidateItemRequestByType(req, itemTypeName);
@@ -1317,6 +1386,7 @@ api.MapPut("/items/{itemId:int}", async (int itemId, CreateItemRequest req, AppD
     row.RangeNormal = req.RangeNormal;
     row.RangeLong = req.RangeLong;
     row.SourceMaterialId = req.SourceMaterialId;
+    row.CampaignId = req.SourceType == SourceType.Official ? null : req.CampaignId;
     row.SourceBook = string.IsNullOrWhiteSpace(req.SourceBook) ? null : req.SourceBook.Trim();
     row.SourcePage = req.SourcePage;
     row.IsConsumable = req.IsConsumable;
@@ -2757,6 +2827,7 @@ public sealed class Item
     public int? RangeNormal { get; set; }
     public int? RangeLong { get; set; }
     public int? SourceMaterialId { get; set; }
+    public int? CampaignId { get; set; }
     public string? SourceBook { get; set; }
     public int? SourcePage { get; set; }
     public bool IsConsumable { get; set; }
@@ -2782,7 +2853,7 @@ public sealed class Item
 public sealed record CreateItemTypeRequest(int GameSystemId, string Name, string? Description);
 
 
-public sealed record CreateItemRequest(int GameSystemId, string Name, int? ItemTypeDefinitionId, int? RarityDefinitionId, string? Description, decimal? CostAmount = null, int? CurrencyDefinitionId = null, string? CostCurrency = null, decimal? Weight = null, int Quantity = 1, string? Tags = null, string? Effect = null, bool RequiresAttunement = false, string? AttunementRequirement = null, string? DamageDice = null, string? DamageType = null, string? VersatileDamageDice = null, int? ArmorClass = null, int? StrengthRequirement = null, bool StealthDisadvantage = false, int? RangeNormal = null, int? RangeLong = null, int? SourceMaterialId = null, string? SourceBook = null, int? SourcePage = null, bool IsConsumable = false, int? ChargesCurrent = null, int? ChargesMax = null, string? RechargeRule = null, int? UsesPerDay = null, string? ArmorCategory = null, bool WeaponPropertyLight = false, bool WeaponPropertyHeavy = false, bool WeaponPropertyFinesse = false, bool WeaponPropertyThrown = false, bool WeaponPropertyTwoHanded = false, bool WeaponPropertyLoading = false, bool WeaponPropertyReach = false, bool WeaponPropertyAmmunition = false, int? OwnerAppUserId = null, List<int>? TagDefinitionIds = null, SourceType SourceType = SourceType.Official, string? Alias = null);
+public sealed record CreateItemRequest(int GameSystemId, string Name, int? ItemTypeDefinitionId, int? RarityDefinitionId, string? Description, decimal? CostAmount = null, int? CurrencyDefinitionId = null, string? CostCurrency = null, decimal? Weight = null, int Quantity = 1, string? Tags = null, string? Effect = null, bool RequiresAttunement = false, string? AttunementRequirement = null, string? DamageDice = null, string? DamageType = null, string? VersatileDamageDice = null, int? ArmorClass = null, int? StrengthRequirement = null, bool StealthDisadvantage = false, int? RangeNormal = null, int? RangeLong = null, int? SourceMaterialId = null, int? CampaignId = null, string? SourceBook = null, int? SourcePage = null, bool IsConsumable = false, int? ChargesCurrent = null, int? ChargesMax = null, string? RechargeRule = null, int? UsesPerDay = null, string? ArmorCategory = null, bool WeaponPropertyLight = false, bool WeaponPropertyHeavy = false, bool WeaponPropertyFinesse = false, bool WeaponPropertyThrown = false, bool WeaponPropertyTwoHanded = false, bool WeaponPropertyLoading = false, bool WeaponPropertyReach = false, bool WeaponPropertyAmmunition = false, int? OwnerAppUserId = null, List<int>? TagDefinitionIds = null, SourceType SourceType = SourceType.Official, string? Alias = null);
 
 public sealed record UpsertItemTypeRequest(int GameSystemId, string Name, string? Description);
 
