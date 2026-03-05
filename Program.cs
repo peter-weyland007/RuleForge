@@ -151,6 +151,29 @@ using (var scope = app.Services.CreateScope())
     try { await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS IX_Campaigns_Title_Unique_Active ON Campaigns (Title) WHERE DateDeletedUtc IS NULL;"); } catch (SqliteException) { }
 
     await db.Database.ExecuteSqlRawAsync("""
+        CREATE TABLE IF NOT EXISTS CampaignCollaborators (
+            CampaignCollaboratorId INTEGER PRIMARY KEY AUTOINCREMENT,
+            CampaignId INTEGER NOT NULL,
+            AppUserId INTEGER NOT NULL,
+            DateCreatedUtc TEXT NOT NULL,
+            DateDeletedUtc TEXT NULL
+        );
+    """);
+
+    await db.Database.ExecuteSqlRawAsync("""
+        CREATE TABLE IF NOT EXISTS CampaignPlayers (
+            CampaignPlayerId INTEGER PRIMARY KEY AUTOINCREMENT,
+            CampaignId INTEGER NOT NULL,
+            AppUserId INTEGER NOT NULL,
+            DateCreatedUtc TEXT NOT NULL,
+            DateDeletedUtc TEXT NULL
+        );
+    """);
+
+    try { await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS IX_CampaignCollaborators_Unique_Active ON CampaignCollaborators (CampaignId, AppUserId) WHERE DateDeletedUtc IS NULL;"); } catch (SqliteException) { }
+    try { await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS IX_CampaignPlayers_Unique_Active ON CampaignPlayers (CampaignId, AppUserId) WHERE DateDeletedUtc IS NULL;"); } catch (SqliteException) { }
+
+    await db.Database.ExecuteSqlRawAsync("""
         CREATE TABLE IF NOT EXISTS ItemTypeDefinitions (
             ItemTypeDefinitionId INTEGER PRIMARY KEY AUTOINCREMENT,
             GameSystemId INTEGER NOT NULL,
@@ -557,13 +580,33 @@ api.MapGet("/campaigns", async (AppDbContext db) =>
     await db.Campaigns
         .Where(c => c.DateDeletedUtc == null)
         .OrderBy(c => c.Title)
+        .Select(c => new
+        {
+            c.CampaignId,
+            c.Title,
+            c.Description,
+            CollaboratorCount = db.CampaignCollaborators.Count(cc => cc.CampaignId == c.CampaignId && cc.DateDeletedUtc == null),
+            PlayerCount = db.CampaignPlayers.Count(cp => cp.CampaignId == c.CampaignId && cp.DateDeletedUtc == null)
+        })
         .ToListAsync())
     .WithTags("Campaigns");
 
 api.MapGet("/campaigns/{campaignId:int}", async (int campaignId, AppDbContext db) =>
 {
     var row = await db.Campaigns.FirstOrDefaultAsync(c => c.CampaignId == campaignId && c.DateDeletedUtc == null);
-    return row is null ? Results.NotFound() : Results.Ok(row);
+    if (row is null) return Results.NotFound();
+
+    var collaborators = await db.CampaignCollaborators.Where(cc => cc.CampaignId == campaignId && cc.DateDeletedUtc == null).Select(cc => cc.AppUserId).ToListAsync();
+    var players = await db.CampaignPlayers.Where(cp => cp.CampaignId == campaignId && cp.DateDeletedUtc == null).Select(cp => cp.AppUserId).ToListAsync();
+
+    return Results.Ok(new
+    {
+        row.CampaignId,
+        row.Title,
+        row.Description,
+        CollaboratorUserIds = collaborators,
+        PlayerUserIds = players
+    });
 }).WithTags("Campaigns");
 
 api.MapPost("/campaigns", async (UpsertCampaignRequest req, AppDbContext db) =>
@@ -584,6 +627,10 @@ api.MapPost("/campaigns", async (UpsertCampaignRequest req, AppDbContext db) =>
     };
     db.Campaigns.Add(row);
     await db.SaveChangesAsync();
+
+    await SyncCampaignMembershipsAsync(db, row.CampaignId, req.CollaboratorUserIds, req.PlayerUserIds);
+    await db.SaveChangesAsync();
+
     return Results.Ok(row);
 }).WithTags("Campaigns");
 
@@ -601,6 +648,10 @@ api.MapPut("/campaigns/{campaignId:int}", async (int campaignId, UpsertCampaignR
     row.Description = string.IsNullOrWhiteSpace(req.Description) ? null : req.Description.Trim();
     row.DateModifiedUtc = DateTime.UtcNow;
     await db.SaveChangesAsync();
+
+    await SyncCampaignMembershipsAsync(db, row.CampaignId, req.CollaboratorUserIds, req.PlayerUserIds);
+    await db.SaveChangesAsync();
+
     return Results.Ok(row);
 }).WithTags("Campaigns");
 
@@ -2432,6 +2483,35 @@ static bool VerifyPassword(string password, string hashBase64, string saltBase64
     }
 }
 
+
+static async Task SyncCampaignMembershipsAsync(AppDbContext db, int campaignId, IEnumerable<int>? collaboratorIds, IEnumerable<int>? playerIds)
+{
+    var now = DateTime.UtcNow;
+
+    var desiredCollaborators = (collaboratorIds ?? Enumerable.Empty<int>()).Distinct().ToHashSet();
+    var desiredPlayers = (playerIds ?? Enumerable.Empty<int>()).Distinct().ToHashSet();
+
+    var validUserIds = await db.AppUsers
+        .Where(u => u.DateDeletedUtc == null && u.IsActive && (desiredCollaborators.Contains(u.AppUserId) || desiredPlayers.Contains(u.AppUserId)))
+        .Select(u => u.AppUserId)
+        .ToListAsync();
+
+    desiredCollaborators.IntersectWith(validUserIds);
+    desiredPlayers.IntersectWith(validUserIds);
+
+    var existingCollabs = await db.CampaignCollaborators.Where(x => x.CampaignId == campaignId && x.DateDeletedUtc == null).ToListAsync();
+    foreach (var row in existingCollabs.Where(r => !desiredCollaborators.Contains(r.AppUserId))) row.DateDeletedUtc = now;
+    var existingCollabIds = existingCollabs.Where(r => r.DateDeletedUtc == null).Select(r => r.AppUserId).ToHashSet();
+    foreach (var uid in desiredCollaborators.Where(id => !existingCollabIds.Contains(id)))
+        db.CampaignCollaborators.Add(new CampaignCollaborator { CampaignId = campaignId, AppUserId = uid, DateCreatedUtc = now });
+
+    var existingPlayers = await db.CampaignPlayers.Where(x => x.CampaignId == campaignId && x.DateDeletedUtc == null).ToListAsync();
+    foreach (var row in existingPlayers.Where(r => !desiredPlayers.Contains(r.AppUserId))) row.DateDeletedUtc = now;
+    var existingPlayerIds = existingPlayers.Where(r => r.DateDeletedUtc == null).Select(r => r.AppUserId).ToHashSet();
+    foreach (var uid in desiredPlayers.Where(id => !existingPlayerIds.Contains(id)))
+        db.CampaignPlayers.Add(new CampaignPlayer { CampaignId = campaignId, AppUserId = uid, DateCreatedUtc = now });
+}
+
 public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
     public DbSet<Note> Notes => Set<Note>();
@@ -2445,6 +2525,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<ItemTag> ItemTags => Set<ItemTag>();
     public DbSet<AppUser> AppUsers => Set<AppUser>();
     public DbSet<Campaign> Campaigns => Set<Campaign>();
+    public DbSet<CampaignCollaborator> CampaignCollaborators => Set<CampaignCollaborator>();
+    public DbSet<CampaignPlayer> CampaignPlayers => Set<CampaignPlayer>();
 }
 
 public sealed class Note
@@ -2693,7 +2775,25 @@ public sealed class Campaign
     public DateTime? DateDeletedUtc { get; set; }
 }
 
-public sealed record UpsertCampaignRequest(string Title, string? Description);
+public sealed record UpsertCampaignRequest(string Title, string? Description, List<int>? CollaboratorUserIds = null, List<int>? PlayerUserIds = null);
+
+public sealed class CampaignCollaborator
+{
+    public int CampaignCollaboratorId { get; set; }
+    public int CampaignId { get; set; }
+    public int AppUserId { get; set; }
+    public DateTime DateCreatedUtc { get; set; }
+    public DateTime? DateDeletedUtc { get; set; }
+}
+
+public sealed class CampaignPlayer
+{
+    public int CampaignPlayerId { get; set; }
+    public int CampaignId { get; set; }
+    public int AppUserId { get; set; }
+    public DateTime DateCreatedUtc { get; set; }
+    public DateTime? DateDeletedUtc { get; set; }
+}
 
 public sealed class AppUser
 {

@@ -14,12 +14,14 @@
     <MudTable Items="rows" Dense="true" Hover="true">
         <HeaderContent>
             <MudTh>Title</MudTh>
-            <MudTh>Description</MudTh>
+            <MudTh>Description</MudTh><MudTh>Collaborators</MudTh><MudTh>Players</MudTh>
             <MudTh></MudTh>
         </HeaderContent>
         <RowTemplate>
             <MudTd>@context.Title</MudTd>
             <MudTd>@context.Description</MudTd>
+            <MudTd>@context.CollaboratorCount</MudTd>
+            <MudTd>@context.PlayerCount</MudTd>
             <MudTd>
                 <MudIconButton Href="@($"/campaigns/{context.CampaignId}/edit")" Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" />
             </MudTd>
@@ -35,5 +37,5 @@
         rows = await Http.GetFromJsonAsync<List<CampaignDto>>(Nav.ToAbsoluteUri("/api/campaigns")) ?? new();
     }
 
-    private sealed record CampaignDto(int CampaignId, string Title, string? Description);
+    private sealed record CampaignDto(int CampaignId, string Title, string? Description, int CollaboratorCount, int PlayerCount);
 }
