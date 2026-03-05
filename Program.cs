@@ -249,6 +249,21 @@ using (var scope = app.Services.CreateScope())
     try { await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS IX_Creatures_System_Slug_Unique_Active ON Creatures (GameSystemId, Slug) WHERE DateDeletedUtc IS NULL;"); } catch (SqliteException) { }
 
     await db.Database.ExecuteSqlRawAsync("""
+        CREATE TABLE IF NOT EXISTS CreatureAbilities (
+            CreatureAbilityId INTEGER PRIMARY KEY AUTOINCREMENT,
+            CreatureId INTEGER NOT NULL,
+            AbilityType TEXT NOT NULL,
+            Name TEXT NULL,
+            Description TEXT NOT NULL,
+            SortOrder INTEGER NOT NULL DEFAULT 0,
+            DateCreatedUtc TEXT NOT NULL,
+            DateModifiedUtc TEXT NOT NULL,
+            DateDeletedUtc TEXT NULL
+        );
+    """);
+    try { await db.Database.ExecuteSqlRawAsync("CREATE INDEX IF NOT EXISTS IX_CreatureAbilities_Creature ON CreatureAbilities (CreatureId);"); } catch (SqliteException) { }
+
+    await db.Database.ExecuteSqlRawAsync("""
         CREATE TABLE IF NOT EXISTS ItemTypeDefinitions (
             ItemTypeDefinitionId INTEGER PRIMARY KEY AUTOINCREMENT,
             GameSystemId INTEGER NOT NULL,
@@ -705,7 +720,27 @@ api.MapGet("/creatures", async (int gameSystemId, AppDbContext db) =>
 api.MapGet("/creatures/{creatureId:int}", async (int creatureId, AppDbContext db) =>
 {
     var row = await db.Creatures.FirstOrDefaultAsync(c => c.CreatureId == creatureId && c.DateDeletedUtc == null);
-    return row is null ? Results.NotFound() : Results.Ok(row);
+    if (row is null) return Results.NotFound();
+
+    var abilities = await db.CreatureAbilities
+        .Where(a => a.CreatureId == creatureId && a.DateDeletedUtc == null)
+        .OrderBy(a => a.SortOrder)
+        .Select(a => new { a.AbilityType, a.Name, a.Description, a.SortOrder })
+        .ToListAsync();
+
+    return Results.Ok(new
+    {
+        row.CreatureId, row.GameSystemId, row.Name, row.Slug, row.Alias,
+        row.CreatureType, row.Size, row.Alignment, row.ArmorClass, row.HitPoints,
+        row.Speed, row.Strength, row.Dexterity, row.Constitution, row.Intelligence,
+        row.Wisdom, row.Charisma, row.ChallengeRating, row.ProficiencyBonus,
+        row.Description, row.SourceType, row.OwnerAppUserId, row.SourceMaterialId,
+        row.CampaignId, row.SourcePage,
+        TraitsList = abilities.Where(a => a.AbilityType == "Trait").Select(a => new { a.Name, a.Description, a.SortOrder }).ToList(),
+        ActionsList = abilities.Where(a => a.AbilityType == "Action").Select(a => new { a.Name, a.Description, a.SortOrder }).ToList(),
+        ReactionsList = abilities.Where(a => a.AbilityType == "Reaction").Select(a => new { a.Name, a.Description, a.SortOrder }).ToList(),
+        LegendaryActionsList = abilities.Where(a => a.AbilityType == "LegendaryAction").Select(a => new { a.Name, a.Description, a.SortOrder }).ToList()
+    });
 }).WithTags("Creatures");
 
 api.MapPost("/creatures", async (CreateCreatureRequest req, AppDbContext db, HttpContext http) =>
@@ -779,9 +814,7 @@ api.MapPost("/creatures", async (CreateCreatureRequest req, AppDbContext db, Htt
         ChallengeRating = req.ChallengeRating,
         ProficiencyBonus = req.ProficiencyBonus,
         Description = req.Description,
-        Traits = req.Traits,
-        Actions = req.Actions,
-        SourceType = req.SourceType,
+                SourceType = req.SourceType,
         OwnerAppUserId = ownerUserId,
         SourceMaterialId = req.SourceMaterialId,
         CampaignId = req.SourceType == SourceType.Official ? null : req.CampaignId,
@@ -791,6 +824,10 @@ api.MapPost("/creatures", async (CreateCreatureRequest req, AppDbContext db, Htt
     };
     db.Creatures.Add(row);
     await db.SaveChangesAsync();
+
+    await SyncCreatureAbilitiesAsync(db, row.CreatureId, req.TraitsList, req.ActionsList, req.ReactionsList, req.LegendaryActionsList);
+    await db.SaveChangesAsync();
+
     return Results.Ok(row);
 }).WithTags("Creatures");
 
@@ -863,15 +900,17 @@ api.MapPut("/creatures/{creatureId:int}", async (int creatureId, CreateCreatureR
     row.ChallengeRating = req.ChallengeRating;
     row.ProficiencyBonus = req.ProficiencyBonus;
     row.Description = req.Description;
-    row.Traits = req.Traits;
-    row.Actions = req.Actions;
-    row.SourceType = req.SourceType;
+        row.SourceType = req.SourceType;
     row.OwnerAppUserId = ownerUserId;
     row.SourceMaterialId = req.SourceMaterialId;
     row.CampaignId = req.SourceType == SourceType.Official ? null : req.CampaignId;
     row.SourcePage = req.SourcePage;
     row.DateModifiedUtc = DateTime.UtcNow;
     await db.SaveChangesAsync();
+
+    await SyncCreatureAbilitiesAsync(db, row.CreatureId, req.TraitsList, req.ActionsList, req.ReactionsList, req.LegendaryActionsList);
+    await db.SaveChangesAsync();
+
     return Results.Ok(row);
 }).WithTags("Creatures");
 
@@ -3114,6 +3153,46 @@ static bool VerifyPassword(string password, string hashBase64, string saltBase64
 }
 
 
+
+static async Task SyncCreatureAbilitiesAsync(AppDbContext db, int creatureId,
+    IEnumerable<CreatureAbilityInput>? traits,
+    IEnumerable<CreatureAbilityInput>? actions,
+    IEnumerable<CreatureAbilityInput>? reactions,
+    IEnumerable<CreatureAbilityInput>? legendaryActions)
+{
+    var now = DateTime.UtcNow;
+
+    static List<(string Type, CreatureAbilityInput Input)> Flatten(string type, IEnumerable<CreatureAbilityInput>? items)
+        => (items ?? Enumerable.Empty<CreatureAbilityInput>())
+            .Where(i => !string.IsNullOrWhiteSpace(i.Description) || !string.IsNullOrWhiteSpace(i.Name))
+            .Select(i => (type, i))
+            .ToList();
+
+    var desired = new List<(string Type, CreatureAbilityInput Input)>();
+    desired.AddRange(Flatten("Trait", traits));
+    desired.AddRange(Flatten("Action", actions));
+    desired.AddRange(Flatten("Reaction", reactions));
+    desired.AddRange(Flatten("LegendaryAction", legendaryActions));
+
+    var existing = await db.CreatureAbilities.Where(a => a.CreatureId == creatureId && a.DateDeletedUtc == null).ToListAsync();
+    foreach (var e in existing) e.DateDeletedUtc = now;
+
+    var order = 0;
+    foreach (var (type, input) in desired)
+    {
+        db.CreatureAbilities.Add(new CreatureAbility
+        {
+            CreatureId = creatureId,
+            AbilityType = type,
+            Name = string.IsNullOrWhiteSpace(input.Name) ? null : input.Name.Trim(),
+            Description = input.Description?.Trim() ?? string.Empty,
+            SortOrder = order++,
+            DateCreatedUtc = now,
+            DateModifiedUtc = now
+        });
+    }
+}
+
 static async Task SyncCampaignMembershipsAsync(AppDbContext db, int campaignId, IEnumerable<int>? collaboratorIds, IEnumerable<int>? playerIds)
 {
     var now = DateTime.UtcNow;
@@ -3190,6 +3269,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<FriendRequest> FriendRequests => Set<FriendRequest>();
     public DbSet<Friend> Friends => Set<Friend>();
     public DbSet<Creature> Creatures => Set<Creature>();
+    public DbSet<CreatureAbility> CreatureAbilities => Set<CreatureAbility>();
 }
 
 public sealed class Note
@@ -3461,6 +3541,19 @@ public sealed class AppError
     public DateTime DateCreatedUtc { get; set; }
 }
 
+public sealed class CreatureAbility
+{
+    public int CreatureAbilityId { get; set; }
+    public int CreatureId { get; set; }
+    public string AbilityType { get; set; } = string.Empty;
+    public string? Name { get; set; }
+    public string Description { get; set; } = string.Empty;
+    public int SortOrder { get; set; }
+    public DateTime DateCreatedUtc { get; set; }
+    public DateTime DateModifiedUtc { get; set; }
+    public DateTime? DateDeletedUtc { get; set; }
+}
+
 public sealed class Creature
 {
     public int CreatureId { get; set; }
@@ -3483,8 +3576,6 @@ public sealed class Creature
     public string? ChallengeRating { get; set; }
     public int? ProficiencyBonus { get; set; }
     public string? Description { get; set; }
-    public string? Traits { get; set; }
-    public string? Actions { get; set; }
     public SourceType SourceType { get; set; } = SourceType.Official;
     public int? OwnerAppUserId { get; set; }
     public int? SourceMaterialId { get; set; }
@@ -3495,7 +3586,9 @@ public sealed class Creature
     public DateTime? DateDeletedUtc { get; set; }
 }
 
-public sealed record CreateCreatureRequest(int GameSystemId, string Name, string? Alias = null, string? CreatureType = null, string? Size = null, string? Alignment = null, int? ArmorClass = null, int? HitPoints = null, string? Speed = null, int? Strength = null, int? Dexterity = null, int? Constitution = null, int? Intelligence = null, int? Wisdom = null, int? Charisma = null, string? ChallengeRating = null, int? ProficiencyBonus = null, string? Description = null, string? Traits = null, string? Actions = null, SourceType SourceType = SourceType.Official, int? OwnerAppUserId = null, int? SourceMaterialId = null, int? CampaignId = null, int? SourcePage = null);
+public sealed record CreateCreatureRequest(int GameSystemId, string Name, string? Alias = null, string? CreatureType = null, string? Size = null, string? Alignment = null, int? ArmorClass = null, int? HitPoints = null, string? Speed = null, int? Strength = null, int? Dexterity = null, int? Constitution = null, int? Intelligence = null, int? Wisdom = null, int? Charisma = null, string? ChallengeRating = null, int? ProficiencyBonus = null, string? Description = null, SourceType SourceType = SourceType.Official, int? OwnerAppUserId = null, int? SourceMaterialId = null, int? CampaignId = null, int? SourcePage = null, List<CreatureAbilityInput>? TraitsList = null, List<CreatureAbilityInput>? ActionsList = null, List<CreatureAbilityInput>? ReactionsList = null, List<CreatureAbilityInput>? LegendaryActionsList = null);
+
+public sealed record CreatureAbilityInput(string? Name, string Description, int SortOrder = 0);
 
 public sealed class Campaign
 {
