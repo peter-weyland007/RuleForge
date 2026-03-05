@@ -1,7 +1,5 @@
 @page "/admin/users"
-@using System.Net.Http.Json
-@inject HttpClient Http
-@inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>Admin Users</PageTitle>
 
@@ -11,6 +9,11 @@
         <MudText Typo="Typo.body2">Manage user accounts and roles (Admin / Users).</MudText>
         <MudButton Href="/admin/users/new" StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled">Create User</MudButton>
     </MudStack>
+
+    @if (!string.IsNullOrWhiteSpace(error))
+    {
+        <MudAlert Severity="Severity.Error">@error</MudAlert>
+    }
 
     <MudTable Items="rows" Dense="true" Hover="true">
         <HeaderContent>
@@ -23,19 +26,25 @@
             <MudTd>@(context.IsActive ? "Yes" : "No")</MudTd>
             <MudTd>@(context.IsSystemAccount ? "Yes" : "No")</MudTd>
             <MudTd>@(context.MustChangePassword ? "Yes" : "No")</MudTd>
-            <MudTd>
-                <MudIconButton Href="@($"/admin/users/{context.AppUserId}/edit")" Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" />
-            </MudTd>
+            <MudTd><MudIconButton Href="@($"/admin/users/{context.AppUserId}/edit")" Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" /></MudTd>
         </RowTemplate>
     </MudTable>
 </MudStack>
 
 @code {
     private List<UserDto> rows = new();
+    private string? error;
 
     protected override async Task OnInitializedAsync()
     {
-        rows = await Http.GetFromJsonAsync<List<UserDto>>(Nav.ToAbsoluteUri("/api/admin/users")) ?? new();
+        try
+        {
+            rows = await JS.InvokeAsync<List<UserDto>>("ruleforgeAuth.adminUsers") ?? new();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
     }
 
     private sealed record UserDto(int AppUserId, string Email, string Username, string Role, bool IsActive, bool IsSystemAccount, bool MustChangePassword);

@@ -48,5 +48,43 @@ window.ruleforgeAuth = {
     const text = await res.text();
     if (!res.ok) throw new Error(text || 'Password change failed');
     return text ? JSON.parse(text) : {};
+  },
+
+  async adminUsers() {
+    const res = await fetch('/api/admin/users', { credentials: 'include' });
+    const text = await res.text();
+    if (!res.ok) throw new Error(text || 'Failed to load users');
+    return text ? JSON.parse(text) : [];
+  },
+
+  async adminUser(id) {
+    const res = await fetch(`/api/admin/users/${id}`, { credentials: 'include' });
+    const text = await res.text();
+    if (!res.ok) throw new Error(text || 'Failed to load user');
+    return text ? JSON.parse(text) : null;
+  },
+
+  async adminCreateUser(payload) {
+    const res = await fetch('/api/admin/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload)
+    });
+    const text = await res.text();
+    if (!res.ok) throw new Error(text || 'Failed to create user');
+    return text ? JSON.parse(text) : {};
+  },
+
+  async adminUpdateUser(id, payload) {
+    const res = await fetch(`/api/admin/users/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload)
+    });
+    const text = await res.text();
+    if (!res.ok) throw new Error(text || 'Failed to update user');
+    return text ? JSON.parse(text) : {};
   }
 };

@@ -1,8 +1,7 @@
 @page "/admin/users/new"
 @page "/admin/users/{AppUserId:int}/edit"
-@using System.Net.Http.Json
-@inject HttpClient Http
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>@(_isEdit ? "Edit User" : "Create User")</PageTitle>
 
@@ -29,6 +28,11 @@
             <MudItem xs="12" md="3"><MudCheckBox @bind-Value="model.MustChangePassword" Label="Must Change Password" Disabled="@(_isEdit || model.IsSystemAccount)" /></MudItem>
             <MudItem xs="12" md="3"><MudCheckBox @bind-Value="model.IsSystemAccount" Label="System Account" Disabled="true" /></MudItem>
 
+            @if (!string.IsNullOrWhiteSpace(error))
+            {
+                <MudItem xs="12"><MudAlert Severity="Severity.Error">@error</MudAlert></MudItem>
+            }
+
             <MudItem xs="12">
                 <MudStack Row="true" Spacing="2">
                     <MudButtonGroup Variant="Variant.Filled" Color="Color.Primary">
@@ -46,39 +50,53 @@
     private bool _isEdit => AppUserId.HasValue;
 
     private FormModel model = new();
+    private string? error;
 
     protected override async Task OnParametersSetAsync()
     {
         if (!_isEdit) return;
 
-        var dto = await Http.GetFromJsonAsync<UserDto>(Nav.ToAbsoluteUri($"/api/admin/users/{AppUserId!.Value}"));
-        if (dto is null) { Nav.NavigateTo("/admin/users"); return; }
-        model = new FormModel
+        try
         {
-            Email = dto.Email,
-            Username = dto.Username,
-            Role = dto.Role,
-            IsActive = dto.IsActive,
-            IsSystemAccount = dto.IsSystemAccount,
-            MustChangePassword = dto.MustChangePassword
-        };
+            var dto = await JS.InvokeAsync<UserDto>("ruleforgeAuth.adminUser", AppUserId!.Value);
+            if (dto is null) { Nav.NavigateTo("/admin/users"); return; }
+            model = new FormModel
+            {
+                Email = dto.Email,
+                Username = dto.Username,
+                Role = dto.Role,
+                IsActive = dto.IsActive,
+                IsSystemAccount = dto.IsSystemAccount,
+                MustChangePassword = dto.MustChangePassword
+            };
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
     }
 
     private async Task Save()
     {
-        HttpResponseMessage res;
-
-        if (_isEdit)
+        error = null;
+        try
         {
-            res = await Http.PutAsJsonAsync(Nav.ToAbsoluteUri($"/api/admin/users/{AppUserId!.Value}"), new { Role = model.Role, IsActive = model.IsActive });
-        }
-        else
-        {
-            if (string.IsNullOrWhiteSpace(model.Email) || string.IsNullOrWhiteSpace(model.Password)) return;
-            res = await Http.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/admin/users"), new { Email = model.Email, Username = model.Username, Password = model.Password, Role = model.Role, IsActive = model.IsActive, MustChangePassword = model.MustChangePassword });
-        }
+            if (_isEdit)
+            {
+                await JS.InvokeAsync<object>("ruleforgeAuth.adminUpdateUser", AppUserId!.Value, new { Role = model.Role, IsActive = model.IsActive });
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(model.Email) || string.IsNullOrWhiteSpace(model.Username) || string.IsNullOrWhiteSpace(model.Password)) return;
+                await JS.InvokeAsync<object>("ruleforgeAuth.adminCreateUser", new { Email = model.Email, Username = model.Username, Password = model.Password, Role = model.Role, IsActive = model.IsActive, MustChangePassword = model.MustChangePassword });
+            }
 
-        if (res.IsSuccessStatusCode) Nav.NavigateTo("/admin/users");
+            Nav.NavigateTo("/admin/users");
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
     }
 
     private sealed class FormModel
