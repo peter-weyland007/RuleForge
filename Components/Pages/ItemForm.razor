@@ -83,13 +83,14 @@
             @if (model.SourceType == SourceType.Official)
             {
                 <MudItem xs="12" md="8"><MudSelect T="int?" @bind-Value="model.SourceMaterialId" Label="Official Source Material" Variant="Variant.Outlined"><MudSelectItem Value="@((int?)null)">(select source)</MudSelectItem>@foreach (var sm in sourceMaterials){ <MudSelectItem Value="@((int?)sm.SourceMaterialId)">@($"{sm.Code} — {sm.Title}")</MudSelectItem> }</MudSelect></MudItem>
+                <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="model.SourcePage" Label="Source Page" Variant="Variant.Outlined" Min="1" /></MudItem>
+                <MudItem xs="12" md="2"><MudTextField @bind-Value="model.SourceBook" Label="Legacy Source Text" Variant="Variant.Outlined" Placeholder="optional" /></MudItem>
             }
             else
             {
                 <MudItem xs="12" md="8"><MudSelect T="int?" @bind-Value="model.CampaignId" Label="Campaign Source" Variant="Variant.Outlined"><MudSelectItem Value="@((int?)null)">(none)</MudSelectItem>@foreach (var c in campaigns){ <MudSelectItem Value="@((int?)c.CampaignId)">@c.Title</MudSelectItem> }</MudSelect></MudItem>
+                <MudItem xs="12" md="4"><MudTextField @bind-Value="model.SourceBook" Label="Legacy Source Text" Variant="Variant.Outlined" Placeholder="optional" /></MudItem>
             }
-            <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="model.SourcePage" Label="Source Page" Variant="Variant.Outlined" Min="1" /></MudItem>
-            <MudItem xs="12" md="2"><MudTextField @bind-Value="model.SourceBook" Label="Legacy Source Text" Variant="Variant.Outlined" Placeholder="optional" /></MudItem>
 
             @if (model.SourceType != SourceType.Official)
             {
@@ -440,6 +441,7 @@
         else
         {
             model.SourceMaterialId = null;
+            model.SourcePage = null;
         }
     }
 

@@ -635,6 +635,19 @@ api.MapPut("/admin/users/{appUserId:int}", async (int appUserId, UpdateUserAdmin
 api.MapGet("/campaigns/accessible", async (AppDbContext db, HttpContext http) =>
 {
     if (http.User?.Identity?.IsAuthenticated != true) return Results.Unauthorized();
+
+    var isAdmin = string.Equals(http.User.FindFirstValue(ClaimTypes.Role), "Admin", StringComparison.OrdinalIgnoreCase);
+    if (isAdmin)
+    {
+        var allRows = await db.Campaigns
+            .Where(c => c.DateDeletedUtc == null)
+            .OrderBy(c => c.Title)
+            .Select(c => new { c.CampaignId, c.Title, c.Description })
+            .ToListAsync();
+
+        return Results.Ok(allRows);
+    }
+
     var idRaw = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
     if (!int.TryParse(idRaw, out var userId)) return Results.Unauthorized();
 
