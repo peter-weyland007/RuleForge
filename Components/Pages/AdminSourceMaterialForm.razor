@@ -1,0 +1,92 @@
+@page "/admin/source-materials/new"
+@page "/admin/source-materials/{SourceMaterialId:int}/edit"
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject NavigationManager Nav
+
+<PageTitle>Admin Source Material Form</PageTitle>
+
+<MudStack Spacing="3">
+    <MudText Typo="Typo.h4">@(_isEdit ? "Edit Source Material" : "Create Source Material")</MudText>
+
+    <MudPaper Class="pa-4" Outlined="true">
+        <MudGrid>
+            <MudItem xs="12" md="3">
+                <MudSelect T="int" @bind-Value="model.GameSystemId" Label="Game System" Variant="Variant.Outlined">
+                    @foreach (var s in systems)
+                    {
+                        <MudSelectItem Value="@s.GameSystemId">@s.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="2"><MudTextField @bind-Value="model.Code" Label="Code" Variant="Variant.Outlined" Required="true" /></MudItem>
+            <MudItem xs="12" md="4"><MudTextField @bind-Value="model.Title" Label="Title" Variant="Variant.Outlined" Required="true" /></MudItem>
+            <MudItem xs="12" md="3"><MudTextField @bind-Value="model.Publisher" Label="Publisher" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" md="3"><MudCheckBox @bind-Value="model.IsOfficial" Label="Official" /></MudItem>
+            <MudItem xs="12">
+                <MudStack Row="true" Spacing="2">
+                    <MudButtonGroup Variant="Variant.Filled" Color="Color.Primary">
+                        <MudButton OnClick="Save">Save</MudButton>
+                        <MudButton Href="/admin/source-materials" Color="Color.Secondary">Cancel</MudButton>
+                    </MudButtonGroup>
+                </MudStack>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+</MudStack>
+
+@code {
+    [Parameter] public int? SourceMaterialId { get; set; }
+    private bool _isEdit => SourceMaterialId.HasValue;
+
+    private List<GameSystemDto> systems = new();
+    private FormModel model = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        systems = await Http.GetFromJsonAsync<List<GameSystemDto>>(Nav.ToAbsoluteUri("/api/game-systems")) ?? new();
+        model.GameSystemId = systems.FirstOrDefault()?.GameSystemId ?? 0;
+        model.IsOfficial = true;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!_isEdit) return;
+        var dto = await Http.GetFromJsonAsync<SourceMaterialDto>(Nav.ToAbsoluteUri($"/api/admin/source-materials/{SourceMaterialId!.Value}"));
+        if (dto is null) { Nav.NavigateTo("/admin/source-materials"); return; }
+
+        model = new FormModel
+        {
+            GameSystemId = dto.GameSystemId,
+            Code = dto.Code,
+            Title = dto.Title,
+            Publisher = dto.Publisher,
+            IsOfficial = dto.IsOfficial
+        };
+    }
+
+    private async Task Save()
+    {
+        if (model.GameSystemId <= 0 || string.IsNullOrWhiteSpace(model.Code) || string.IsNullOrWhiteSpace(model.Title)) return;
+
+        var req = new UpsertSourceMaterialRequest(model.GameSystemId, model.Code, model.Title, model.Publisher, model.IsOfficial);
+        var res = _isEdit
+            ? await Http.PutAsJsonAsync(Nav.ToAbsoluteUri($"/api/admin/source-materials/{SourceMaterialId!.Value}"), req)
+            : await Http.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/admin/source-materials"), req);
+
+        if (res.IsSuccessStatusCode)
+            Nav.NavigateTo("/admin/source-materials");
+    }
+
+    private sealed class FormModel
+    {
+        public int GameSystemId { get; set; }
+        public string Code { get; set; } = string.Empty;
+        public string Title { get; set; } = string.Empty;
+        public string? Publisher { get; set; }
+        public bool IsOfficial { get; set; }
+    }
+
+    private sealed record GameSystemDto(int GameSystemId, string Name);
+    private sealed record SourceMaterialDto(int SourceMaterialId, int GameSystemId, string Code, string Title, string? Publisher, bool IsOfficial);
+}

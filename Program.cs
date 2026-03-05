@@ -1122,6 +1122,72 @@ api.MapPut("/admin/currencies/{currencyDefinitionId:int}", async (int currencyDe
     return Results.Ok(row);
 }).WithTags("Admin");
 
+
+api.MapGet("/admin/source-materials", async (int gameSystemId, AppDbContext db) =>
+    await db.SourceMaterials
+        .Where(sm => sm.DateDeletedUtc == null && sm.GameSystemId == gameSystemId)
+        .OrderBy(sm => sm.Code)
+        .ToListAsync())
+    .WithTags("Admin");
+
+api.MapGet("/admin/source-materials/{sourceMaterialId:int}", async (int sourceMaterialId, AppDbContext db) =>
+{
+    var row = await db.SourceMaterials.FirstOrDefaultAsync(sm => sm.SourceMaterialId == sourceMaterialId && sm.DateDeletedUtc == null);
+    return row is null ? Results.NotFound() : Results.Ok(row);
+}).WithTags("Admin");
+
+api.MapPost("/admin/source-materials", async (UpsertSourceMaterialRequest req, AppDbContext db) =>
+{
+    var gsExists = await db.GameSystems.AnyAsync(gs => gs.GameSystemId == req.GameSystemId && gs.DateDeletedUtc == null);
+    if (!gsExists) return Results.BadRequest("GameSystemId is invalid.");
+    if (string.IsNullOrWhiteSpace(req.Code) || string.IsNullOrWhiteSpace(req.Title))
+        return Results.BadRequest("Code and Title are required.");
+
+    var code = req.Code.Trim().ToUpperInvariant();
+    var dup = await db.SourceMaterials.AnyAsync(sm => sm.DateDeletedUtc == null && sm.GameSystemId == req.GameSystemId && sm.Code == code);
+    if (dup) return Results.BadRequest("Source material code already exists for this system.");
+
+    var now = DateTime.UtcNow;
+    var row = new SourceMaterial
+    {
+        GameSystemId = req.GameSystemId,
+        Code = code,
+        Title = req.Title.Trim(),
+        Publisher = string.IsNullOrWhiteSpace(req.Publisher) ? null : req.Publisher.Trim(),
+        IsOfficial = req.IsOfficial,
+        DateCreatedUtc = now,
+        DateModifiedUtc = now
+    };
+    db.SourceMaterials.Add(row);
+    await db.SaveChangesAsync();
+    return Results.Ok(row);
+}).WithTags("Admin");
+
+api.MapPut("/admin/source-materials/{sourceMaterialId:int}", async (int sourceMaterialId, UpsertSourceMaterialRequest req, AppDbContext db) =>
+{
+    var row = await db.SourceMaterials.FirstOrDefaultAsync(sm => sm.SourceMaterialId == sourceMaterialId && sm.DateDeletedUtc == null);
+    if (row is null) return Results.NotFound();
+
+    var gsExists = await db.GameSystems.AnyAsync(gs => gs.GameSystemId == req.GameSystemId && gs.DateDeletedUtc == null);
+    if (!gsExists) return Results.BadRequest("GameSystemId is invalid.");
+    if (string.IsNullOrWhiteSpace(req.Code) || string.IsNullOrWhiteSpace(req.Title))
+        return Results.BadRequest("Code and Title are required.");
+
+    var code = req.Code.Trim().ToUpperInvariant();
+    var dup = await db.SourceMaterials.AnyAsync(sm => sm.DateDeletedUtc == null && sm.GameSystemId == req.GameSystemId && sm.Code == code && sm.SourceMaterialId != sourceMaterialId);
+    if (dup) return Results.BadRequest("Source material code already exists for this system.");
+
+    row.GameSystemId = req.GameSystemId;
+    row.Code = code;
+    row.Title = req.Title.Trim();
+    row.Publisher = string.IsNullOrWhiteSpace(req.Publisher) ? null : req.Publisher.Trim();
+    row.IsOfficial = req.IsOfficial;
+    row.DateModifiedUtc = DateTime.UtcNow;
+
+    await db.SaveChangesAsync();
+    return Results.Ok(row);
+}).WithTags("Admin");
+
 api.MapPost("/admin/currency-migration/map-to-definitions", async (int gameSystemId, AppDbContext db) =>
 {
     var currencies = await db.CurrencyDefinitions.Where(c => c.DateDeletedUtc == null && c.GameSystemId == gameSystemId).ToListAsync();

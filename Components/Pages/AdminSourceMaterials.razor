@@ -1,0 +1,45 @@
+@page "/admin/source-materials"
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject NavigationManager Nav
+
+<PageTitle>Admin Source Materials</PageTitle>
+
+<MudStack Spacing="3">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+        <MudText Typo="Typo.h4">Admin · Source Materials</MudText>
+        <MudButton Href="/admin/source-materials/new" StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled">Create</MudButton>
+    </MudStack>
+
+    <MudPaper Class="pa-4" Outlined="true">
+        <MudSelect T="int" Value="selectedSystemId" ValueChanged="OnSystemChanged" Label="Game System" Variant="Variant.Outlined">
+            @foreach (var s in systems){<MudSelectItem Value="@s.GameSystemId">@s.Name</MudSelectItem>}
+        </MudSelect>
+    </MudPaper>
+
+    <MudTable Items="rows" Dense="true" Hover="true">
+        <HeaderContent><MudTh>Code</MudTh><MudTh>Title</MudTh><MudTh>Publisher</MudTh><MudTh>Official</MudTh><MudTh></MudTh></HeaderContent>
+        <RowTemplate>
+            <MudTd>@context.Code</MudTd><MudTd>@context.Title</MudTd><MudTd>@context.Publisher</MudTd><MudTd>@(context.IsOfficial ? "Yes" : "No")</MudTd>
+            <MudTd><MudIconButton Href="@($"/admin/source-materials/{context.SourceMaterialId}/edit")" Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" /></MudTd>
+        </RowTemplate>
+    </MudTable>
+</MudStack>
+
+@code {
+    private List<GameSystemDto> systems = new();
+    private List<SourceMaterialDto> rows = new();
+    private int selectedSystemId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        systems = await Http.GetFromJsonAsync<List<GameSystemDto>>(Nav.ToAbsoluteUri("/api/game-systems")) ?? new();
+        selectedSystemId = systems.FirstOrDefault()?.GameSystemId ?? 0;
+        await Load();
+    }
+    private async Task OnSystemChanged(int id){ selectedSystemId=id; await Load(); }
+    private async Task Load(){ if(selectedSystemId<=0)return; rows = await Http.GetFromJsonAsync<List<SourceMaterialDto>>(Nav.ToAbsoluteUri($"/api/admin/source-materials?gameSystemId={selectedSystemId}")) ?? new(); }
+
+    private sealed record GameSystemDto(int GameSystemId, string Name);
+    private sealed record SourceMaterialDto(int SourceMaterialId,int GameSystemId,string Code,string Title,string? Publisher,bool IsOfficial);
+}
