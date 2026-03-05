@@ -36,7 +36,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        systems = await Http.GetFromJsonAsync<List<GameSystemDto>>(Nav.ToAbsoluteUri("/api/game-systems")) ?? new();
+        systems = await Http.GetFromJsonAsync<List<GameSystemDto>>("/api/game-systems") ?? new();
         selectedSystemId = systems.FirstOrDefault()?.GameSystemId ?? 0;
         await Load();
     }

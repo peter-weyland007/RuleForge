@@ -61,7 +61,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        systems = await Http.GetFromJsonAsync<List<GameSystemDto>>(Nav.ToAbsoluteUri("/api/game-systems")) ?? new();
+        systems = await Http.GetFromJsonAsync<List<GameSystemDto>>("/api/game-systems") ?? new();
         fromId = systems.FirstOrDefault()?.GameSystemId ?? 0;
         toId = systems.Skip(1).FirstOrDefault()?.GameSystemId ?? fromId;
         orphanTargetSystemId = systems.FirstOrDefault()?.GameSystemId ?? 0;
@@ -73,7 +73,7 @@
         var res = await Http.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/admin/game-systems/merge"), new MergeReq(fromId, toId));
         Snackbar.Add(res.IsSuccessStatusCode ? "Merge complete." : "Merge failed.", res.IsSuccessStatusCode ? Severity.Success : Severity.Error);
         if (res.IsSuccessStatusCode)
-            systems = await Http.GetFromJsonAsync<List<GameSystemDto>>(Nav.ToAbsoluteUri("/api/game-systems")) ?? new();
+            systems = await Http.GetFromJsonAsync<List<GameSystemDto>>("/api/game-systems") ?? new();
     }
 
     private async Task LoadOrphans()
