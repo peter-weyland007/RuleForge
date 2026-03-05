@@ -1,0 +1,99 @@
+@page "/profile"
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject NavigationManager Nav
+
+<PageTitle>Profile</PageTitle>
+
+<MudStack Spacing="3" Style="max-width:760px; margin: 1rem auto;">
+    <MudText Typo="Typo.h4">Profile</MudText>
+
+    @if (!isLoaded)
+    {
+        <MudProgressCircular Indeterminate="true" />
+    }
+    else if (me is null)
+    {
+        <MudAlert Severity="Severity.Warning">You are not logged in. <MudLink Href="/login">Login</MudLink></MudAlert>
+    }
+    else
+    {
+        <MudPaper Class="pa-4" Outlined="true">
+            <MudGrid>
+                <MudItem xs="12" md="4"><MudText Typo="Typo.caption">Email</MudText><MudText Typo="Typo.body1">@me.email</MudText></MudItem>
+                <MudItem xs="12" md="4"><MudText Typo="Typo.caption">Username</MudText><MudText Typo="Typo.body1">@me.username</MudText></MudItem>
+                <MudItem xs="12" md="4"><MudText Typo="Typo.caption">Role</MudText><MudText Typo="Typo.body1">@me.role</MudText></MudItem>
+            </MudGrid>
+        </MudPaper>
+
+        <MudPaper Class="pa-4" Outlined="true">
+            <MudText Typo="Typo.h6" Class="mb-2">Change Password</MudText>
+            <MudGrid>
+                <MudItem xs="12" md="6"><MudTextField @bind-Value="currentPassword" Label="Current Password" InputType="InputType.Password" Variant="Variant.Outlined" /></MudItem>
+                <MudItem xs="12" md="6"><MudTextField @bind-Value="newPassword" Label="New Password" InputType="InputType.Password" Variant="Variant.Outlined" HelperText="Minimum 8 characters" /></MudItem>
+            </MudGrid>
+            @if (!string.IsNullOrWhiteSpace(error))
+            {
+                <MudAlert Severity="Severity.Error" Dense="true" Class="mt-2">@error</MudAlert>
+            }
+            @if (!string.IsNullOrWhiteSpace(ok))
+            {
+                <MudAlert Severity="Severity.Success" Dense="true" Class="mt-2">@ok</MudAlert>
+            }
+            <MudStack Row="true" Spacing="2" Class="mt-3">
+                <MudButton OnClick="DoChangePassword" Variant="Variant.Filled" Color="Color.Primary">Update Password</MudButton>
+                <MudButton OnClick="DoLogout" Variant="Variant.Outlined" Color="Color.Secondary">Logout</MudButton>
+            </MudStack>
+        </MudPaper>
+    }
+</MudStack>
+
+@code {
+    private AuthMe? me;
+    private bool isLoaded;
+    private string currentPassword = string.Empty;
+    private string newPassword = string.Empty;
+    private string? error;
+    private string? ok;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            me = await Http.GetFromJsonAsync<AuthMe>(Nav.ToAbsoluteUri("/api/auth/me"));
+        }
+        catch
+        {
+            me = null;
+        }
+        finally
+        {
+            isLoaded = true;
+        }
+    }
+
+    private async Task DoChangePassword()
+    {
+        error = null;
+        ok = null;
+
+        var res = await Http.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/auth/change-password"), new { CurrentPassword = currentPassword, NewPassword = newPassword });
+        if (res.IsSuccessStatusCode)
+        {
+            ok = "Password updated. Please log in again.";
+            await Task.Delay(700);
+            Nav.NavigateTo("/login", true);
+            return;
+        }
+
+        error = await res.Content.ReadAsStringAsync();
+    }
+
+    private async Task DoLogout()
+    {
+        await Http.PostAsync(Nav.ToAbsoluteUri("/api/auth/logout"), null);
+        Nav.NavigateTo("/login", true);
+    }
+
+    private sealed record AuthMe(string? id, string? email, string? username, string? role, bool mustChangePassword);
+}

@@ -13,10 +13,18 @@
         </MudNavGroup>
     </AuthorizeView>
 
-    <MudNavGroup Title="Account" Icon="@Icons.Material.Filled.Person" Expanded="false">
-        <MudNavLink Href="/login" Icon="@Icons.Material.Filled.Login">Login</MudNavLink>
-        <MudNavLink Href="/register" Icon="@Icons.Material.Filled.PersonAdd">Register</MudNavLink>
-        <MudNavLink Href="/change-password" Icon="@Icons.Material.Filled.Password">Change Password</MudNavLink>
-    </MudNavGroup>
+    <AuthorizeView>
+        <Authorized>
+            <MudNavGroup Title="Account" Icon="@Icons.Material.Filled.Person" Expanded="false">
+                <MudNavLink Href="/profile" Icon="@Icons.Material.Filled.AccountCircle">Profile</MudNavLink>
+            </MudNavGroup>
+        </Authorized>
+        <NotAuthorized>
+            <MudNavGroup Title="Account" Icon="@Icons.Material.Filled.Person" Expanded="false">
+                <MudNavLink Href="/login" Icon="@Icons.Material.Filled.Login">Login</MudNavLink>
+                <MudNavLink Href="/register" Icon="@Icons.Material.Filled.PersonAdd">Register</MudNavLink>
+            </MudNavGroup>
+        </NotAuthorized>
+    </AuthorizeView>
 </MudNavMenu>
 </CascadingAuthenticationState>
