@@ -1,0 +1,37 @@
+@page "/users/{Username}"
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject NavigationManager Nav
+
+<PageTitle>User Profile</PageTitle>
+
+<MudStack Spacing="3" Style="max-width:700px;">
+    <MudText Typo="Typo.h4">User Profile</MudText>
+
+    @if (user is null)
+    {
+        <MudAlert Severity="Severity.Warning">User not found.</MudAlert>
+    }
+    else
+    {
+        <MudPaper Class="pa-4" Outlined="true">
+            <MudGrid>
+                <MudItem xs="12" md="4"><MudText Typo="Typo.caption">Username</MudText><MudText Typo="Typo.body1">@user.Username</MudText></MudItem>
+                <MudItem xs="12" md="4"><MudText Typo="Typo.caption">Email</MudText><MudText Typo="Typo.body1">@user.Email</MudText></MudItem>
+                <MudItem xs="12" md="4"><MudText Typo="Typo.caption">Role</MudText><MudText Typo="Typo.body1">@user.Role</MudText></MudItem>
+            </MudGrid>
+        </MudPaper>
+    }
+</MudStack>
+
+@code {
+    [Parameter] public string Username { get; set; } = string.Empty;
+    private UserDto? user;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        user = await Http.GetFromJsonAsync<UserDto>(Nav.ToAbsoluteUri($"/api/users/{Username}"));
+    }
+
+    private sealed record UserDto(int AppUserId, string Username, string Email, string Role);
+}

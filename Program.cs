@@ -142,6 +142,7 @@ using (var scope = app.Services.CreateScope())
             CampaignId INTEGER PRIMARY KEY AUTOINCREMENT,
             Title TEXT NOT NULL,
             Description TEXT NULL,
+            OwnerAppUserId INTEGER NULL,
             DateCreatedUtc TEXT NOT NULL,
             DateModifiedUtc TEXT NOT NULL,
             DateDeletedUtc TEXT NULL
@@ -149,6 +150,7 @@ using (var scope = app.Services.CreateScope())
     """);
 
     try { await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS IX_Campaigns_Title_Unique_Active ON Campaigns (Title) WHERE DateDeletedUtc IS NULL;"); } catch (SqliteException) { }
+    try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Campaigns ADD COLUMN OwnerAppUserId INTEGER NULL;"); } catch (SqliteException) { }
 
     await db.Database.ExecuteSqlRawAsync("""
         CREATE TABLE IF NOT EXISTS CampaignCollaborators (
@@ -585,6 +587,8 @@ api.MapGet("/campaigns", async (AppDbContext db) =>
             c.CampaignId,
             c.Title,
             c.Description,
+            c.OwnerAppUserId,
+            OwnerUsername = db.AppUsers.Where(u => u.AppUserId == c.OwnerAppUserId && u.DateDeletedUtc == null).Select(u => u.Username).FirstOrDefault(),
             CollaboratorCount = db.CampaignCollaborators.Count(cc => cc.CampaignId == c.CampaignId && cc.DateDeletedUtc == null),
             PlayerCount = db.CampaignPlayers.Count(cp => cp.CampaignId == c.CampaignId && cp.DateDeletedUtc == null)
         })
@@ -599,17 +603,21 @@ api.MapGet("/campaigns/{campaignId:int}", async (int campaignId, AppDbContext db
     var collaborators = await db.CampaignCollaborators.Where(cc => cc.CampaignId == campaignId && cc.DateDeletedUtc == null).Select(cc => cc.AppUserId).ToListAsync();
     var players = await db.CampaignPlayers.Where(cp => cp.CampaignId == campaignId && cp.DateDeletedUtc == null).Select(cp => cp.AppUserId).ToListAsync();
 
+    var ownerUsername = await db.AppUsers.Where(u => u.AppUserId == row.OwnerAppUserId && u.DateDeletedUtc == null).Select(u => u.Username).FirstOrDefaultAsync();
+
     return Results.Ok(new
     {
         row.CampaignId,
         row.Title,
         row.Description,
+        row.OwnerAppUserId,
+        OwnerUsername = ownerUsername,
         CollaboratorUserIds = collaborators,
         PlayerUserIds = players
     });
 }).WithTags("Campaigns");
 
-api.MapPost("/campaigns", async (UpsertCampaignRequest req, AppDbContext db) =>
+api.MapPost("/campaigns", async (UpsertCampaignRequest req, AppDbContext db, HttpContext http) =>
 {
     if (string.IsNullOrWhiteSpace(req.Title)) return Results.BadRequest("Title is required.");
     var title = ToTitleCase(req.Title.Trim());
@@ -617,11 +625,25 @@ api.MapPost("/campaigns", async (UpsertCampaignRequest req, AppDbContext db) =>
     var dup = await db.Campaigns.AnyAsync(c => c.DateDeletedUtc == null && c.Title == title);
     if (dup) return Results.BadRequest("Campaign title already exists.");
 
+    int? ownerUserId = req.OwnerAppUserId;
+    if (!ownerUserId.HasValue)
+    {
+        var idRaw = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (int.TryParse(idRaw, out var uid)) ownerUserId = uid;
+    }
+
+    if (ownerUserId.HasValue)
+    {
+        var exists = await db.AppUsers.AnyAsync(u => u.AppUserId == ownerUserId.Value && u.DateDeletedUtc == null && u.IsActive);
+        if (!exists) return Results.BadRequest("OwnerAppUserId is invalid.");
+    }
+
     var now = DateTime.UtcNow;
     var row = new Campaign
     {
         Title = title,
         Description = string.IsNullOrWhiteSpace(req.Description) ? null : req.Description.Trim(),
+        OwnerAppUserId = ownerUserId,
         DateCreatedUtc = now,
         DateModifiedUtc = now
     };
@@ -644,8 +666,15 @@ api.MapPut("/campaigns/{campaignId:int}", async (int campaignId, UpsertCampaignR
     var dup = await db.Campaigns.AnyAsync(c => c.DateDeletedUtc == null && c.Title == title && c.CampaignId != campaignId);
     if (dup) return Results.BadRequest("Campaign title already exists.");
 
+    if (req.OwnerAppUserId.HasValue)
+    {
+        var ownerExists = await db.AppUsers.AnyAsync(u => u.AppUserId == req.OwnerAppUserId.Value && u.DateDeletedUtc == null && u.IsActive);
+        if (!ownerExists) return Results.BadRequest("OwnerAppUserId is invalid.");
+    }
+
     row.Title = title;
     row.Description = string.IsNullOrWhiteSpace(req.Description) ? null : req.Description.Trim();
+    row.OwnerAppUserId = req.OwnerAppUserId;
     row.DateModifiedUtc = DateTime.UtcNow;
     await db.SaveChangesAsync();
 
@@ -694,6 +723,16 @@ api.MapGet("/users", async (AppDbContext db) =>
         .OrderBy(u => u.Username)
         .Select(u => new { u.AppUserId, u.Username, u.Email })
         .ToListAsync())
+    .WithTags("Users");
+
+api.MapGet("/users/{username}", async (string username, AppDbContext db) =>
+{
+    var u = await db.AppUsers
+        .Where(x => x.DateDeletedUtc == null && x.IsActive && x.Username == username.ToLower())
+        .Select(x => new { x.AppUserId, x.Username, x.Email, x.Role })
+        .FirstOrDefaultAsync();
+    return u is null ? Results.NotFound() : Results.Ok(u);
+})
     .WithTags("Users");
 
 api.MapGet("/game-systems", async (AppDbContext db) =>
@@ -2770,12 +2809,13 @@ public sealed class Campaign
     public int CampaignId { get; set; }
     public string Title { get; set; } = string.Empty;
     public string? Description { get; set; }
+    public int? OwnerAppUserId { get; set; }
     public DateTime DateCreatedUtc { get; set; }
     public DateTime DateModifiedUtc { get; set; }
     public DateTime? DateDeletedUtc { get; set; }
 }
 
-public sealed record UpsertCampaignRequest(string Title, string? Description, List<int>? CollaboratorUserIds = null, List<int>? PlayerUserIds = null);
+public sealed record UpsertCampaignRequest(string Title, string? Description, int? OwnerAppUserId = null, List<int>? CollaboratorUserIds = null, List<int>? PlayerUserIds = null);
 
 public sealed class CampaignCollaborator
 {

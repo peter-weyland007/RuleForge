@@ -14,6 +14,15 @@
             <MudItem xs="12"><MudTextField @bind-Value="model.Title" Label="Title" Variant="Variant.Outlined" Required="true" /></MudItem>
             <MudItem xs="12"><MudTextField @bind-Value="model.Description" Label="Description" Variant="Variant.Outlined" Lines="4" /></MudItem>
             <MudItem xs="12" md="6">
+                <MudSelect T="int?" @bind-Value="model.OwnerAppUserId" Label="Owner" Variant="Variant.Outlined">
+                    <MudSelectItem Value="@((int?)null)">(none)</MudSelectItem>
+                    @foreach (var u in users)
+                    {
+                        <MudSelectItem Value="@((int?)u.AppUserId)">@($"{u.Username} ({u.Email})")</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="6">
                 <MudSelect T="int" MultiSelection="true" @bind-SelectedValues="SelectedCollaboratorValues" Label="Collaborators" Variant="Variant.Outlined" MultiSelectionTextFunc="@(vals => $"{SelectedCollaboratorValues.Count()} selected")">
                     @foreach (var u in users)
                     {
@@ -72,7 +81,7 @@
         if (!_isEdit) return;
         var dto = await Http.GetFromJsonAsync<CampaignDto>(Nav.ToAbsoluteUri($"/api/campaigns/{CampaignId!.Value}"));
         if (dto is null) { Nav.NavigateTo("/campaigns"); return; }
-        model = new FormModel { Title = dto.Title, Description = dto.Description };
+        model = new FormModel { Title = dto.Title, Description = dto.Description, OwnerAppUserId = dto.OwnerAppUserId };
         selectedCollaboratorIds = (dto.CollaboratorUserIds ?? new List<int>()).ToHashSet();
         selectedPlayerIds = (dto.PlayerUserIds ?? new List<int>()).ToHashSet();
     }
@@ -81,7 +90,7 @@
     {
         error = null;
         if (string.IsNullOrWhiteSpace(model.Title)) return;
-        var req = new { Title = model.Title, Description = model.Description, CollaboratorUserIds = selectedCollaboratorIds.ToList(), PlayerUserIds = selectedPlayerIds.ToList() };
+        var req = new { Title = model.Title, Description = model.Description, OwnerAppUserId = model.OwnerAppUserId, CollaboratorUserIds = selectedCollaboratorIds.ToList(), PlayerUserIds = selectedPlayerIds.ToList() };
         var res = _isEdit
             ? await Http.PutAsJsonAsync(Nav.ToAbsoluteUri($"/api/campaigns/{CampaignId!.Value}"), req)
             : await Http.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/campaigns"), req);
@@ -90,7 +99,7 @@
         else error = await res.Content.ReadAsStringAsync();
     }
 
-    private sealed class FormModel { public string Title { get; set; } = string.Empty; public string? Description { get; set; } }
-    private sealed record CampaignDto(int CampaignId, string Title, string? Description, List<int>? CollaboratorUserIds, List<int>? PlayerUserIds);
+    private sealed class FormModel { public string Title { get; set; } = string.Empty; public string? Description { get; set; } public int? OwnerAppUserId { get; set; } }
+    private sealed record CampaignDto(int CampaignId, string Title, string? Description, int? OwnerAppUserId, string? OwnerUsername, List<int>? CollaboratorUserIds, List<int>? PlayerUserIds);
     private sealed record UserDto(int AppUserId, string Username, string Email);
 }

@@ -14,12 +14,13 @@
     <MudTable Items="rows" Dense="true" Hover="true">
         <HeaderContent>
             <MudTh>Title</MudTh>
-            <MudTh>Description</MudTh><MudTh>Collaborators</MudTh><MudTh>Players</MudTh>
+            <MudTh>Description</MudTh><MudTh>Owner</MudTh><MudTh>Collaborators</MudTh><MudTh>Players</MudTh>
             <MudTh></MudTh>
         </HeaderContent>
         <RowTemplate>
             <MudTd>@context.Title</MudTd>
             <MudTd>@context.Description</MudTd>
+            <MudTd>@if (!string.IsNullOrWhiteSpace(context.OwnerUsername)) { <MudLink Href="@($"/users/{context.OwnerUsername}")">@context.OwnerUsername</MudLink> } else { <MudText Typo="Typo.caption">(none)</MudText> }</MudTd>
             <MudTd>@context.CollaboratorCount</MudTd>
             <MudTd>@context.PlayerCount</MudTd>
             <MudTd>
@@ -37,5 +38,5 @@
         rows = await Http.GetFromJsonAsync<List<CampaignDto>>(Nav.ToAbsoluteUri("/api/campaigns")) ?? new();
     }
 
-    private sealed record CampaignDto(int CampaignId, string Title, string? Description, int CollaboratorCount, int PlayerCount);
+    private sealed record CampaignDto(int CampaignId, string Title, string? Description, int? OwnerAppUserId, string? OwnerUsername, int CollaboratorCount, int PlayerCount);
 }
