@@ -4,7 +4,7 @@
 
 <PageTitle>Profile</PageTitle>
 
-<MudStack Spacing="3" Style="max-width:760px; margin: 1rem auto;">
+<MudStack Spacing="3" Style="max-width:900px; margin: 1rem auto;">
     <MudText Typo="Typo.h4">Profile</MudText>
 
     @if (!isLoaded)
@@ -23,6 +23,65 @@
                 <MudItem xs="12" md="4"><MudText Typo="Typo.caption">Username</MudText><MudText Typo="Typo.body1">@me.username</MudText></MudItem>
                 <MudItem xs="12" md="4"><MudText Typo="Typo.caption">Role</MudText><MudText Typo="Typo.body1">@me.role</MudText></MudItem>
             </MudGrid>
+        </MudPaper>
+
+        <MudPaper Class="pa-4" Outlined="true">
+            <MudText Typo="Typo.h6" Class="mb-2">Friends</MudText>
+            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.End">
+                <MudTextField @bind-Value="friendUsername" Label="Send friend request by username" Variant="Variant.Outlined" />
+                <MudButton OnClick="SendFriendRequest" Variant="Variant.Filled" Color="Color.Primary">Send Request</MudButton>
+            </MudStack>
+
+            @if (!string.IsNullOrWhiteSpace(friendError))
+            {
+                <MudAlert Severity="Severity.Error" Dense="true" Class="mt-2">@friendError</MudAlert>
+            }
+            @if (!string.IsNullOrWhiteSpace(friendOk))
+            {
+                <MudAlert Severity="Severity.Success" Dense="true" Class="mt-2">@friendOk</MudAlert>
+            }
+
+            <MudDivider Class="my-3" />
+
+            <MudText Typo="Typo.subtitle2">Incoming Requests (@incoming.Count)</MudText>
+            @if (incoming.Count == 0)
+            {
+                <MudText Typo="Typo.body2">No incoming requests.</MudText>
+            }
+            else
+            {
+                <MudList Dense="true">
+                    @foreach (var r in incoming)
+                    {
+                        <MudListItem>
+                            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Style="width:100%">
+                                <MudLink Href="@($"/users/{r.FromUser.Username}")">@r.FromUser.Username</MudLink>
+                                <MudText Typo="Typo.caption">(@r.FromUser.Email)</MudText>
+                                <MudSpacer />
+                                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success" OnClick="@(() => Approve(r.FriendRequestId))">Approve</MudButton>
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => Decline(r.FriendRequestId))">Decline</MudButton>
+                            </MudStack>
+                        </MudListItem>
+                    }
+                </MudList>
+            }
+
+            <MudDivider Class="my-3" />
+
+            <MudText Typo="Typo.subtitle2">Friends (@friends.Count)</MudText>
+            @if (friends.Count == 0)
+            {
+                <MudText Typo="Typo.body2">No friends yet.</MudText>
+            }
+            else
+            {
+                <MudList Dense="true">
+                    @foreach (var f in friends)
+                    {
+                        <MudListItem><MudLink Href="@($"/users/{f.Username}")">@f.Username</MudLink></MudListItem>
+                    }
+                </MudList>
+            }
         </MudPaper>
 
         <MudPaper Class="pa-4" Outlined="true">
@@ -55,11 +114,19 @@
     private string? error;
     private string? ok;
 
+    private string friendUsername = string.Empty;
+    private string? friendError;
+    private string? friendOk;
+    private List<IncomingRequestDto> incoming = new();
+    private List<FriendDto> friends = new();
+
     protected override async Task OnInitializedAsync()
     {
         try
         {
             me = await JS.InvokeAsync<AuthMe?>("ruleforgeAuth.me");
+            if (me is not null)
+                await LoadFriendsData();
         }
         catch
         {
@@ -68,6 +135,57 @@
         finally
         {
             isLoaded = true;
+        }
+    }
+
+    private async Task LoadFriendsData()
+    {
+        incoming = await JS.InvokeAsync<List<IncomingRequestDto>>("ruleforgeAuth.friendRequestsIncoming") ?? new();
+        friends = await JS.InvokeAsync<List<FriendDto>>("ruleforgeAuth.friendsList") ?? new();
+    }
+
+    private async Task SendFriendRequest()
+    {
+        friendError = null;
+        friendOk = null;
+        if (string.IsNullOrWhiteSpace(friendUsername)) return;
+        try
+        {
+            await JS.InvokeAsync<object>("ruleforgeAuth.friendRequestSend", friendUsername);
+            friendOk = "Friend request sent.";
+            friendUsername = string.Empty;
+        }
+        catch (Exception ex)
+        {
+            friendError = ex.Message;
+        }
+    }
+
+    private async Task Approve(int id)
+    {
+        friendError = null;
+        try
+        {
+            await JS.InvokeAsync<object>("ruleforgeAuth.friendRequestApprove", id);
+            await LoadFriendsData();
+        }
+        catch (Exception ex)
+        {
+            friendError = ex.Message;
+        }
+    }
+
+    private async Task Decline(int id)
+    {
+        friendError = null;
+        try
+        {
+            await JS.InvokeAsync<object>("ruleforgeAuth.friendRequestDecline", id);
+            await LoadFriendsData();
+        }
+        catch (Exception ex)
+        {
+            friendError = ex.Message;
         }
     }
 
@@ -95,4 +213,7 @@
     }
 
     private sealed record AuthMe(string? id, string? email, string? username, string? role, bool mustChangePassword);
+    private sealed record IncomingFromUserDto(int AppUserId, string Username, string Email);
+    private sealed record IncomingRequestDto(int FriendRequestId, DateTime DateCreatedUtc, IncomingFromUserDto FromUser);
+    private sealed record FriendDto(int AppUserId, string Username, string Email);
 }

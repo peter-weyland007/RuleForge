@@ -19,6 +19,7 @@
                 <MudItem xs="12" md="4"><MudText Typo="Typo.caption">Username</MudText><MudText Typo="Typo.body1">@summary.user.Username</MudText></MudItem>
                 <MudItem xs="12" md="4"><MudText Typo="Typo.caption">Campaigns</MudText><MudText Typo="Typo.body1">@summary.campaignCount</MudText></MudItem>
                 <MudItem xs="12" md="4"><MudText Typo="Typo.caption">Items</MudText><MudText Typo="Typo.body1">@summary.itemCount</MudText></MudItem>
+                <MudItem xs="12" md="4"><MudText Typo="Typo.caption">Friends</MudText><MudText Typo="Typo.body1">@summary.friendCount</MudText></MudItem>
             </MudGrid>
         </MudPaper>
 
@@ -83,5 +84,5 @@
     private sealed record UserDto(int AppUserId, string Username, string Email, string Role);
     private sealed record CampaignLinkDto(int Key, string Title, List<string> Relationships);
     private sealed record ItemLinkDto(int ItemId, string Name, string Slug, string Relationship);
-    private sealed record UserSummaryDto(UserDto user, int campaignCount, int itemCount, List<CampaignLinkDto> campaigns, List<ItemLinkDto> items);
+    private sealed record UserSummaryDto(UserDto user, int campaignCount, int itemCount, int friendCount, List<CampaignLinkDto> campaigns, List<ItemLinkDto> items);
 }

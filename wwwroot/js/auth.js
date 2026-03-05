@@ -158,4 +158,45 @@ window.ruleforgeAuth = {
     if (!res.ok) throw new Error(text || `Update failed (${res.status})`);
     return text ? JSON.parse(text) : {};
   }
+,
+
+  async friendRequestSend(toUsername) {
+    const res = await fetch('/api/friends/requests', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ toUsername })
+    });
+    const text = await res.text();
+    if (!res.ok) throw new Error(text || 'Failed to send request');
+    return text ? JSON.parse(text) : {};
+  },
+
+  async friendRequestsIncoming() {
+    const res = await fetch('/api/friends/requests/incoming', { credentials: 'include' });
+    const text = await res.text();
+    if (!res.ok) throw new Error(text || 'Failed to load incoming requests');
+    return text ? JSON.parse(text) : [];
+  },
+
+  async friendRequestApprove(id) {
+    const res = await fetch(`/api/friends/requests/${id}/approve`, { method: 'POST', credentials: 'include' });
+    const text = await res.text();
+    if (!res.ok) throw new Error(text || 'Failed to approve request');
+    return text ? JSON.parse(text) : {};
+  },
+
+  async friendRequestDecline(id) {
+    const res = await fetch(`/api/friends/requests/${id}/decline`, { method: 'POST', credentials: 'include' });
+    const text = await res.text();
+    if (!res.ok) throw new Error(text || 'Failed to decline request');
+    return text ? JSON.parse(text) : {};
+  },
+
+  async friendsList() {
+    const res = await fetch('/api/friends', { credentials: 'include' });
+    const text = await res.text();
+    if (!res.ok) throw new Error(text || 'Failed to load friends');
+    return text ? JSON.parse(text) : [];
+  }
 };

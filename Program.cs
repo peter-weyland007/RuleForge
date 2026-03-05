@@ -421,6 +421,28 @@ using (var scope = app.Services.CreateScope())
         );
     """);
     try { await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS IX_AppErrors_ErrorUid ON AppErrors (ErrorUid);"); } catch (SqliteException) { }
+
+    await db.Database.ExecuteSqlRawAsync("""
+        CREATE TABLE IF NOT EXISTS FriendRequests (
+            FriendRequestId INTEGER PRIMARY KEY AUTOINCREMENT,
+            FromAppUserId INTEGER NOT NULL,
+            ToAppUserId INTEGER NOT NULL,
+            Status TEXT NOT NULL,
+            DateCreatedUtc TEXT NOT NULL,
+            DateResolvedUtc TEXT NULL
+        );
+    """);
+
+    await db.Database.ExecuteSqlRawAsync("""
+        CREATE TABLE IF NOT EXISTS Friends (
+            FriendId INTEGER PRIMARY KEY AUTOINCREMENT,
+            UserAId INTEGER NOT NULL,
+            UserBId INTEGER NOT NULL,
+            DateCreatedUtc TEXT NOT NULL
+        );
+    """);
+    try { await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS IX_Friends_Pair_Unique ON Friends (UserAId, UserBId);"); } catch (SqliteException) { }
+
     try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE AppUsers ADD COLUMN Username TEXT NOT NULL DEFAULT '';"); } catch (SqliteException) { }
     try { await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS IX_AppUsers_Email_Unique_Active ON AppUsers (Email) WHERE DateDeletedUtc IS NULL;"); } catch (SqliteException) { }
     try { await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS IX_AppUsers_Username_Unique_Active ON AppUsers (Username) WHERE DateDeletedUtc IS NULL;"); } catch (SqliteException) { }
@@ -837,6 +859,111 @@ api.MapGet("/users", async (AppDbContext db) =>
     .WithTags("Users");
 
 
+
+api.MapPost("/friends/requests", async (SendFriendRequestRequest req, AppDbContext db, HttpContext http) =>
+{
+    if (http.User?.Identity?.IsAuthenticated != true) return Results.Unauthorized();
+    var idRaw = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+    if (!int.TryParse(idRaw, out var fromUserId)) return Results.Unauthorized();
+    if (string.IsNullOrWhiteSpace(req.ToUsername)) return await LoggedBadRequestAsync(db, http, "ToUsername is required.");
+
+    var toUsername = req.ToUsername.Trim().ToLowerInvariant();
+    var toUser = await db.AppUsers.FirstOrDefaultAsync(u => u.DateDeletedUtc == null && u.IsActive && u.Username == toUsername);
+    if (toUser is null) return await LoggedBadRequestAsync(db, http, "Target user not found.");
+    if (toUser.AppUserId == fromUserId) return await LoggedBadRequestAsync(db, http, "Cannot friend yourself.");
+
+    var a = Math.Min(fromUserId, toUser.AppUserId);
+    var b = Math.Max(fromUserId, toUser.AppUserId);
+
+    var alreadyFriends = await db.Friends.AnyAsync(f => f.UserAId == a && f.UserBId == b);
+    if (alreadyFriends) return await LoggedBadRequestAsync(db, http, "You are already friends.");
+
+    var pending = await db.FriendRequests.AnyAsync(fr => fr.Status == "Pending" && ((fr.FromAppUserId == fromUserId && fr.ToAppUserId == toUser.AppUserId) || (fr.FromAppUserId == toUser.AppUserId && fr.ToAppUserId == fromUserId)));
+    if (pending) return await LoggedBadRequestAsync(db, http, "A pending friend request already exists.");
+
+    db.FriendRequests.Add(new FriendRequest { FromAppUserId = fromUserId, ToAppUserId = toUser.AppUserId, Status = "Pending", DateCreatedUtc = DateTime.UtcNow });
+    await db.SaveChangesAsync();
+    return Results.Ok(new { ok = true });
+}).WithTags("Friends");
+
+api.MapGet("/friends/requests/incoming", async (AppDbContext db, HttpContext http) =>
+{
+    if (http.User?.Identity?.IsAuthenticated != true) return Results.Unauthorized();
+    var idRaw = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+    if (!int.TryParse(idRaw, out var userId)) return Results.Unauthorized();
+
+    var rows = await db.FriendRequests
+        .Where(fr => fr.Status == "Pending" && fr.ToAppUserId == userId)
+        .OrderByDescending(fr => fr.DateCreatedUtc)
+        .Select(fr => new
+        {
+            fr.FriendRequestId,
+            fr.DateCreatedUtc,
+            FromUser = db.AppUsers.Where(u => u.AppUserId == fr.FromAppUserId).Select(u => new { u.AppUserId, u.Username, u.Email }).FirstOrDefault()
+        })
+        .ToListAsync();
+
+    return Results.Ok(rows);
+}).WithTags("Friends");
+
+api.MapPost("/friends/requests/{friendRequestId:int}/approve", async (int friendRequestId, AppDbContext db, HttpContext http) =>
+{
+    if (http.User?.Identity?.IsAuthenticated != true) return Results.Unauthorized();
+    var idRaw = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+    if (!int.TryParse(idRaw, out var userId)) return Results.Unauthorized();
+
+    var fr = await db.FriendRequests.FirstOrDefaultAsync(x => x.FriendRequestId == friendRequestId && x.Status == "Pending");
+    if (fr is null) return Results.NotFound();
+    if (fr.ToAppUserId != userId) return Results.Forbid();
+
+    fr.Status = "Approved";
+    fr.DateResolvedUtc = DateTime.UtcNow;
+
+    var a = Math.Min(fr.FromAppUserId, fr.ToAppUserId);
+    var b = Math.Max(fr.FromAppUserId, fr.ToAppUserId);
+    var exists = await db.Friends.AnyAsync(f => f.UserAId == a && f.UserBId == b);
+    if (!exists) db.Friends.Add(new Friend { UserAId = a, UserBId = b, DateCreatedUtc = DateTime.UtcNow });
+
+    await db.SaveChangesAsync();
+    return Results.Ok(new { ok = true });
+}).WithTags("Friends");
+
+api.MapPost("/friends/requests/{friendRequestId:int}/decline", async (int friendRequestId, AppDbContext db, HttpContext http) =>
+{
+    if (http.User?.Identity?.IsAuthenticated != true) return Results.Unauthorized();
+    var idRaw = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+    if (!int.TryParse(idRaw, out var userId)) return Results.Unauthorized();
+
+    var fr = await db.FriendRequests.FirstOrDefaultAsync(x => x.FriendRequestId == friendRequestId && x.Status == "Pending");
+    if (fr is null) return Results.NotFound();
+    if (fr.ToAppUserId != userId) return Results.Forbid();
+
+    fr.Status = "Declined";
+    fr.DateResolvedUtc = DateTime.UtcNow;
+    await db.SaveChangesAsync();
+    return Results.Ok(new { ok = true });
+}).WithTags("Friends");
+
+api.MapGet("/friends", async (AppDbContext db, HttpContext http) =>
+{
+    if (http.User?.Identity?.IsAuthenticated != true) return Results.Unauthorized();
+    var idRaw = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+    if (!int.TryParse(idRaw, out var userId)) return Results.Unauthorized();
+
+    var links = await db.Friends
+        .Where(f => f.UserAId == userId || f.UserBId == userId)
+        .ToListAsync();
+
+    var ids = links.Select(f => f.UserAId == userId ? f.UserBId : f.UserAId).Distinct().ToList();
+    var users = await db.AppUsers
+        .Where(u => u.DateDeletedUtc == null && u.IsActive && ids.Contains(u.AppUserId))
+        .OrderBy(u => u.Username)
+        .Select(u => new { u.AppUserId, u.Username, u.Email })
+        .ToListAsync();
+
+    return Results.Ok(users);
+}).WithTags("Friends");
+
 api.MapGet("/users/{username}/summary", async (string username, AppDbContext db) =>
 {
     var uname = username.Trim().ToLowerInvariant();
@@ -881,11 +1008,14 @@ api.MapGet("/users/{username}/summary", async (string username, AppDbContext db)
         .Select(i => new { i.ItemId, i.Name, i.Slug, Relationship = "Owner" })
         .ToListAsync();
 
+    var friendCount = await db.Friends.CountAsync(f => f.UserAId == user.AppUserId || f.UserBId == user.AppUserId);
+
     return Results.Ok(new
     {
         user,
         campaignCount = campaigns.Count,
         itemCount = items.Count,
+        friendCount,
         campaigns,
         items
     });
@@ -2813,6 +2943,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<CampaignCollaborator> CampaignCollaborators => Set<CampaignCollaborator>();
     public DbSet<CampaignPlayer> CampaignPlayers => Set<CampaignPlayer>();
     public DbSet<AppError> AppErrors => Set<AppError>();
+    public DbSet<FriendRequest> FriendRequests => Set<FriendRequest>();
+    public DbSet<Friend> Friends => Set<Friend>();
 }
 
 public sealed class Note
@@ -3051,6 +3183,26 @@ public sealed record MergeGameSystemsRequest(int FromGameSystemId, int ToGameSys
 public sealed record ReassignOrphansRequest(int FromGameSystemId, int ToGameSystemId);
 public sealed record ReassignOneOrphanRequest(string Kind, int Id, int ToGameSystemId);
 
+
+public sealed class FriendRequest
+{
+    public int FriendRequestId { get; set; }
+    public int FromAppUserId { get; set; }
+    public int ToAppUserId { get; set; }
+    public string Status { get; set; } = "Pending";
+    public DateTime DateCreatedUtc { get; set; }
+    public DateTime? DateResolvedUtc { get; set; }
+}
+
+public sealed class Friend
+{
+    public int FriendId { get; set; }
+    public int UserAId { get; set; }
+    public int UserBId { get; set; }
+    public DateTime DateCreatedUtc { get; set; }
+}
+
+public sealed record SendFriendRequestRequest(string ToUsername);
 
 public sealed class AppError
 {
