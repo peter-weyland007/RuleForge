@@ -1,3 +1,4 @@
+@using Microsoft.AspNetCore.Components.Authorization
 @page "/items"
 @using System.Net.Http.Json
 @inject HttpClient Http
@@ -10,7 +11,7 @@
 <MudStack Spacing="3">
     <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
         <MudText Typo="Typo.h4">Items</MudText>
-        <MudButton Href="/items/new" StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled">Create</MudButton>
+        <AuthorizeView Context="auth"><Authorized><MudButton Href="/items/new" StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled">Create</MudButton></Authorized></AuthorizeView>
     </MudStack>
 
     <MudPaper Class="pa-4" Outlined="true">
@@ -24,7 +25,7 @@
 
     <MudTable Items="items" Dense="true" Hover="true">
         <HeaderContent>
-            <MudTh>Name</MudTh><MudTh>Type</MudTh><MudTh>Rarity</MudTh><MudTh>Cost</MudTh><MudTh>Weight (lb)</MudTh><MudTh>Qty</MudTh><MudTh>Tags</MudTh><MudTh>Source</MudTh><MudTh></MudTh>
+            <MudTh>Name</MudTh><MudTh>Type</MudTh><MudTh>Rarity</MudTh><MudTh>Cost</MudTh><MudTh>Weight (lb)</MudTh><MudTh>Qty</MudTh><MudTh>Tags</MudTh><MudTh>Source</MudTh><AuthorizeView Context="auth"><Authorized><MudTh></MudTh></Authorized></AuthorizeView>
         </HeaderContent>
         <RowTemplate>
             <MudTd><MudLink Href="@($"/items/{context.ItemId}")">@context.Name</MudLink></MudTd>
@@ -35,7 +36,7 @@
             <MudTd>@context.Quantity</MudTd>
             <MudTd>@FormatTags(context.TagNames, context.Tags)</MudTd>
             <MudTd>@context.SourceType</MudTd>
-            <MudTd><MudIconButton Href="@($"/items/{context.ItemId}/edit")" Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" /><MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(()=>ConfirmDelete(context.ItemId, context.Name))" /></MudTd>
+            <AuthorizeView Context="auth"><Authorized><MudTd><MudIconButton Href="@($"/items/{context.ItemId}/edit")" Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" /><MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(()=>ConfirmDelete(context.ItemId, context.Name))" /></MudTd></Authorized></AuthorizeView>
         </RowTemplate>
     </MudTable>
 </MudStack>

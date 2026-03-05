@@ -1,3 +1,4 @@
+@using Microsoft.AspNetCore.Components.Authorization
 @page "/campaigns"
 @inject IJSRuntime JS
 
@@ -6,7 +7,7 @@
 <MudStack Spacing="3">
     <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
         <MudText Typo="Typo.h4">Campaigns</MudText>
-        <MudButton Href="/campaigns/new" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">New Campaign</MudButton>
+        <AuthorizeView Context="auth"><Authorized><MudButton Href="/campaigns/new" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">New Campaign</MudButton></Authorized></AuthorizeView>
     </MudStack>
 
     @if (!string.IsNullOrWhiteSpace(error))
@@ -18,7 +19,7 @@
         <HeaderContent>
             <MudTh>Title</MudTh>
             <MudTh>Description</MudTh><MudTh>Owner</MudTh><MudTh>Collaborators</MudTh><MudTh>Players</MudTh>
-            <MudTh></MudTh>
+            <AuthorizeView Context="auth"><Authorized><MudTh></MudTh></Authorized></AuthorizeView>
         </HeaderContent>
         <RowTemplate>
             <MudTd>@context.Title</MudTd>
@@ -26,9 +27,9 @@
             <MudTd>@if (!string.IsNullOrWhiteSpace(context.OwnerUsername)) { <MudLink Href="@($"/users/{context.OwnerUsername}")">@context.OwnerUsername</MudLink> } else { <MudText Typo="Typo.caption">(none)</MudText> }</MudTd>
             <MudTd>@context.CollaboratorCount</MudTd>
             <MudTd>@context.PlayerCount</MudTd>
-            <MudTd>
+            <AuthorizeView Context="auth"><Authorized><MudTd>
                 <MudIconButton Href="@($"/campaigns/{context.CampaignId}/edit")" Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" />
-            </MudTd>
+            </MudTd></Authorized></AuthorizeView>
         </RowTemplate>
     </MudTable>
 </MudStack>

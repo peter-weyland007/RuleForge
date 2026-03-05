@@ -1,3 +1,4 @@
+@using Microsoft.AspNetCore.Components.Authorization
 @page "/game-systems"
 @using System.Net.Http.Json
 @inject HttpClient Http
@@ -10,7 +11,7 @@
 <MudStack Spacing="3">
     <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
         <MudText Typo="Typo.h4">Game Systems</MudText>
-        <MudButton Href="/game-systems/new" StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled">Create</MudButton>
+        <AuthorizeView Context="auth"><Authorized><MudButton Href="/game-systems/new" StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled">Create</MudButton></Authorized></AuthorizeView>
     </MudStack>
 
     <MudTable Items="rows" Hover="true" Dense="true" Loading="loading">
@@ -20,7 +21,7 @@
                 <MudTh>Slug</MudTh>
                 <MudTh>Alias</MudTh>
                 <MudTh>Source</MudTh>
-                <MudTh></MudTh>
+                <AuthorizeView Context="auth"><Authorized><MudTh></MudTh></Authorized></AuthorizeView>
             </HeaderContent>
             <RowTemplate>
                 
@@ -28,10 +29,10 @@
                 <MudTd>@context.Slug</MudTd>
                 <MudTd>@context.Alias</MudTd>
                 <MudTd>@context.SourceType</MudTd>
-                <MudTd>
+                <AuthorizeView Context="auth"><Authorized><MudTd>
                     <MudIconButton Href="@($"/game-systems/{context.GameSystemId}/edit")" Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" />
                     <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(()=>ConfirmDelete(context.GameSystemId, context.Name))" />
-                </MudTd>
+                </MudTd></Authorized></AuthorizeView>
             </RowTemplate>
         </MudTable>
 </MudStack>
