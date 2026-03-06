@@ -1,0 +1,142 @@
+@page "/creatures/{CreatureId:int}"
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject NavigationManager Nav
+@using Microsoft.AspNetCore.Components.Authorization
+
+<PageTitle>Creature Statblock</PageTitle>
+
+@if (creature is null)
+{
+    <MudText>Loading...</MudText>
+}
+else
+{
+    <MudContainer MaxWidth="MaxWidth.Medium">
+        <MudPaper Class="pa-4 statblock" Outlined="true">
+            <MudText Typo="Typo.h4" Class="statblock-title">@creature.Name</MudText>
+            <MudText Typo="Typo.subtitle2" Class="mb-2">@MetaLine()</MudText>
+            <MudDivider Class="my-2" />
+
+            <MudGrid>
+                <MudItem xs="12" md="6"><MudText Typo="Typo.body2"><b>Armor Class:</b> @Display(creature.ArmorClass)</MudText></MudItem>
+                <MudItem xs="12" md="6"><MudText Typo="Typo.body2"><b>Hit Points:</b> @Display(creature.HitPoints)</MudText></MudItem>
+                <MudItem xs="12" md="6"><MudText Typo="Typo.body2"><b>Speed:</b> @Display(creature.Speed)</MudText></MudItem>
+                <MudItem xs="12" md="6"><MudText Typo="Typo.body2"><b>Challenge:</b> @Display(creature.ChallengeRating)</MudText></MudItem>
+            </MudGrid>
+
+            <MudDivider Class="my-2" />
+
+            <MudGrid>
+                <MudItem xs="4" sm="2"><MudText Align="Align.Center"><b>STR</b><br/>@Display(creature.Strength)</MudText></MudItem>
+                <MudItem xs="4" sm="2"><MudText Align="Align.Center"><b>DEX</b><br/>@Display(creature.Dexterity)</MudText></MudItem>
+                <MudItem xs="4" sm="2"><MudText Align="Align.Center"><b>CON</b><br/>@Display(creature.Constitution)</MudText></MudItem>
+                <MudItem xs="4" sm="2"><MudText Align="Align.Center"><b>INT</b><br/>@Display(creature.Intelligence)</MudText></MudItem>
+                <MudItem xs="4" sm="2"><MudText Align="Align.Center"><b>WIS</b><br/>@Display(creature.Wisdom)</MudText></MudItem>
+                <MudItem xs="4" sm="2"><MudText Align="Align.Center"><b>CHA</b><br/>@Display(creature.Charisma)</MudText></MudItem>
+            </MudGrid>
+
+            @if (!string.IsNullOrWhiteSpace(creature.Description))
+            {
+                <MudDivider Class="my-3" />
+                <MudText Typo="Typo.subtitle2"><b>Description</b></MudText>
+                <MudText Typo="Typo.body2">@creature.Description</MudText>
+            }
+
+            @RenderSection("Traits", creature.TraitsList)
+            @RenderSection("Actions", creature.ActionsList)
+            @RenderSection("Reactions", creature.ReactionsList)
+            @RenderSection("Legendary Actions", creature.LegendaryActionsList)
+
+            <MudStack Row="true" Spacing="2" Class="mt-4">
+                <AuthorizeView Context="auth"><Authorized><MudButton Href="@($"/creatures/{creature.CreatureId}/edit")" Color="Color.Primary" Variant="Variant.Filled">Edit</MudButton></Authorized></AuthorizeView>
+                <MudButton Href="/creatures" Variant="Variant.Text">Back</MudButton>
+            </MudStack>
+        </MudPaper>
+    </MudContainer>
+}
+
+<style>
+    .statblock { border-left: 6px solid #8b5a2b; background: #fffdf8; }
+    .statblock-title { font-variant: small-caps; letter-spacing: .04em; }
+</style>
+
+@code {
+    [Parameter] public int CreatureId { get; set; }
+    private CreatureDto? creature;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        creature = await Http.GetFromJsonAsync<CreatureDto>(Nav.ToAbsoluteUri($"/api/creatures/{CreatureId}"));
+    }
+
+    private string MetaLine()
+    {
+        if (creature is null) return string.Empty;
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(creature.Size)) parts.Add(creature.Size!);
+        if (!string.IsNullOrWhiteSpace(creature.CreatureType)) parts.Add(creature.CreatureType!);
+        if (!string.IsNullOrWhiteSpace(creature.Alignment)) parts.Add(creature.Alignment!);
+        return parts.Count > 0 ? string.Join(", ", parts) : "Creature";
+    }
+
+    private static string Display(string? s) => string.IsNullOrWhiteSpace(s) ? "—" : s;
+    private static string Display(int? n) => n.HasValue ? n.Value.ToString() : "—";
+
+    private RenderFragment RenderSection(string title, List<AbilityDto>? list) => builder =>
+    {
+        if (list is null || list.Count == 0) return;
+        var i = 0;
+        builder.OpenComponent<MudDivider>(i++);
+        builder.AddAttribute(i++, "Class", "my-3");
+        builder.CloseComponent();
+
+        builder.OpenComponent<MudText>(i++);
+        builder.AddAttribute(i++, "Typo", Typo.subtitle2);
+        builder.AddAttribute(i++, "ChildContent", (RenderFragment)(b => b.AddMarkupContent(0, $"<b>{title}</b>")));
+        builder.CloseComponent();
+
+        foreach (var row in list.OrderBy(x => x.SortOrder))
+        {
+            builder.OpenElement(i++, "div");
+            builder.OpenComponent<MudText>(i++);
+            builder.AddAttribute(i++, "Typo", Typo.body2);
+            var label = string.IsNullOrWhiteSpace(row.Name) ? string.Empty : $"<b>{row.Name}.</b> ";
+            builder.AddAttribute(i++, "ChildContent", (RenderFragment)(b => b.AddMarkupContent(0, label + System.Net.WebUtility.HtmlEncode(row.Description))));
+            builder.CloseComponent();
+            builder.CloseElement();
+        }
+    };
+
+    private sealed record AbilityDto(string? Name, string Description, int SortOrder);
+    private sealed record CreatureDto(
+        int CreatureId,
+        int GameSystemId,
+        string Name,
+        string Slug,
+        string? Alias,
+        string? CreatureType,
+        string? Size,
+        string? Alignment,
+        int? ArmorClass,
+        int? HitPoints,
+        string? Speed,
+        int? Strength,
+        int? Dexterity,
+        int? Constitution,
+        int? Intelligence,
+        int? Wisdom,
+        int? Charisma,
+        string? ChallengeRating,
+        int? ProficiencyBonus,
+        string? Description,
+        SourceType SourceType,
+        int? OwnerAppUserId,
+        int? SourceMaterialId,
+        int? CampaignId,
+        int? SourcePage,
+        List<AbilityDto>? TraitsList,
+        List<AbilityDto>? ActionsList,
+        List<AbilityDto>? ReactionsList,
+        List<AbilityDto>? LegendaryActionsList);
+}

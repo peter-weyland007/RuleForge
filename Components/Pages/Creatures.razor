@@ -24,11 +24,11 @@
             <AuthorizeView Context="auth"><Authorized><MudTh></MudTh></Authorized></AuthorizeView>
         </HeaderContent>
         <RowTemplate>
-            <MudTd>@context.Name</MudTd>
+            <MudTd><MudLink Href="@($"/creatures/{context.CreatureId}")">@context.Name</MudLink></MudTd>
             <MudTd>@context.CreatureType</MudTd>
             <MudTd>@context.ChallengeRating</MudTd>
             <MudTd>@context.SourceType</MudTd>
-            <AuthorizeView Context="auth"><Authorized><MudTd><MudIconButton Href="@($"/creatures/{context.CreatureId}/edit")" Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" /></MudTd></Authorized></AuthorizeView>
+            <AuthorizeView Context="auth"><Authorized><MudTd><MudIconButton Href="@($"/creatures/{context.CreatureId}")" Icon="@Icons.Material.Filled.Visibility" Color="Color.Default" /><MudIconButton Href="@($"/creatures/{context.CreatureId}/edit")" Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" /></MudTd></Authorized></AuthorizeView>
         </RowTemplate>
     </MudTable>
 </MudStack>
