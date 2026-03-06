@@ -12,9 +12,9 @@
     <MudPaper Class="pa-4" Outlined="true">
         <MudGrid>
             <MudItem xs="12" md="4"><MudTextField @bind-Value="newTitle" Label="Title" Variant="Variant.Outlined" /></MudItem>
-            <MudItem xs="12" md="3"><MudTextField @bind-Value="newPriority" Label="Priority" Variant="Variant.Outlined" Placeholder="Low/Med/High" /></MudItem>
+            <MudItem xs="12" md="2"><MudSelect T="string" @bind-Value="newPriority" Label="Priority" Variant="Variant.Outlined">@foreach (var p in priorityOptions){<MudSelectItem Value="@p">@p</MudSelectItem>}</MudSelect></MudItem>
             <MudItem xs="12" md="3"><MudTextField @bind-Value="newRequestedBy" Label="Requested by" Variant="Variant.Outlined" /></MudItem>
-            <MudItem xs="12" md="2"><MudTextField @bind-Value="newEntity" Label="Entity" Variant="Variant.Outlined" Placeholder="Creature/Item/..." /></MudItem>
+            <MudItem xs="12" md="2"><MudSelect T="string" @bind-Value="newEntity" Label="Entity" Variant="Variant.Outlined">@foreach (var e in entitySelectOptions){<MudSelectItem Value="@e">@e</MudSelectItem>}</MudSelect></MudItem>
             <MudItem xs="12" md="2"><MudSelect T="string" @bind-Value="newStatus" Label="Status" Variant="Variant.Outlined"><MudSelectItem Value="@("Backlog")">Backlog</MudSelectItem><MudSelectItem Value="@("In Progress")">In Progress</MudSelectItem><MudSelectItem Value="@("Done")">Done</MudSelectItem></MudSelect></MudItem>
             <MudItem xs="12"><MudTextField @bind-Value="newDescription" Label="Description" Variant="Variant.Outlined" Lines="2" /></MudItem>
             <MudItem xs="12"><MudButton OnClick="Create" Variant="Variant.Filled" Color="Color.Primary">Add Feature</MudButton></MudItem>
@@ -62,6 +62,18 @@
                                     <MudSelectItem Value="@("In Progress")">In Progress</MudSelectItem>
                                     <MudSelectItem Value="@("Done")">Done</MudSelectItem>
                                 </MudSelect>
+                                <MudSelect T="string" Value="@(card.Entity ?? "General")" ValueChanged="@(v => UpdateEntity(card, v))" Dense="true" Variant="Variant.Outlined">
+                                    @foreach (var e in entitySelectOptions)
+                                    {
+                                        <MudSelectItem Value="@e">@e</MudSelectItem>
+                                    }
+                                </MudSelect>
+                                <MudSelect T="string" Value="@(card.Priority ?? "Medium")" ValueChanged="@(v => UpdatePriority(card, v))" Dense="true" Variant="Variant.Outlined">
+                                    @foreach (var p in priorityOptions)
+                                    {
+                                        <MudSelectItem Value="@p">@p</MudSelectItem>
+                                    }
+                                </MudSelect>
                                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => Delete(card))" />
                             </MudStack>
                         </MudPaper>
@@ -80,12 +92,15 @@
     private string newTitle = string.Empty;
     private string? newDescription;
     private string newStatus = "Backlog";
-    private string? newPriority;
+    private string newPriority = "Medium";
     private string? newRequestedBy;
-    private string? newEntity;
+    private string newEntity = "Creature";
     private string entityFilter = "All";
 
+    private static readonly string[] baseEntityOptions = ["Creature", "Item", "Campaign", "Auth", "Admin", "UI", "API", "Ops", "General"];
+    private static readonly string[] priorityOptions = ["Low", "Medium", "High", "Critical"];
     private IEnumerable<string> entityOptions => rows.Select(r => r.Entity).Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x!).Distinct().OrderBy(x => x);
+    private IEnumerable<string> entitySelectOptions => baseEntityOptions.Concat(entityOptions).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x);
     private bool EntityMatches(FeatureCard r) => entityFilter == "All" || string.Equals(r.Entity ?? string.Empty, entityFilter, StringComparison.OrdinalIgnoreCase);
 
     protected override async Task OnInitializedAsync() => await Load();
@@ -105,9 +120,9 @@
 
         newTitle = string.Empty;
         newDescription = null;
-        newPriority = null;
+        newPriority = "Medium";
         newRequestedBy = null;
-        newEntity = null;
+        newEntity = "Creature";
         newStatus = "Backlog";
         await Load();
     }
@@ -115,6 +130,21 @@
     private async Task Move(FeatureCard card, string status)
     {
         try { await JS.InvokeAsync<object>("ruleforgeAuth.featureKanbanUpdate", card.FeatureRequestId, new UpsertFeature(card.Title, card.Description, status, card.Priority, card.RequestedBy, card.Entity, card.SortOrder)); } catch (Exception ex) { error = ex.Message; return; }
+        await Load();
+    }
+
+
+    private async Task UpdateEntity(FeatureCard card, string entity)
+    {
+        try { await JS.InvokeAsync<object>("ruleforgeAuth.featureKanbanUpdate", card.FeatureRequestId, new UpsertFeature(card.Title, card.Description, card.Status, card.Priority, card.RequestedBy, entity, card.SortOrder)); }
+        catch (Exception ex) { error = ex.Message; return; }
+        await Load();
+    }
+
+    private async Task UpdatePriority(FeatureCard card, string priority)
+    {
+        try { await JS.InvokeAsync<object>("ruleforgeAuth.featureKanbanUpdate", card.FeatureRequestId, new UpsertFeature(card.Title, card.Description, card.Status, priority, card.RequestedBy, card.Entity, card.SortOrder)); }
+        catch (Exception ex) { error = ex.Message; return; }
         await Load();
     }
 
