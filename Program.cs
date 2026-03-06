@@ -54,12 +54,36 @@ builder.Services.AddAuthorization();
 builder.Services.AddCascadingAuthenticationState();
 
 
+var dbProvider = (builder.Configuration["Database:Provider"]
+    ?? Environment.GetEnvironmentVariable("RULEFORGE_DB_PROVIDER")
+    ?? "sqlite").Trim().ToLowerInvariant();
+
+var isPostgres = dbProvider is "postgres" or "postgresql" or "npgsql";
+var isSqlite = !isPostgres;
+
 var dataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ruleforge");
 Directory.CreateDirectory(dataDir);
 var dbPath = Path.Combine(dataDir, "ruleforge.db");
 
 builder.Services.AddDbContext<AppDbContext>(opt =>
-    opt.UseSqlite($"Data Source={dbPath}"));
+{
+    if (isPostgres)
+    {
+        var pg = builder.Configuration.GetConnectionString("Default")
+            ?? builder.Configuration["Database:ConnectionString"]
+            ?? Environment.GetEnvironmentVariable("RULEFORGE_POSTGRES_CONNECTION")
+            ?? Environment.GetEnvironmentVariable("DATABASE_URL");
+
+        if (string.IsNullOrWhiteSpace(pg))
+            throw new InvalidOperationException("Postgres selected but no connection string configured. Set ConnectionStrings:Default or RULEFORGE_POSTGRES_CONNECTION.");
+
+        opt.UseNpgsql(pg);
+    }
+    else
+    {
+        opt.UseSqlite($"Data Source={dbPath}");
+    }
+});
 
 var app = builder.Build();
 
@@ -159,7 +183,16 @@ app.UseSwaggerUI(c =>
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.EnsureCreated();
+
+    if (!isSqlite)
+    {
+        await db.Database.EnsureCreatedAsync();
+        await EnsureSeedAdminAccountAsync(db);
+        await SeedStarterDataAsync(db, app.Environment.ContentRootPath);
+    }
+    else
+    {
+        db.Database.EnsureCreated();
 
     await db.Database.ExecuteSqlRawAsync("""
         CREATE TABLE IF NOT EXISTS GameSystems (
@@ -548,6 +581,7 @@ using (var scope = app.Services.CreateScope())
 
     await EnsureSeedAdminAccountAsync(db);
     await SeedStarterDataAsync(db, app.Environment.ContentRootPath);
+    }
 
 }
 
