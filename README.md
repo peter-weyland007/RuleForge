@@ -152,3 +152,50 @@ The script:
 - converts integer-backed booleans to Postgres booleans where needed
 - resets identity sequences
 - prints SQLite vs Postgres row-count verification per table
+
+
+## Postgres backup + restore playbook
+
+### Backup (manual)
+
+```bash
+RULEFORGE_PGURL='postgresql://ruleforge:***@127.0.0.1:5432/ruleforge' ./scripts/pg_backup_ruleforge.sh
+```
+
+Outputs:
+- daily dump: `~/backups/ruleforge-postgres/daily/ruleforge-YYYYMMDD-HHMMSS.dump`
+- checksum: matching `.sha256`
+- retention: 7 daily, 4 weekly (weekly snapshot each Sunday)
+
+### Restore (manual)
+
+```bash
+# create target db first (example)
+/opt/homebrew/opt/postgresql@16/bin/psql -d postgres -c "CREATE DATABASE ruleforge_restore_test OWNER ruleforge;"
+
+RULEFORGE_PGHOST=127.0.0.1 RULEFORGE_PGPORT=5432 RULEFORGE_PGUSER=ruleforge RULEFORGE_PGPASSWORD='***' ./scripts/pg_restore_ruleforge.sh   ~/backups/ruleforge-postgres/daily/ruleforge-YYYYMMDD-HHMMSS.dump   ruleforge_restore_test
+```
+
+### Restore validation (example)
+
+Compare row counts between source and restored DB for critical tables:
+
+```sql
+SELECT COUNT(*) FROM "AppUsers";
+SELECT COUNT(*) FROM "GameSystems";
+SELECT COUNT(*) FROM "Items";
+SELECT COUNT(*) FROM "Creatures";
+SELECT COUNT(*) FROM "CreatureAbilities";
+SELECT COUNT(*) FROM "FeatureRequests";
+```
+
+### Scheduled nightly backup (launchd)
+
+A user launch agent was installed at:
+
+- `~/Library/LaunchAgents/com.ruleforge.pgbackup.plist`
+
+Schedule: daily at **02:15** local time.
+Logs:
+- `/tmp/ruleforge-pg-backup.log`
+- `/tmp/ruleforge-pg-backup.err.log`
