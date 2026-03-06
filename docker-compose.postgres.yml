@@ -1,0 +1,21 @@
+services:
+  ruleforge-postgres:
+    image: postgres:16
+    container_name: ruleforge-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ruleforge
+      POSTGRES_USER: ruleforge
+      POSTGRES_PASSWORD: ruleforge_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - ruleforge_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ruleforge -d ruleforge"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  ruleforge_pgdata:

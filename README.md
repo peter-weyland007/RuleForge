@@ -97,3 +97,43 @@ For remote access on your network/tailscale:
 ```bash
 ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS=http://0.0.0.0:5233 dotnet run --no-launch-profile
 ```
+
+
+## Postgres local dev (migration track)
+
+### 1) Start local Postgres
+
+```bash
+docker compose -f docker-compose.postgres.yml up -d
+```
+
+### 2) Run RuleForge against Postgres
+
+```bash
+scripts/run-ruleforge-postgres-local.sh
+```
+
+This sets:
+
+- `RULEFORGE_DB_PROVIDER=postgres`
+- `RULEFORGE_POSTGRES_CONNECTION=Host=127.0.0.1;Port=5432;Database=ruleforge;Username=ruleforge;Password=ruleforge_dev_password;...`
+
+### 3) EF migration commands (local tool)
+
+Because this project uses a custom MSBuild extensions path, include the flag below:
+
+```bash
+dotnet tool run dotnet-ef migrations list --context AppDbContext --msbuildprojectextensionspath /tmp/ruleforge_msbuild
+```
+
+Add new migration:
+
+```bash
+dotnet tool run dotnet-ef migrations add <Name> --context AppDbContext --msbuildprojectextensionspath /tmp/ruleforge_msbuild
+```
+
+### 4) Stop local Postgres
+
+```bash
+docker compose -f docker-compose.postgres.yml down
+```
