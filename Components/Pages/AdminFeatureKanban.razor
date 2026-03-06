@@ -2,6 +2,7 @@
 @using System.Net.Http.Json
 @inject HttpClient Http
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>Admin Feature Kanban</PageTitle>
 
@@ -73,7 +74,7 @@
     private async Task Load()
     {
         error = null;
-        rows = await Http.GetFromJsonAsync<List<FeatureCard>>(Nav.ToAbsoluteUri("/api/admin/feature-requests")) ?? new();
+        try { rows = await JS.InvokeAsync<List<FeatureCard>>("ruleforgeAuth.featureKanbanList") ?? new(); } catch (Exception ex) { error = ex.Message; rows = new(); }
     }
 
     private async Task Create()
@@ -81,8 +82,7 @@
         error = null;
         if (string.IsNullOrWhiteSpace(newTitle)) { error = "Title is required."; return; }
 
-        var res = await Http.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/admin/feature-requests"), new UpsertFeature(newTitle, newDescription, newStatus, newPriority, newRequestedBy, rows.Count + 1));
-        if (!res.IsSuccessStatusCode) { error = await res.Content.ReadAsStringAsync(); return; }
+        try { await JS.InvokeAsync<object>("ruleforgeAuth.featureKanbanCreate", new UpsertFeature(newTitle, newDescription, newStatus, newPriority, newRequestedBy, rows.Count + 1)); } catch (Exception ex) { error = ex.Message; return; }
 
         newTitle = string.Empty;
         newDescription = null;
@@ -94,15 +94,13 @@
 
     private async Task Move(FeatureCard card, string status)
     {
-        var res = await Http.PutAsJsonAsync(Nav.ToAbsoluteUri($"/api/admin/feature-requests/{card.FeatureRequestId}"), new UpsertFeature(card.Title, card.Description, status, card.Priority, card.RequestedBy, card.SortOrder));
-        if (!res.IsSuccessStatusCode) { error = await res.Content.ReadAsStringAsync(); return; }
+        try { await JS.InvokeAsync<object>("ruleforgeAuth.featureKanbanUpdate", card.FeatureRequestId, new UpsertFeature(card.Title, card.Description, status, card.Priority, card.RequestedBy, card.SortOrder)); } catch (Exception ex) { error = ex.Message; return; }
         await Load();
     }
 
     private async Task Delete(FeatureCard card)
     {
-        var res = await Http.DeleteAsync(Nav.ToAbsoluteUri($"/api/admin/feature-requests/{card.FeatureRequestId}"));
-        if (!res.IsSuccessStatusCode) { error = await res.Content.ReadAsStringAsync(); return; }
+        try { await JS.InvokeAsync<object>("ruleforgeAuth.featureKanbanDelete", card.FeatureRequestId); } catch (Exception ex) { error = ex.Message; return; }
         await Load();
     }
 

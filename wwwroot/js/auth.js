@@ -214,4 +214,43 @@ window.ruleforgeAuth = {
     if (!res.ok) throw new Error(text || 'Failed to purge game system');
     return text ? JSON.parse(text) : {};
   }
+,
+  async featureKanbanList() {
+    const res = await fetch('/api/admin/feature-requests', { credentials: 'include' });
+    const text = await res.text();
+    if (!res.ok) throw new Error(text || 'Failed to load feature requests');
+    return text ? JSON.parse(text) : [];
+  },
+
+  async featureKanbanCreate(payload) {
+    const res = await fetch('/api/admin/feature-requests', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload)
+    });
+    const text = await res.text();
+    if (!res.ok) throw new Error(text || 'Failed to create feature request');
+    return text ? JSON.parse(text) : {};
+  },
+
+  async featureKanbanUpdate(id, payload) {
+    const res = await fetch(`/api/admin/feature-requests/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload)
+    });
+    const text = await res.text();
+    if (!res.ok) throw new Error(text || 'Failed to update feature request');
+    return text ? JSON.parse(text) : {};
+  },
+
+  async featureKanbanDelete(id) {
+    const res = await fetch(`/api/admin/feature-requests/${id}`, { method: 'DELETE', credentials: 'include' });
+    const text = await res.text();
+    if (!res.ok) throw new Error(text || 'Failed to delete feature request');
+    return text ? JSON.parse(text) : {};
+  }
+
 };
