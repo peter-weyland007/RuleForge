@@ -525,6 +525,7 @@ using (var scope = app.Services.CreateScope())
             Status TEXT NOT NULL,
             Priority TEXT NULL,
             RequestedBy TEXT NULL,
+            Entity TEXT NULL,
             SortOrder INTEGER NOT NULL DEFAULT 0,
             DateCreatedUtc TEXT NOT NULL,
             DateModifiedUtc TEXT NOT NULL,
@@ -532,6 +533,8 @@ using (var scope = app.Services.CreateScope())
         );
     """);
     try { await db.Database.ExecuteSqlRawAsync("CREATE INDEX IF NOT EXISTS IX_FeatureRequests_Status_Sort ON FeatureRequests (Status, SortOrder, FeatureRequestId);"); } catch (SqliteException) { }
+    try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE FeatureRequests ADD COLUMN Entity TEXT NULL;"); } catch (SqliteException) { }
+    try { await db.Database.ExecuteSqlRawAsync("UPDATE FeatureRequests SET Entity = 'Creature' WHERE DateDeletedUtc IS NULL AND (Entity IS NULL OR Entity = '') AND Title LIKE 'Bestiary%';"); } catch (SqliteException) { }
 
     try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE AppUsers ADD COLUMN Username TEXT NOT NULL DEFAULT '';"); } catch (SqliteException) { }
     try { await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS IX_AppUsers_Email_Unique_Active ON AppUsers (Email) WHERE DateDeletedUtc IS NULL;"); } catch (SqliteException) { }
@@ -757,6 +760,7 @@ api.MapGet("/admin/feature-requests", async (AppDbContext db) =>
             x.Status,
             x.Priority,
             x.RequestedBy,
+            x.Entity,
             x.SortOrder,
             x.DateCreatedUtc,
             x.DateModifiedUtc
@@ -775,6 +779,7 @@ api.MapPost("/admin/feature-requests", async (UpsertFeatureRequest req, AppDbCon
         Status = NormalizeFeatureStatus(req.Status),
         Priority = string.IsNullOrWhiteSpace(req.Priority) ? null : req.Priority.Trim(),
         RequestedBy = string.IsNullOrWhiteSpace(req.RequestedBy) ? null : req.RequestedBy.Trim(),
+        Entity = string.IsNullOrWhiteSpace(req.Entity) ? null : req.Entity.Trim(),
         SortOrder = req.SortOrder ?? 0,
         DateCreatedUtc = now,
         DateModifiedUtc = now
@@ -795,6 +800,7 @@ api.MapPut("/admin/feature-requests/{featureRequestId:int}", async (int featureR
     row.Status = NormalizeFeatureStatus(req.Status);
     row.Priority = string.IsNullOrWhiteSpace(req.Priority) ? null : req.Priority.Trim();
     row.RequestedBy = string.IsNullOrWhiteSpace(req.RequestedBy) ? null : req.RequestedBy.Trim();
+    row.Entity = string.IsNullOrWhiteSpace(req.Entity) ? null : req.Entity.Trim();
     row.SortOrder = req.SortOrder ?? row.SortOrder;
     row.DateModifiedUtc = DateTime.UtcNow;
     await db.SaveChangesAsync();
@@ -3266,12 +3272,12 @@ static async Task SeedStarterDataAsync(AppDbContext db, string contentRootPath)
     {
         var seedFeatures = new[]
         {
-            new { Title = "Bestiary Phase 3: statblock gap fields (senses/saves/skills/languages)", Description = "Add core missing MM-style fields on creatures with minimal schema churn.", Status = "Backlog", Priority = "High", RequestedBy = "Product" },
-            new { Title = "Bestiary Phase 3: damage and condition interactions", Description = "Add vulnerabilities/resistances/immunities/condition immunities for creature statblocks.", Status = "Backlog", Priority = "High", RequestedBy = "Product" },
-            new { Title = "Bestiary: structured spellcasting model", Description = "Support innate/spellcasting blocks with slots/DC/attack bonus in structured form.", Status = "Backlog", Priority = "Medium", RequestedBy = "Product" },
-            new { Title = "Bestiary: lair actions and regional effects", Description = "Extend creature abilities for high-tier monsters and encounter context.", Status = "Backlog", Priority = "Medium", RequestedBy = "Product" },
-            new { Title = "Bestiary: export/import schema docs and templates", Description = "Provide copy-paste examples and schema docs to reduce malformed import payloads.", Status = "Backlog", Priority = "Low", RequestedBy = "Product" },
-            new { Title = "Bestiary: server-side filtered list endpoint", Description = "Promote current client filters to API query filters if dataset grows.", Status = "Backlog", Priority = "Low", RequestedBy = "Product" }
+            new { Title = "Bestiary Phase 3: statblock gap fields (senses/saves/skills/languages)", Description = "Add core missing MM-style fields on creatures with minimal schema churn.", Status = "Backlog", Priority = "High", RequestedBy = "Product", Entity = "Creature" },
+            new { Title = "Bestiary Phase 3: damage and condition interactions", Description = "Add vulnerabilities/resistances/immunities/condition immunities for creature statblocks.", Status = "Backlog", Priority = "High", RequestedBy = "Product", Entity = "Creature" },
+            new { Title = "Bestiary: structured spellcasting model", Description = "Support innate/spellcasting blocks with slots/DC/attack bonus in structured form.", Status = "Backlog", Priority = "Medium", RequestedBy = "Product", Entity = "Creature" },
+            new { Title = "Bestiary: lair actions and regional effects", Description = "Extend creature abilities for high-tier monsters and encounter context.", Status = "Backlog", Priority = "Medium", RequestedBy = "Product", Entity = "Creature" },
+            new { Title = "Bestiary: export/import schema docs and templates", Description = "Provide copy-paste examples and schema docs to reduce malformed import payloads.", Status = "Backlog", Priority = "Low", RequestedBy = "Product", Entity = "Creature" },
+            new { Title = "Bestiary: server-side filtered list endpoint", Description = "Promote current client filters to API query filters if dataset grows.", Status = "Backlog", Priority = "Low", RequestedBy = "Product", Entity = "Creature" }
         };
 
         var order = 0;
@@ -3288,6 +3294,7 @@ static async Task SeedStarterDataAsync(AppDbContext db, string contentRootPath)
                     Status = NormalizeFeatureStatus(f.Status),
                     Priority = f.Priority,
                     RequestedBy = f.RequestedBy,
+                    Entity = f.Entity,
                     SortOrder = order++,
                     DateCreatedUtc = now,
                     DateModifiedUtc = now
@@ -4022,6 +4029,7 @@ public sealed class FeatureRequest
     public string Status { get; set; } = "Backlog";
     public string? Priority { get; set; }
     public string? RequestedBy { get; set; }
+    public string? Entity { get; set; }
     public int SortOrder { get; set; }
     public DateTime DateCreatedUtc { get; set; }
     public DateTime DateModifiedUtc { get; set; }
@@ -4062,7 +4070,7 @@ public sealed class Creature
 
 public sealed record CreateCreatureRequest(int GameSystemId, string Name, string? Alias = null, string? CreatureType = null, string? Size = null, string? Alignment = null, int? ArmorClass = null, int? HitPoints = null, string? Speed = null, int? Strength = null, int? Dexterity = null, int? Constitution = null, int? Intelligence = null, int? Wisdom = null, int? Charisma = null, string? ChallengeRating = null, int? ProficiencyBonus = null, string? Description = null, SourceType SourceType = SourceType.Official, int? OwnerAppUserId = null, int? SourceMaterialId = null, int? CampaignId = null, int? SourcePage = null, List<CreatureAbilityInput>? TraitsList = null, List<CreatureAbilityInput>? ActionsList = null, List<CreatureAbilityInput>? ReactionsList = null, List<CreatureAbilityInput>? LegendaryActionsList = null);
 public sealed record CreatureImportRequest(CreateCreatureRequest? Creature = null, List<CreateCreatureRequest>? Creatures = null);
-public sealed record UpsertFeatureRequest(string Title, string? Description = null, string? Status = null, string? Priority = null, string? RequestedBy = null, int? SortOrder = null);
+public sealed record UpsertFeatureRequest(string Title, string? Description = null, string? Status = null, string? Priority = null, string? RequestedBy = null, string? Entity = null, int? SortOrder = null);
 
 public sealed record CreatureAbilityInput(string? Name, string Description, int SortOrder = 0);
 

@@ -14,10 +14,24 @@
             <MudItem xs="12" md="4"><MudTextField @bind-Value="newTitle" Label="Title" Variant="Variant.Outlined" /></MudItem>
             <MudItem xs="12" md="3"><MudTextField @bind-Value="newPriority" Label="Priority" Variant="Variant.Outlined" Placeholder="Low/Med/High" /></MudItem>
             <MudItem xs="12" md="3"><MudTextField @bind-Value="newRequestedBy" Label="Requested by" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" md="2"><MudTextField @bind-Value="newEntity" Label="Entity" Variant="Variant.Outlined" Placeholder="Creature/Item/..." /></MudItem>
             <MudItem xs="12" md="2"><MudSelect T="string" @bind-Value="newStatus" Label="Status" Variant="Variant.Outlined"><MudSelectItem Value="@("Backlog")">Backlog</MudSelectItem><MudSelectItem Value="@("In Progress")">In Progress</MudSelectItem><MudSelectItem Value="@("Done")">Done</MudSelectItem></MudSelect></MudItem>
             <MudItem xs="12"><MudTextField @bind-Value="newDescription" Label="Description" Variant="Variant.Outlined" Lines="2" /></MudItem>
             <MudItem xs="12"><MudButton OnClick="Create" Variant="Variant.Filled" Color="Color.Primary">Add Feature</MudButton></MudItem>
         </MudGrid>
+    </MudPaper>
+
+    <MudPaper Class="pa-3" Outlined="true">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudText Typo="Typo.subtitle2">Filter Entity</MudText>
+            <MudSelect T="string" @bind-Value="entityFilter" Dense="true" Variant="Variant.Outlined">
+                <MudSelectItem Value="@("All")">All</MudSelectItem>
+                @foreach (var e in entityOptions)
+                {
+                    <MudSelectItem Value="@e">@e</MudSelectItem>
+                }
+            </MudSelect>
+        </MudStack>
     </MudPaper>
 
     @if (!string.IsNullOrWhiteSpace(error))
@@ -33,7 +47,7 @@
                     <MudText Typo="Typo.h6">@col</MudText>
                     <MudDivider Class="mb-2" />
 
-                    @foreach (var card in rows.Where(r => r.Status == col).OrderBy(r => r.SortOrder).ThenBy(r => r.FeatureRequestId))
+                    @foreach (var card in rows.Where(r => r.Status == col && EntityMatches(r)).OrderBy(r => r.SortOrder).ThenBy(r => r.FeatureRequestId))
                     {
                         <MudPaper Class="pa-3 mb-2" Outlined="true">
                             <MudText Typo="Typo.subtitle1">@card.Title</MudText>
@@ -41,7 +55,7 @@
                             {
                                 <MudText Typo="Typo.body2" Class="mb-1">@card.Description</MudText>
                             }
-                            <MudText Typo="Typo.caption">Priority: @(card.Priority ?? "—") · Requested by: @(card.RequestedBy ?? "—")</MudText>
+                            <MudText Typo="Typo.caption">Entity: @(card.Entity ?? "—") · Priority: @(card.Priority ?? "—") · Requested by: @(card.RequestedBy ?? "—")</MudText>
                             <MudStack Row="true" Spacing="1" Class="mt-2" AlignItems="AlignItems.Center">
                                 <MudSelect T="string" Value="@card.Status" ValueChanged="@(v => Move(card, v))" Dense="true" Variant="Variant.Outlined">
                                     <MudSelectItem Value="@("Backlog")">Backlog</MudSelectItem>
@@ -68,6 +82,11 @@
     private string newStatus = "Backlog";
     private string? newPriority;
     private string? newRequestedBy;
+    private string? newEntity;
+    private string entityFilter = "All";
+
+    private IEnumerable<string> entityOptions => rows.Select(r => r.Entity).Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x!).Distinct().OrderBy(x => x);
+    private bool EntityMatches(FeatureCard r) => entityFilter == "All" || string.Equals(r.Entity ?? string.Empty, entityFilter, StringComparison.OrdinalIgnoreCase);
 
     protected override async Task OnInitializedAsync() => await Load();
 
@@ -82,19 +101,20 @@
         error = null;
         if (string.IsNullOrWhiteSpace(newTitle)) { error = "Title is required."; return; }
 
-        try { await JS.InvokeAsync<object>("ruleforgeAuth.featureKanbanCreate", new UpsertFeature(newTitle, newDescription, newStatus, newPriority, newRequestedBy, rows.Count + 1)); } catch (Exception ex) { error = ex.Message; return; }
+        try { await JS.InvokeAsync<object>("ruleforgeAuth.featureKanbanCreate", new UpsertFeature(newTitle, newDescription, newStatus, newPriority, newRequestedBy, newEntity, rows.Count + 1)); } catch (Exception ex) { error = ex.Message; return; }
 
         newTitle = string.Empty;
         newDescription = null;
         newPriority = null;
         newRequestedBy = null;
+        newEntity = null;
         newStatus = "Backlog";
         await Load();
     }
 
     private async Task Move(FeatureCard card, string status)
     {
-        try { await JS.InvokeAsync<object>("ruleforgeAuth.featureKanbanUpdate", card.FeatureRequestId, new UpsertFeature(card.Title, card.Description, status, card.Priority, card.RequestedBy, card.SortOrder)); } catch (Exception ex) { error = ex.Message; return; }
+        try { await JS.InvokeAsync<object>("ruleforgeAuth.featureKanbanUpdate", card.FeatureRequestId, new UpsertFeature(card.Title, card.Description, status, card.Priority, card.RequestedBy, card.Entity, card.SortOrder)); } catch (Exception ex) { error = ex.Message; return; }
         await Load();
     }
 
@@ -104,6 +124,6 @@
         await Load();
     }
 
-    private sealed record FeatureCard(int FeatureRequestId, string Title, string? Description, string Status, string? Priority, string? RequestedBy, int SortOrder, DateTime DateCreatedUtc, DateTime DateModifiedUtc);
-    private sealed record UpsertFeature(string Title, string? Description, string? Status, string? Priority, string? RequestedBy, int? SortOrder);
+    private sealed record FeatureCard(int FeatureRequestId, string Title, string? Description, string Status, string? Priority, string? RequestedBy, string? Entity, int SortOrder, DateTime DateCreatedUtc, DateTime DateModifiedUtc);
+    private sealed record UpsertFeature(string Title, string? Description, string? Status, string? Priority, string? RequestedBy, string? Entity, int? SortOrder);
 }
