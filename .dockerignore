@@ -1,0 +1,9 @@
+.git
+.github
+App_Data
+bin
+obj
+/tmp
+*.db
+*.db-*
+*.log

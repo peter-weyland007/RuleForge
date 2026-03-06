@@ -199,3 +199,28 @@ Schedule: daily at **02:15** local time.
 Logs:
 - `/tmp/ruleforge-pg-backup.log`
 - `/tmp/ruleforge-pg-backup.err.log`
+
+
+## GHCR image publishing (for Unraid/private repo)
+
+This repo publishes a container image to GitHub Container Registry via GitHub Actions:
+
+- Workflow: `.github/workflows/publish-ghcr.yml`
+- Image: `ghcr.io/peter-weyland007/ruleforge`
+- Tags on `main`: `latest`, `main`, and `sha-<commit>`
+
+### First-time setup
+
+In GitHub repo settings:
+
+1. **Actions permissions**: allow workflow read/write for packages (workflow already requests `packages: write`).
+2. After first successful run, open the package in GitHub and set visibility/access as desired.
+   - For Unraid pull with auth: keep private and use a PAT with `read:packages`.
+
+### Unraid image reference
+
+Use one of:
+
+- `ghcr.io/peter-weyland007/ruleforge:latest`
+- `ghcr.io/peter-weyland007/ruleforge:main`
+- `ghcr.io/peter-weyland007/ruleforge:sha-<commit>`
