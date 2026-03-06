@@ -207,7 +207,8 @@ This repo publishes a container image to GitHub Container Registry via GitHub Ac
 
 - Workflow: `.github/workflows/publish-ghcr.yml`
 - Image: `ghcr.io/peter-weyland007/ruleforge`
-- Tags on `main`: `latest`, `main`, and `sha-<commit>`
+- Tags on `main` (internal/testing): `main`, `main-<sha>`
+- Tags on `release` (production): `prod`, `prod-<sha>`
 
 ### First-time setup
 
@@ -221,6 +222,6 @@ In GitHub repo settings:
 
 Use one of:
 
-- `ghcr.io/peter-weyland007/ruleforge:latest`
-- `ghcr.io/peter-weyland007/ruleforge:main`
-- `ghcr.io/peter-weyland007/ruleforge:sha-<commit>`
+- `ghcr.io/peter-weyland007/ruleforge:main` (internal/testing)
+- `ghcr.io/peter-weyland007/ruleforge:prod` (production)
+- `ghcr.io/peter-weyland007/ruleforge:main-<sha>` / `prod-<sha>` (pinned)
