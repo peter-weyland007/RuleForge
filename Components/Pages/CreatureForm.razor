@@ -45,57 +45,80 @@
 
             <MudItem xs="12"><MudTextField @bind-Value="model.Description" Label="Description" Variant="Variant.Outlined" Lines="4" /></MudItem>
 
-            @* Structured abilities *@
             <MudItem xs="12">
                 <MudText Typo="Typo.h6">Traits</MudText>
-                @foreach (var t in model.TraitsList)
+                @for (var i = 0; i < model.TraitsList.Count; i++)
                 {
+                    var t = model.TraitsList[i];
                     <MudGrid Class="mb-2">
                         <MudItem xs="12" md="3"><MudTextField @bind-Value="t.Name" Label="Name" Variant="Variant.Outlined" /></MudItem>
-                        <MudItem xs="12" md="8"><MudTextField @bind-Value="t.Description" Label="Description" Variant="Variant.Outlined" Lines="2" /></MudItem>
-                        <MudItem xs="12" md="1"><MudButton Color="Color.Error" Variant="Variant.Text" OnClick="@(() => RemoveTrait(t))">Remove</MudButton></MudItem>
+                        <MudItem xs="12" md="7"><MudTextField @bind-Value="t.Description" Label="Description" Variant="Variant.Outlined" Lines="2" /></MudItem>
+                        <MudItem xs="12" md="2">
+                            <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowUp" Disabled="@(i==0)" OnClick="@(() => MoveUp(model.TraitsList, i))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowDown" Disabled="@(i==model.TraitsList.Count-1)" OnClick="@(() => MoveDown(model.TraitsList, i))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" OnClick="@(() => Duplicate(model.TraitsList, i))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => RemoveAt(model.TraitsList, i))" />
+                        </MudItem>
                     </MudGrid>
                 }
-                <MudButton Variant="Variant.Outlined" OnClick="AddTrait">Add Trait</MudButton>
+                <MudButton Variant="Variant.Outlined" OnClick="@(() => model.TraitsList.Add(new AbilityLine()))">Add Trait</MudButton>
             </MudItem>
 
             <MudItem xs="12">
                 <MudText Typo="Typo.h6">Actions</MudText>
-                @foreach (var a in model.ActionsList)
+                @for (var i = 0; i < model.ActionsList.Count; i++)
                 {
+                    var a = model.ActionsList[i];
                     <MudGrid Class="mb-2">
                         <MudItem xs="12" md="3"><MudTextField @bind-Value="a.Name" Label="Name" Variant="Variant.Outlined" /></MudItem>
-                        <MudItem xs="12" md="8"><MudTextField @bind-Value="a.Description" Label="Description" Variant="Variant.Outlined" Lines="2" /></MudItem>
-                        <MudItem xs="12" md="1"><MudButton Color="Color.Error" Variant="Variant.Text" OnClick="@(() => RemoveAction(a))">Remove</MudButton></MudItem>
+                        <MudItem xs="12" md="7"><MudTextField @bind-Value="a.Description" Label="Description" Variant="Variant.Outlined" Lines="2" /></MudItem>
+                        <MudItem xs="12" md="2">
+                            <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowUp" Disabled="@(i==0)" OnClick="@(() => MoveUp(model.ActionsList, i))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowDown" Disabled="@(i==model.ActionsList.Count-1)" OnClick="@(() => MoveDown(model.ActionsList, i))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" OnClick="@(() => Duplicate(model.ActionsList, i))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => RemoveAt(model.ActionsList, i))" />
+                        </MudItem>
                     </MudGrid>
                 }
-                <MudButton Variant="Variant.Outlined" OnClick="AddAction">Add Action</MudButton>
+                <MudButton Variant="Variant.Outlined" OnClick="@(() => model.ActionsList.Add(new AbilityLine()))">Add Action</MudButton>
             </MudItem>
 
             <MudItem xs="12">
                 <MudText Typo="Typo.h6">Reactions</MudText>
-                @foreach (var r in model.ReactionsList)
+                @for (var i = 0; i < model.ReactionsList.Count; i++)
                 {
+                    var r = model.ReactionsList[i];
                     <MudGrid Class="mb-2">
                         <MudItem xs="12" md="3"><MudTextField @bind-Value="r.Name" Label="Name" Variant="Variant.Outlined" /></MudItem>
-                        <MudItem xs="12" md="8"><MudTextField @bind-Value="r.Description" Label="Description" Variant="Variant.Outlined" Lines="2" /></MudItem>
-                        <MudItem xs="12" md="1"><MudButton Color="Color.Error" Variant="Variant.Text" OnClick="@(() => RemoveReaction(r))">Remove</MudButton></MudItem>
+                        <MudItem xs="12" md="7"><MudTextField @bind-Value="r.Description" Label="Description" Variant="Variant.Outlined" Lines="2" /></MudItem>
+                        <MudItem xs="12" md="2">
+                            <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowUp" Disabled="@(i==0)" OnClick="@(() => MoveUp(model.ReactionsList, i))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowDown" Disabled="@(i==model.ReactionsList.Count-1)" OnClick="@(() => MoveDown(model.ReactionsList, i))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" OnClick="@(() => Duplicate(model.ReactionsList, i))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => RemoveAt(model.ReactionsList, i))" />
+                        </MudItem>
                     </MudGrid>
                 }
-                <MudButton Variant="Variant.Outlined" OnClick="AddReaction">Add Reaction</MudButton>
+                <MudButton Variant="Variant.Outlined" OnClick="@(() => model.ReactionsList.Add(new AbilityLine()))">Add Reaction</MudButton>
             </MudItem>
 
             <MudItem xs="12">
                 <MudText Typo="Typo.h6">Legendary Actions</MudText>
-                @foreach (var l in model.LegendaryActionsList)
+                @for (var i = 0; i < model.LegendaryActionsList.Count; i++)
                 {
+                    var l = model.LegendaryActionsList[i];
                     <MudGrid Class="mb-2">
                         <MudItem xs="12" md="3"><MudTextField @bind-Value="l.Name" Label="Name" Variant="Variant.Outlined" /></MudItem>
-                        <MudItem xs="12" md="8"><MudTextField @bind-Value="l.Description" Label="Description" Variant="Variant.Outlined" Lines="2" /></MudItem>
-                        <MudItem xs="12" md="1"><MudButton Color="Color.Error" Variant="Variant.Text" OnClick="@(() => RemoveLegendary(l))">Remove</MudButton></MudItem>
+                        <MudItem xs="12" md="7"><MudTextField @bind-Value="l.Description" Label="Description" Variant="Variant.Outlined" Lines="2" /></MudItem>
+                        <MudItem xs="12" md="2">
+                            <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowUp" Disabled="@(i==0)" OnClick="@(() => MoveUp(model.LegendaryActionsList, i))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowDown" Disabled="@(i==model.LegendaryActionsList.Count-1)" OnClick="@(() => MoveDown(model.LegendaryActionsList, i))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" OnClick="@(() => Duplicate(model.LegendaryActionsList, i))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => RemoveAt(model.LegendaryActionsList, i))" />
+                        </MudItem>
                     </MudGrid>
                 }
-                <MudButton Variant="Variant.Outlined" OnClick="AddLegendary">Add Legendary Action</MudButton>
+                <MudButton Variant="Variant.Outlined" OnClick="@(() => model.LegendaryActionsList.Add(new AbilityLine()))">Add Legendary Action</MudButton>
             </MudItem>
 
             @if (!string.IsNullOrWhiteSpace(saveError))
@@ -191,10 +214,35 @@
         }
     }
 
+    private bool ValidateAbilityRows()
+    {
+        static string? ValidateList(List<AbilityLine> list, string section)
+        {
+            for (var i = 0; i < list.Count; i++)
+            {
+                var row = list[i];
+                var hasAny = !string.IsNullOrWhiteSpace(row.Name) || !string.IsNullOrWhiteSpace(row.Description);
+                if (!hasAny) continue;
+                if (string.IsNullOrWhiteSpace(row.Description))
+                    return $"{section} row {i + 1}: Description is required.";
+            }
+            return null;
+        }
+
+        saveError = ValidateList(model.TraitsList, "Traits")
+            ?? ValidateList(model.ActionsList, "Actions")
+            ?? ValidateList(model.ReactionsList, "Reactions")
+            ?? ValidateList(model.LegendaryActionsList, "Legendary Actions");
+
+        return string.IsNullOrWhiteSpace(saveError);
+    }
+
     private async Task Save()
     {
         saveError = null;
         if (string.IsNullOrWhiteSpace(model.Name) || model.GameSystemId <= 0) return;
+        if (!ValidateAbilityRows()) return;
+
         NormalizeSourceByType();
 
         var req = new
@@ -222,10 +270,10 @@
             model.SourceMaterialId,
             model.CampaignId,
             model.SourcePage,
-            TraitsList = model.TraitsList.Select((x, i) => new { x.Name, x.Description, SortOrder = i }).ToList(),
-            ActionsList = model.ActionsList.Select((x, i) => new { x.Name, x.Description, SortOrder = i }).ToList(),
-            ReactionsList = model.ReactionsList.Select((x, i) => new { x.Name, x.Description, SortOrder = i }).ToList(),
-            LegendaryActionsList = model.LegendaryActionsList.Select((x, i) => new { x.Name, x.Description, SortOrder = i }).ToList()
+            TraitsList = model.TraitsList.Where(x => !string.IsNullOrWhiteSpace(x.Description) || !string.IsNullOrWhiteSpace(x.Name)).Select((x, i) => new { x.Name, x.Description, SortOrder = i }).ToList(),
+            ActionsList = model.ActionsList.Where(x => !string.IsNullOrWhiteSpace(x.Description) || !string.IsNullOrWhiteSpace(x.Name)).Select((x, i) => new { x.Name, x.Description, SortOrder = i }).ToList(),
+            ReactionsList = model.ReactionsList.Where(x => !string.IsNullOrWhiteSpace(x.Description) || !string.IsNullOrWhiteSpace(x.Name)).Select((x, i) => new { x.Name, x.Description, SortOrder = i }).ToList(),
+            LegendaryActionsList = model.LegendaryActionsList.Where(x => !string.IsNullOrWhiteSpace(x.Description) || !string.IsNullOrWhiteSpace(x.Name)).Select((x, i) => new { x.Name, x.Description, SortOrder = i }).ToList()
         };
 
         var res = _isEdit
@@ -242,14 +290,30 @@
         if (string.IsNullOrWhiteSpace(saveError)) saveError = "Save failed.";
     }
 
-    private void AddTrait() => model.TraitsList.Add(new AbilityLine());
-    private void AddAction() => model.ActionsList.Add(new AbilityLine());
-    private void AddReaction() => model.ReactionsList.Add(new AbilityLine());
-    private void AddLegendary() => model.LegendaryActionsList.Add(new AbilityLine());
-    private void RemoveTrait(AbilityLine x) => model.TraitsList.Remove(x);
-    private void RemoveAction(AbilityLine x) => model.ActionsList.Remove(x);
-    private void RemoveReaction(AbilityLine x) => model.ReactionsList.Remove(x);
-    private void RemoveLegendary(AbilityLine x) => model.LegendaryActionsList.Remove(x);
+    private static void MoveUp(List<AbilityLine> list, int index)
+    {
+        if (index <= 0 || index >= list.Count) return;
+        (list[index - 1], list[index]) = (list[index], list[index - 1]);
+    }
+
+    private static void MoveDown(List<AbilityLine> list, int index)
+    {
+        if (index < 0 || index >= list.Count - 1) return;
+        (list[index], list[index + 1]) = (list[index + 1], list[index]);
+    }
+
+    private static void Duplicate(List<AbilityLine> list, int index)
+    {
+        if (index < 0 || index >= list.Count) return;
+        var src = list[index];
+        list.Insert(index + 1, new AbilityLine { Name = src.Name, Description = src.Description, SortOrder = src.SortOrder });
+    }
+
+    private static void RemoveAt(List<AbilityLine> list, int index)
+    {
+        if (index < 0 || index >= list.Count) return;
+        list.RemoveAt(index);
+    }
 
     private sealed class AbilityLine { public string? Name { get; set; } public string Description { get; set; } = string.Empty; public int SortOrder { get; set; } }
 
