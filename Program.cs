@@ -705,16 +705,21 @@ api.MapPut("/admin/users/{appUserId:int}", async (int appUserId, UpdateUserAdmin
 
 
 
-api.MapGet("/creatures", async (int gameSystemId, AppDbContext db) =>
-    await db.Creatures
-        .Where(c => c.DateDeletedUtc == null && c.GameSystemId == gameSystemId)
+api.MapGet("/creatures", async (int? gameSystemId, AppDbContext db) =>
+{
+    var q = db.Creatures.Where(c => c.DateDeletedUtc == null);
+    if (gameSystemId.HasValue)
+        q = q.Where(c => c.GameSystemId == gameSystemId.Value);
+
+    return await q
         .OrderBy(c => c.Name)
         .Select(c => new
         {
             c.CreatureId, c.GameSystemId, c.Name, c.Slug, c.Alias, c.CreatureType, c.ChallengeRating,
             c.SourceType, c.OwnerAppUserId, c.SourceMaterialId, c.CampaignId
         })
-        .ToListAsync())
+        .ToListAsync();
+})
     .WithTags("Creatures");
 
 api.MapGet("/creatures/{creatureId:int}", async (int creatureId, AppDbContext db) =>
