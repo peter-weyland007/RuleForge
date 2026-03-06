@@ -3179,6 +3179,185 @@ static async Task SeedStarterDataAsync(AppDbContext db, string contentRootPath)
         }
     }
 
+    // Seed starter bestiary entries (idempotent)
+    {
+        var dnd = await ResolveSystemAsync("dungeons-dragons-5e");
+        if (dnd is not null)
+        {
+            var defaultSourceId = await db.SourceMaterials
+                .Where(sm => sm.DateDeletedUtc == null && sm.GameSystemId == dnd.GameSystemId && sm.IsOfficial)
+                .OrderBy(sm => sm.SourceMaterialId)
+                .Select(sm => (int?)sm.SourceMaterialId)
+                .FirstOrDefaultAsync();
+
+            async Task UpsertSeedCreatureAsync(
+                string name,
+                string creatureType,
+                string size,
+                string alignment,
+                int armorClass,
+                int hitPoints,
+                string speed,
+                int str,
+                int dex,
+                int con,
+                int intel,
+                int wis,
+                int cha,
+                string challengeRating,
+                int proficiencyBonus,
+                string description,
+                List<CreatureAbilityInput> traits,
+                List<CreatureAbilityInput> actions,
+                List<CreatureAbilityInput>? reactions = null,
+                List<CreatureAbilityInput>? legendary = null)
+            {
+                var slug = Slugify(name);
+                var row = await db.Creatures.FirstOrDefaultAsync(c => c.DateDeletedUtc == null && c.GameSystemId == dnd.GameSystemId && c.Slug == slug);
+                if (row is null)
+                {
+                    row = new Creature
+                    {
+                        GameSystemId = dnd.GameSystemId,
+                        Name = name,
+                        Slug = await GenerateUniqueCreatureSlugAsync(db, dnd.GameSystemId, slug),
+                        CreatureType = creatureType,
+                        Size = size,
+                        Alignment = alignment,
+                        ArmorClass = armorClass,
+                        HitPoints = hitPoints,
+                        Speed = speed,
+                        Strength = str,
+                        Dexterity = dex,
+                        Constitution = con,
+                        Intelligence = intel,
+                        Wisdom = wis,
+                        Charisma = cha,
+                        ChallengeRating = challengeRating,
+                        ProficiencyBonus = proficiencyBonus,
+                        Description = description,
+                        SourceType = SourceType.Official,
+                        OwnerAppUserId = null,
+                        SourceMaterialId = defaultSourceId,
+                        DateCreatedUtc = now,
+                        DateModifiedUtc = now
+                    };
+                    db.Creatures.Add(row);
+                    await db.SaveChangesAsync();
+                }
+                else
+                {
+                    row.Name = name;
+                    row.CreatureType = creatureType;
+                    row.Size = size;
+                    row.Alignment = alignment;
+                    row.ArmorClass = armorClass;
+                    row.HitPoints = hitPoints;
+                    row.Speed = speed;
+                    row.Strength = str;
+                    row.Dexterity = dex;
+                    row.Constitution = con;
+                    row.Intelligence = intel;
+                    row.Wisdom = wis;
+                    row.Charisma = cha;
+                    row.ChallengeRating = challengeRating;
+                    row.ProficiencyBonus = proficiencyBonus;
+                    row.Description = description;
+                    row.SourceType = SourceType.Official;
+                    row.OwnerAppUserId = null;
+                    if (!row.SourceMaterialId.HasValue) row.SourceMaterialId = defaultSourceId;
+                    row.DateModifiedUtc = now;
+                    await db.SaveChangesAsync();
+                }
+
+                await SyncCreatureAbilitiesAsync(db, row.CreatureId, traits, actions, reactions, legendary);
+                await db.SaveChangesAsync();
+            }
+
+            await UpsertSeedCreatureAsync(
+                name: "Goblin",
+                creatureType: "Humanoid (goblinoid)",
+                size: "Small",
+                alignment: "Neutral Evil",
+                armorClass: 15,
+                hitPoints: 7,
+                speed: "30 ft.",
+                str: 8,
+                dex: 14,
+                con: 10,
+                intel: 10,
+                wis: 8,
+                cha: 8,
+                challengeRating: "1/4",
+                proficiencyBonus: 2,
+                description: "Small, sneaky humanoids who rely on speed, numbers, and dirty tricks.",
+                traits: new()
+                {
+                    new CreatureAbilityInput("Nimble Escape", "The goblin can take the Disengage or Hide action as a bonus action on each of its turns.", 0)
+                },
+                actions: new()
+                {
+                    new CreatureAbilityInput("Scimitar", "Melee Weapon Attack: +4 to hit, reach 5 ft., one target. Hit: 5 (1d6 + 2) slashing damage.", 0),
+                    new CreatureAbilityInput("Shortbow", "Ranged Weapon Attack: +4 to hit, range 80/320 ft., one target. Hit: 5 (1d6 + 2) piercing damage.", 1)
+                });
+
+            await UpsertSeedCreatureAsync(
+                name: "Orc",
+                creatureType: "Humanoid (orc)",
+                size: "Medium",
+                alignment: "Chaotic Evil",
+                armorClass: 13,
+                hitPoints: 15,
+                speed: "30 ft.",
+                str: 16,
+                dex: 12,
+                con: 16,
+                intel: 7,
+                wis: 11,
+                cha: 10,
+                challengeRating: "1/2",
+                proficiencyBonus: 2,
+                description: "Savage raiders driven by brutality, strength, and the will to conquer.",
+                traits: new()
+                {
+                    new CreatureAbilityInput("Aggressive", "As a bonus action, the orc can move up to its speed toward a hostile creature that it can see.", 0)
+                },
+                actions: new()
+                {
+                    new CreatureAbilityInput("Greataxe", "Melee Weapon Attack: +5 to hit, reach 5 ft., one target. Hit: 9 (1d12 + 3) slashing damage.", 0),
+                    new CreatureAbilityInput("Javelin", "Melee or Ranged Weapon Attack: +5 to hit, reach 5 ft. or range 30/120 ft., one target. Hit: 6 (1d6 + 3) piercing damage.", 1)
+                });
+
+            await UpsertSeedCreatureAsync(
+                name: "Owlbear",
+                creatureType: "Monstrosity",
+                size: "Large",
+                alignment: "Unaligned",
+                armorClass: 13,
+                hitPoints: 59,
+                speed: "40 ft.",
+                str: 20,
+                dex: 12,
+                con: 17,
+                intel: 3,
+                wis: 12,
+                cha: 7,
+                challengeRating: "3",
+                proficiencyBonus: 2,
+                description: "A hulking blend of bear and owl, notoriously ferocious and territorial.",
+                traits: new()
+                {
+                    new CreatureAbilityInput("Keen Sight and Smell", "The owlbear has advantage on Wisdom (Perception) checks that rely on sight or smell.", 0)
+                },
+                actions: new()
+                {
+                    new CreatureAbilityInput("Multiattack", "The owlbear makes two attacks: one with its beak and one with its claws.", 0),
+                    new CreatureAbilityInput("Beak", "Melee Weapon Attack: +7 to hit, reach 5 ft., one creature. Hit: 10 (1d10 + 5) piercing damage.", 1),
+                    new CreatureAbilityInput("Claws", "Melee Weapon Attack: +7 to hit, reach 5 ft., one target. Hit: 14 (2d8 + 5) slashing damage.", 2)
+                });
+        }
+    }
+
     await db.SaveChangesAsync();
 }
 
