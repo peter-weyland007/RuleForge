@@ -186,7 +186,7 @@ using (var scope = app.Services.CreateScope())
 
     if (!isSqlite)
     {
-        await db.Database.EnsureCreatedAsync();
+        await db.Database.MigrateAsync();
         await EnsureSeedAdminAccountAsync(db);
         await SeedStarterDataAsync(db, app.Environment.ContentRootPath);
     }
