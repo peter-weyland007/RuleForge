@@ -1,7 +1,9 @@
 @page "/creatures"
 @using System.Net.Http.Json
+@using System.Text.Json
 @inject HttpClient Http
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 @using Microsoft.AspNetCore.Components.Authorization
 
 <PageTitle>Creatures</PageTitle>
@@ -34,6 +36,24 @@
         </MudGrid>
     </MudPaper>
 
+
+
+    <AuthorizeView Context="auth">
+        <Authorized>
+            <MudPaper Class="pa-4" Outlined="true">
+                <MudText Typo="Typo.subtitle1">Import Creatures (JSON)</MudText>
+                <MudTextField @bind-Value="importJson" Lines="6" Variant="Variant.Outlined" Placeholder='{"creature": {...}} or {"creatures": [...]}' />
+                <MudStack Row="true" Spacing="2" Class="mt-2">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ImportCreatures">Import</MudButton>
+                    @if (!string.IsNullOrWhiteSpace(importResult))
+                    {
+                        <MudText Typo="Typo.body2">@importResult</MudText>
+                    }
+                </MudStack>
+            </MudPaper>
+        </Authorized>
+    </AuthorizeView>
+
     <MudTable Items="filteredRows" Dense="true" Hover="true">
         <HeaderContent>
             <MudTh>Name</MudTh><MudTh>Type</MudTh><MudTh>CR</MudTh><MudTh>Source</MudTh>
@@ -44,7 +64,7 @@
             <MudTd>@context.CreatureType</MudTd>
             <MudTd>@context.ChallengeRating</MudTd>
             <MudTd>@context.SourceType</MudTd>
-            <AuthorizeView Context="auth"><Authorized><MudTd><MudIconButton Href="@($"/creatures/{context.CreatureId}")" Icon="@Icons.Material.Filled.Visibility" Color="Color.Default" /><MudIconButton Href="@($"/creatures/{context.CreatureId}/edit")" Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" /></MudTd></Authorized></AuthorizeView>
+            <AuthorizeView Context="auth"><Authorized><MudTd><MudIconButton Href="@($"/creatures/{context.CreatureId}")" Icon="@Icons.Material.Filled.Visibility" Color="Color.Default" /><MudIconButton Href="@($"/api/creatures/{context.CreatureId}/export")" Icon="@Icons.Material.Filled.Download" Color="Color.Secondary" Target="_blank" /><MudIconButton Href="@($"/creatures/{context.CreatureId}/edit")" Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" /></MudTd></Authorized></AuthorizeView>
         </RowTemplate>
     </MudTable>
 </MudStack>
@@ -59,6 +79,8 @@
     private string? crFilter;
     private string sourceFilter = "All";
     private bool officialOnly;
+    private string importJson = string.Empty;
+    private string? importResult;
 
     private IEnumerable<CreatureRowDto> filteredRows => rows.Where(MatchFilters);
 
@@ -81,6 +103,50 @@
         rows = await Http.GetFromJsonAsync<List<CreatureRowDto>>(Nav.ToAbsoluteUri($"/api/creatures?gameSystemId={selectedSystemId}")) ?? new();
     }
 
+
+
+    private async Task ImportCreatures()
+    {
+        importResult = null;
+        if (string.IsNullOrWhiteSpace(importJson))
+        {
+            importResult = "Paste JSON first.";
+            return;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(importJson);
+            object body;
+            if (doc.RootElement.TryGetProperty("Creature", out var capCreature))
+                body = new { Creature = capCreature.Deserialize<CreateCreatureImportDto>() };
+            else if (doc.RootElement.TryGetProperty("creature", out var creature))
+                body = new { Creature = creature.Deserialize<CreateCreatureImportDto>() };
+            else if (doc.RootElement.TryGetProperty("Creatures", out var capCreatures))
+                body = new { Creatures = capCreatures.Deserialize<List<CreateCreatureImportDto>>() };
+            else if (doc.RootElement.TryGetProperty("creatures", out var creatures))
+                body = new { Creatures = creatures.Deserialize<List<CreateCreatureImportDto>>() };
+            else
+                body = new { Creature = doc.RootElement.Deserialize<CreateCreatureImportDto>() };
+
+            var res = await Http.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/creatures/import"), body);
+            var txt = await res.Content.ReadAsStringAsync();
+            if (!res.IsSuccessStatusCode)
+            {
+                importResult = $"Import failed: {txt}";
+                return;
+            }
+
+            importResult = "Import successful.";
+            importJson = string.Empty;
+            await Load();
+        }
+        catch (Exception ex)
+        {
+            importResult = $"Invalid JSON: {ex.Message}";
+        }
+    }
+
     private bool MatchFilters(CreatureRowDto row)
     {
         if (!string.IsNullOrWhiteSpace(nameFilter) && !(row.Name?.Contains(nameFilter, StringComparison.OrdinalIgnoreCase) ?? false)) return false;
@@ -100,4 +166,6 @@
 
     private sealed record GameSystemDto(int GameSystemId, string Name);
     private sealed record CreatureRowDto(int CreatureId, int GameSystemId, string Name, string Slug, string? Alias, string? CreatureType, string? ChallengeRating, SourceType SourceType, int? OwnerAppUserId, int? SourceMaterialId, int? CampaignId);
+    private sealed record AbilityImportDto(string? Name, string Description, int SortOrder = 0);
+    private sealed record CreateCreatureImportDto(int GameSystemId, string Name, string? Alias = null, string? CreatureType = null, string? Size = null, string? Alignment = null, int? ArmorClass = null, int? HitPoints = null, string? Speed = null, int? Strength = null, int? Dexterity = null, int? Constitution = null, int? Intelligence = null, int? Wisdom = null, int? Charisma = null, string? ChallengeRating = null, int? ProficiencyBonus = null, string? Description = null, SourceType SourceType = SourceType.Official, int? OwnerAppUserId = null, int? SourceMaterialId = null, int? CampaignId = null, int? SourcePage = null, List<AbilityImportDto>? TraitsList = null, List<AbilityImportDto>? ActionsList = null, List<AbilityImportDto>? ReactionsList = null, List<AbilityImportDto>? LegendaryActionsList = null);
 }

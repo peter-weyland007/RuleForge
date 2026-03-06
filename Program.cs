@@ -772,6 +772,129 @@ api.MapGet("/creatures/{creatureId:int}", async (int creatureId, AppDbContext db
     });
 }).WithTags("Creatures");
 
+
+api.MapGet("/creatures/{creatureId:int}/export", async (int creatureId, AppDbContext db) =>
+{
+    var row = await db.Creatures.FirstOrDefaultAsync(c => c.CreatureId == creatureId && c.DateDeletedUtc == null);
+    if (row is null) return Results.NotFound();
+
+    var abilities = await db.CreatureAbilities
+        .Where(a => a.CreatureId == creatureId && a.DateDeletedUtc == null)
+        .OrderBy(a => a.SortOrder)
+        .Select(a => new { a.AbilityType, a.Name, a.Description, a.SortOrder })
+        .ToListAsync();
+
+    var payload = new
+    {
+        Version = 1,
+        ExportedUtc = DateTime.UtcNow,
+        Creature = new
+        {
+            row.GameSystemId, row.Name, row.Alias, row.CreatureType, row.Size, row.Alignment,
+            row.ArmorClass, row.HitPoints, row.Speed, row.Strength, row.Dexterity, row.Constitution,
+            row.Intelligence, row.Wisdom, row.Charisma, row.ChallengeRating, row.ProficiencyBonus,
+            row.Description, row.SourceType, row.OwnerAppUserId, row.SourceMaterialId, row.CampaignId, row.SourcePage,
+            TraitsList = abilities.Where(a => a.AbilityType == "Trait").Select(a => new CreatureAbilityInput(a.Name, a.Description, a.SortOrder)).ToList(),
+            ActionsList = abilities.Where(a => a.AbilityType == "Action").Select(a => new CreatureAbilityInput(a.Name, a.Description, a.SortOrder)).ToList(),
+            ReactionsList = abilities.Where(a => a.AbilityType == "Reaction").Select(a => new CreatureAbilityInput(a.Name, a.Description, a.SortOrder)).ToList(),
+            LegendaryActionsList = abilities.Where(a => a.AbilityType == "LegendaryAction").Select(a => new CreatureAbilityInput(a.Name, a.Description, a.SortOrder)).ToList()
+        }
+    };
+
+    return Results.Ok(payload);
+}).WithTags("Creatures");
+
+api.MapPost("/creatures/import", async (CreatureImportRequest req, AppDbContext db, HttpContext http) =>
+{
+    if (http.User?.Identity?.IsAuthenticated != true) return Results.Unauthorized();
+
+    var items = req.Creatures?.Where(c => c is not null).ToList() ?? new();
+    if (items.Count == 0 && req.Creature is not null) items.Add(req.Creature);
+    if (items.Count == 0) return await LoggedBadRequestAsync(db, http, "No creatures in import payload.");
+
+    var createdIds = new List<int>();
+    foreach (var c in items)
+    {
+        if (string.IsNullOrWhiteSpace(c.Name)) return await LoggedBadRequestAsync(db, http, "Imported creature Name is required.");
+        var gsExists = await db.GameSystems.AnyAsync(gs => gs.GameSystemId == c.GameSystemId && gs.DateDeletedUtc == null);
+        if (!gsExists) return await LoggedBadRequestAsync(db, http, $"Imported creature '{c.Name}' has invalid GameSystemId.");
+
+        if (c.SourceType == SourceType.Official)
+        {
+            if (!c.SourceMaterialId.HasValue) return await LoggedBadRequestAsync(db, http, $"Imported creature '{c.Name}' requires SourceMaterialId for Official source.");
+            if (c.CampaignId.HasValue) return await LoggedBadRequestAsync(db, http, $"Imported creature '{c.Name}' cannot use CampaignId for Official source.");
+        }
+        else if (c.SourceMaterialId.HasValue && c.CampaignId.HasValue)
+        {
+            return await LoggedBadRequestAsync(db, http, $"Imported creature '{c.Name}' must use SourceMaterialId or CampaignId, not both.");
+        }
+
+        if (c.SourceMaterialId.HasValue)
+        {
+            var sourceExists = await db.SourceMaterials.AnyAsync(sm => sm.SourceMaterialId == c.SourceMaterialId.Value && sm.GameSystemId == c.GameSystemId && sm.DateDeletedUtc == null);
+            if (!sourceExists) return await LoggedBadRequestAsync(db, http, $"Imported creature '{c.Name}' has invalid SourceMaterialId.");
+        }
+
+        int? ownerUserId = null;
+        if (c.SourceType != SourceType.Official)
+        {
+            if (c.OwnerAppUserId.HasValue)
+            {
+                var ownerExists = await db.AppUsers.AnyAsync(u => u.DateDeletedUtc == null && u.IsActive && u.AppUserId == c.OwnerAppUserId.Value);
+                if (!ownerExists) return await LoggedBadRequestAsync(db, http, $"Imported creature '{c.Name}' has invalid OwnerAppUserId.");
+                ownerUserId = c.OwnerAppUserId.Value;
+            }
+            else
+            {
+                var idRaw = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+                if (int.TryParse(idRaw, out var currentUserId)) ownerUserId = currentUserId;
+            }
+        }
+
+        var now = DateTime.UtcNow;
+        var title = ToTitleCase(c.Name.Trim());
+        var slug = await GenerateUniqueCreatureSlugAsync(db, c.GameSystemId, Slugify(title));
+
+        var row = new Creature
+        {
+            GameSystemId = c.GameSystemId,
+            Name = title,
+            Slug = slug,
+            Alias = c.Alias,
+            CreatureType = c.CreatureType,
+            Size = c.Size,
+            Alignment = c.Alignment,
+            ArmorClass = c.ArmorClass,
+            HitPoints = c.HitPoints,
+            Speed = c.Speed,
+            Strength = c.Strength,
+            Dexterity = c.Dexterity,
+            Constitution = c.Constitution,
+            Intelligence = c.Intelligence,
+            Wisdom = c.Wisdom,
+            Charisma = c.Charisma,
+            ChallengeRating = c.ChallengeRating,
+            ProficiencyBonus = c.ProficiencyBonus,
+            Description = c.Description,
+            SourceType = c.SourceType,
+            OwnerAppUserId = ownerUserId,
+            SourceMaterialId = c.SourceMaterialId,
+            CampaignId = c.SourceType == SourceType.Official ? null : c.CampaignId,
+            SourcePage = c.SourcePage,
+            DateCreatedUtc = now,
+            DateModifiedUtc = now
+        };
+        db.Creatures.Add(row);
+        await db.SaveChangesAsync();
+
+        await SyncCreatureAbilitiesAsync(db, row.CreatureId, c.TraitsList, c.ActionsList, c.ReactionsList, c.LegendaryActionsList);
+        await db.SaveChangesAsync();
+        createdIds.Add(row.CreatureId);
+    }
+
+    return Results.Ok(new { Imported = createdIds.Count, CreatureIds = createdIds });
+}).WithTags("Creatures");
+
 api.MapPost("/creatures", async (CreateCreatureRequest req, AppDbContext db, HttpContext http) =>
 {
     if (string.IsNullOrWhiteSpace(req.Name)) return await LoggedBadRequestAsync(db, http, "Name is required.");
@@ -3616,6 +3739,7 @@ public sealed class Creature
 }
 
 public sealed record CreateCreatureRequest(int GameSystemId, string Name, string? Alias = null, string? CreatureType = null, string? Size = null, string? Alignment = null, int? ArmorClass = null, int? HitPoints = null, string? Speed = null, int? Strength = null, int? Dexterity = null, int? Constitution = null, int? Intelligence = null, int? Wisdom = null, int? Charisma = null, string? ChallengeRating = null, int? ProficiencyBonus = null, string? Description = null, SourceType SourceType = SourceType.Official, int? OwnerAppUserId = null, int? SourceMaterialId = null, int? CampaignId = null, int? SourcePage = null, List<CreatureAbilityInput>? TraitsList = null, List<CreatureAbilityInput>? ActionsList = null, List<CreatureAbilityInput>? ReactionsList = null, List<CreatureAbilityInput>? LegendaryActionsList = null);
+public sealed record CreatureImportRequest(CreateCreatureRequest? Creature = null, List<CreateCreatureRequest>? Creatures = null);
 
 public sealed record CreatureAbilityInput(string? Name, string Description, int SortOrder = 0);
 
