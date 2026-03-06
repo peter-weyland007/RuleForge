@@ -28,13 +28,16 @@ else
             <MudDivider Class="my-2" />
 
             <MudGrid>
-                <MudItem xs="4" sm="2"><MudText Align="Align.Center"><b>STR</b><br/>@Display(creature.Strength)</MudText></MudItem>
-                <MudItem xs="4" sm="2"><MudText Align="Align.Center"><b>DEX</b><br/>@Display(creature.Dexterity)</MudText></MudItem>
-                <MudItem xs="4" sm="2"><MudText Align="Align.Center"><b>CON</b><br/>@Display(creature.Constitution)</MudText></MudItem>
-                <MudItem xs="4" sm="2"><MudText Align="Align.Center"><b>INT</b><br/>@Display(creature.Intelligence)</MudText></MudItem>
-                <MudItem xs="4" sm="2"><MudText Align="Align.Center"><b>WIS</b><br/>@Display(creature.Wisdom)</MudText></MudItem>
-                <MudItem xs="4" sm="2"><MudText Align="Align.Center"><b>CHA</b><br/>@Display(creature.Charisma)</MudText></MudItem>
+                <MudItem xs="4" sm="2"><MudText Align="Align.Center"><b>STR</b><br/>@ScoreWithMod(creature.Strength)</MudText></MudItem>
+                <MudItem xs="4" sm="2"><MudText Align="Align.Center"><b>DEX</b><br/>@ScoreWithMod(creature.Dexterity)</MudText></MudItem>
+                <MudItem xs="4" sm="2"><MudText Align="Align.Center"><b>CON</b><br/>@ScoreWithMod(creature.Constitution)</MudText></MudItem>
+                <MudItem xs="4" sm="2"><MudText Align="Align.Center"><b>INT</b><br/>@ScoreWithMod(creature.Intelligence)</MudText></MudItem>
+                <MudItem xs="4" sm="2"><MudText Align="Align.Center"><b>WIS</b><br/>@ScoreWithMod(creature.Wisdom)</MudText></MudItem>
+                <MudItem xs="4" sm="2"><MudText Align="Align.Center"><b>CHA</b><br/>@ScoreWithMod(creature.Charisma)</MudText></MudItem>
             </MudGrid>
+            <MudDivider Class="my-2" />
+            <MudText Typo="Typo.body2"><b>Passive Perception:</b> @PassivePerception()</MudText>
+
 
             @if (!string.IsNullOrWhiteSpace(creature.Description))
             {
@@ -82,6 +85,18 @@ else
 
     private static string Display(string? s) => string.IsNullOrWhiteSpace(s) ? "—" : s;
     private static string Display(int? n) => n.HasValue ? n.Value.ToString() : "—";
+
+    private static int AbilityMod(int? score) => score.HasValue ? (int)Math.Floor((score.Value - 10) / 2.0) : 0;
+    private static string ModText(int mod) => mod >= 0 ? $"+{mod}" : mod.ToString();
+    private static string ScoreWithMod(int? n) => n.HasValue ? $"{n.Value} ({ModText(AbilityMod(n))})" : "—";
+    private string PassivePerception()
+    {
+        if (creature is null) return "—";
+        var wis = creature.Wisdom ?? 10;
+        var prof = creature.ProficiencyBonus ?? 0;
+        var passive = 10 + AbilityMod(wis) + prof;
+        return $"{passive} (10 + WIS {ModText(AbilityMod(wis))}{(prof != 0 ? $" + PB {prof}" : string.Empty)})";
+    }
 
     private RenderFragment RenderSection(string title, List<AbilityDto>? list) => builder =>
     {

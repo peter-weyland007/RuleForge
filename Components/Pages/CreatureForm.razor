@@ -24,12 +24,14 @@
             <MudItem xs="12" md="2"><MudTextField @bind-Value="model.Speed" Label="Speed" Variant="Variant.Outlined" /></MudItem>
             <MudItem xs="12" md="3"><MudTextField @bind-Value="model.ChallengeRating" Label="Challenge Rating" Variant="Variant.Outlined" /></MudItem>
 
-            <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="model.Strength" Label="STR" Variant="Variant.Outlined" /></MudItem>
-            <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="model.Dexterity" Label="DEX" Variant="Variant.Outlined" /></MudItem>
-            <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="model.Constitution" Label="CON" Variant="Variant.Outlined" /></MudItem>
-            <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="model.Intelligence" Label="INT" Variant="Variant.Outlined" /></MudItem>
-            <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="model.Wisdom" Label="WIS" Variant="Variant.Outlined" /></MudItem>
-            <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="model.Charisma" Label="CHA" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="model.Strength" Label="STR" HelperText="@ModHint(model.Strength)" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="model.Dexterity" Label="DEX" HelperText="@ModHint(model.Dexterity)" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="model.Constitution" Label="CON" HelperText="@ModHint(model.Constitution)" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="model.Intelligence" Label="INT" HelperText="@ModHint(model.Intelligence)" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="model.Wisdom" Label="WIS" HelperText="@ModHint(model.Wisdom)" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="model.Charisma" Label="CHA" HelperText="@ModHint(model.Charisma)" Variant="Variant.Outlined" /></MudItem>
+
+            <MudItem xs="12" md="3"><MudText Typo="Typo.caption">Passive Perception (derived): <b>@PassivePerceptionPreview()</b></MudText></MudItem>
 
             <MudItem xs="12" md="3"><MudSelect T="SourceType" @bind-Value="model.SourceType" Label="Source Type" Variant="Variant.Outlined"><MudSelectItem Value="SourceType.Official">Official</MudSelectItem><MudSelectItem Value="SourceType.ThirdParty">Third Party</MudSelectItem><MudSelectItem Value="SourceType.Homebrew">Homebrew</MudSelectItem></MudSelect></MudItem>
             @if (model.SourceType == SourceType.Official)
@@ -212,6 +214,18 @@
             model.SourceMaterialId = null;
             model.SourcePage = null;
         }
+    }
+
+
+    private static int AbilityMod(int? score) => score.HasValue ? (int)Math.Floor((score.Value - 10) / 2.0) : 0;
+    private static string ModText(int mod) => mod >= 0 ? $"+{mod}" : mod.ToString();
+    private static string ModHint(int? score) => score.HasValue ? $"mod {ModText(AbilityMod(score))}" : "mod —";
+    private string PassivePerceptionPreview()
+    {
+        var wis = model.Wisdom ?? 10;
+        var prof = model.ProficiencyBonus ?? 0;
+        var total = 10 + AbilityMod(wis) + prof;
+        return $"{total} (10 + WIS {ModText(AbilityMod(wis))}{(prof != 0 ? $" + PB {prof}" : string.Empty)})";
     }
 
     private bool ValidateAbilityRows()
