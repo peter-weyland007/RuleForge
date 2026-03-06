@@ -517,6 +517,22 @@ using (var scope = app.Services.CreateScope())
     """);
     try { await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS IX_Friends_Pair_Unique ON Friends (UserAId, UserBId);"); } catch (SqliteException) { }
 
+    await db.Database.ExecuteSqlRawAsync("""
+        CREATE TABLE IF NOT EXISTS FeatureRequests (
+            FeatureRequestId INTEGER PRIMARY KEY AUTOINCREMENT,
+            Title TEXT NOT NULL,
+            Description TEXT NULL,
+            Status TEXT NOT NULL,
+            Priority TEXT NULL,
+            RequestedBy TEXT NULL,
+            SortOrder INTEGER NOT NULL DEFAULT 0,
+            DateCreatedUtc TEXT NOT NULL,
+            DateModifiedUtc TEXT NOT NULL,
+            DateDeletedUtc TEXT NULL
+        );
+    """);
+    try { await db.Database.ExecuteSqlRawAsync("CREATE INDEX IF NOT EXISTS IX_FeatureRequests_Status_Sort ON FeatureRequests (Status, SortOrder, FeatureRequestId);"); } catch (SqliteException) { }
+
     try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE AppUsers ADD COLUMN Username TEXT NOT NULL DEFAULT '';"); } catch (SqliteException) { }
     try { await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS IX_AppUsers_Email_Unique_Active ON AppUsers (Email) WHERE DateDeletedUtc IS NULL;"); } catch (SqliteException) { }
     try { await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS IX_AppUsers_Username_Unique_Active ON AppUsers (Username) WHERE DateDeletedUtc IS NULL;"); } catch (SqliteException) { }
@@ -727,6 +743,73 @@ api.MapPut("/admin/users/{appUserId:int}", async (int appUserId, UpdateUserAdmin
     return Results.Ok(new { u.AppUserId, u.Email, u.Role, u.IsActive, u.IsSystemAccount });
 }).WithTags("Admin");
 
+api.MapGet("/admin/feature-requests", async (AppDbContext db) =>
+    await db.FeatureRequests
+        .Where(x => x.DateDeletedUtc == null)
+        .OrderBy(x => x.Status)
+        .ThenBy(x => x.SortOrder)
+        .ThenBy(x => x.FeatureRequestId)
+        .Select(x => new
+        {
+            x.FeatureRequestId,
+            x.Title,
+            x.Description,
+            x.Status,
+            x.Priority,
+            x.RequestedBy,
+            x.SortOrder,
+            x.DateCreatedUtc,
+            x.DateModifiedUtc
+        })
+        .ToListAsync())
+    .WithTags("Admin");
+
+api.MapPost("/admin/feature-requests", async (UpsertFeatureRequest req, AppDbContext db, HttpContext http) =>
+{
+    if (string.IsNullOrWhiteSpace(req.Title)) return await LoggedBadRequestAsync(db, http, "Title is required.");
+    var now = DateTime.UtcNow;
+    var row = new FeatureRequest
+    {
+        Title = req.Title.Trim(),
+        Description = string.IsNullOrWhiteSpace(req.Description) ? null : req.Description.Trim(),
+        Status = NormalizeFeatureStatus(req.Status),
+        Priority = string.IsNullOrWhiteSpace(req.Priority) ? null : req.Priority.Trim(),
+        RequestedBy = string.IsNullOrWhiteSpace(req.RequestedBy) ? null : req.RequestedBy.Trim(),
+        SortOrder = req.SortOrder ?? 0,
+        DateCreatedUtc = now,
+        DateModifiedUtc = now
+    };
+    db.FeatureRequests.Add(row);
+    await db.SaveChangesAsync();
+    return Results.Ok(row);
+}).WithTags("Admin");
+
+api.MapPut("/admin/feature-requests/{featureRequestId:int}", async (int featureRequestId, UpsertFeatureRequest req, AppDbContext db, HttpContext http) =>
+{
+    var row = await db.FeatureRequests.FirstOrDefaultAsync(x => x.FeatureRequestId == featureRequestId && x.DateDeletedUtc == null);
+    if (row is null) return Results.NotFound();
+    if (string.IsNullOrWhiteSpace(req.Title)) return await LoggedBadRequestAsync(db, http, "Title is required.");
+
+    row.Title = req.Title.Trim();
+    row.Description = string.IsNullOrWhiteSpace(req.Description) ? null : req.Description.Trim();
+    row.Status = NormalizeFeatureStatus(req.Status);
+    row.Priority = string.IsNullOrWhiteSpace(req.Priority) ? null : req.Priority.Trim();
+    row.RequestedBy = string.IsNullOrWhiteSpace(req.RequestedBy) ? null : req.RequestedBy.Trim();
+    row.SortOrder = req.SortOrder ?? row.SortOrder;
+    row.DateModifiedUtc = DateTime.UtcNow;
+    await db.SaveChangesAsync();
+    return Results.Ok(row);
+}).WithTags("Admin");
+
+api.MapDelete("/admin/feature-requests/{featureRequestId:int}", async (int featureRequestId, AppDbContext db) =>
+{
+    var row = await db.FeatureRequests.FirstOrDefaultAsync(x => x.FeatureRequestId == featureRequestId && x.DateDeletedUtc == null);
+    if (row is null) return Results.NotFound();
+    row.DateDeletedUtc = DateTime.UtcNow;
+    row.DateModifiedUtc = DateTime.UtcNow;
+    await db.SaveChangesAsync();
+    return Results.Ok(new { ok = true });
+}).WithTags("Admin");
 
 
 api.MapGet("/creatures", async (int? gameSystemId, AppDbContext db) =>
@@ -3362,6 +3445,15 @@ static async Task SeedStarterDataAsync(AppDbContext db, string contentRootPath)
 }
 
 
+static string NormalizeFeatureStatus(string? status)
+{
+    var s = (status ?? "Backlog").Trim();
+    if (s.Equals("InProgress", StringComparison.OrdinalIgnoreCase)) return "In Progress";
+    if (s.Equals("In Progress", StringComparison.OrdinalIgnoreCase)) return "In Progress";
+    if (s.Equals("Done", StringComparison.OrdinalIgnoreCase)) return "Done";
+    return "Backlog";
+}
+
 static string? ValidateItemRequest(CreateItemRequest req)
 {
     if (req.Quantity <= 0) return "Quantity must be at least 1.";
@@ -3601,6 +3693,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<Friend> Friends => Set<Friend>();
     public DbSet<Creature> Creatures => Set<Creature>();
     public DbSet<CreatureAbility> CreatureAbilities => Set<CreatureAbility>();
+    public DbSet<FeatureRequest> FeatureRequests => Set<FeatureRequest>();
 }
 
 public sealed class Note
@@ -3885,6 +3978,20 @@ public sealed class CreatureAbility
     public DateTime? DateDeletedUtc { get; set; }
 }
 
+public sealed class FeatureRequest
+{
+    public int FeatureRequestId { get; set; }
+    public string Title { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public string Status { get; set; } = "Backlog";
+    public string? Priority { get; set; }
+    public string? RequestedBy { get; set; }
+    public int SortOrder { get; set; }
+    public DateTime DateCreatedUtc { get; set; }
+    public DateTime DateModifiedUtc { get; set; }
+    public DateTime? DateDeletedUtc { get; set; }
+}
+
 public sealed class Creature
 {
     public int CreatureId { get; set; }
@@ -3919,6 +4026,7 @@ public sealed class Creature
 
 public sealed record CreateCreatureRequest(int GameSystemId, string Name, string? Alias = null, string? CreatureType = null, string? Size = null, string? Alignment = null, int? ArmorClass = null, int? HitPoints = null, string? Speed = null, int? Strength = null, int? Dexterity = null, int? Constitution = null, int? Intelligence = null, int? Wisdom = null, int? Charisma = null, string? ChallengeRating = null, int? ProficiencyBonus = null, string? Description = null, SourceType SourceType = SourceType.Official, int? OwnerAppUserId = null, int? SourceMaterialId = null, int? CampaignId = null, int? SourcePage = null, List<CreatureAbilityInput>? TraitsList = null, List<CreatureAbilityInput>? ActionsList = null, List<CreatureAbilityInput>? ReactionsList = null, List<CreatureAbilityInput>? LegendaryActionsList = null);
 public sealed record CreatureImportRequest(CreateCreatureRequest? Creature = null, List<CreateCreatureRequest>? Creatures = null);
+public sealed record UpsertFeatureRequest(string Title, string? Description = null, string? Status = null, string? Priority = null, string? RequestedBy = null, int? SortOrder = null);
 
 public sealed record CreatureAbilityInput(string? Name, string Description, int SortOrder = 0);
 

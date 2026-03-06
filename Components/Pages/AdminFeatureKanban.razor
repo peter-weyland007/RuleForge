@@ -1,0 +1,111 @@
+@page "/admin/feature-kanban"
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject NavigationManager Nav
+
+<PageTitle>Admin Feature Kanban</PageTitle>
+
+<MudStack Spacing="3">
+    <MudText Typo="Typo.h4">Admin · Feature Kanban</MudText>
+
+    <MudPaper Class="pa-4" Outlined="true">
+        <MudGrid>
+            <MudItem xs="12" md="4"><MudTextField @bind-Value="newTitle" Label="Title" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" md="3"><MudTextField @bind-Value="newPriority" Label="Priority" Variant="Variant.Outlined" Placeholder="Low/Med/High" /></MudItem>
+            <MudItem xs="12" md="3"><MudTextField @bind-Value="newRequestedBy" Label="Requested by" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" md="2"><MudSelect T="string" @bind-Value="newStatus" Label="Status" Variant="Variant.Outlined"><MudSelectItem Value="@("Backlog")">Backlog</MudSelectItem><MudSelectItem Value="@("In Progress")">In Progress</MudSelectItem><MudSelectItem Value="@("Done")">Done</MudSelectItem></MudSelect></MudItem>
+            <MudItem xs="12"><MudTextField @bind-Value="newDescription" Label="Description" Variant="Variant.Outlined" Lines="2" /></MudItem>
+            <MudItem xs="12"><MudButton OnClick="Create" Variant="Variant.Filled" Color="Color.Primary">Add Feature</MudButton></MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    @if (!string.IsNullOrWhiteSpace(error))
+    {
+        <MudAlert Severity="Severity.Error">@error</MudAlert>
+    }
+
+    <MudGrid>
+        @foreach (var col in Columns)
+        {
+            <MudItem xs="12" md="4">
+                <MudPaper Class="pa-3" Outlined="true" Style="min-height: 300px;">
+                    <MudText Typo="Typo.h6">@col</MudText>
+                    <MudDivider Class="mb-2" />
+
+                    @foreach (var card in rows.Where(r => r.Status == col).OrderBy(r => r.SortOrder).ThenBy(r => r.FeatureRequestId))
+                    {
+                        <MudPaper Class="pa-3 mb-2" Outlined="true">
+                            <MudText Typo="Typo.subtitle1">@card.Title</MudText>
+                            @if (!string.IsNullOrWhiteSpace(card.Description))
+                            {
+                                <MudText Typo="Typo.body2" Class="mb-1">@card.Description</MudText>
+                            }
+                            <MudText Typo="Typo.caption">Priority: @(card.Priority ?? "—") · Requested by: @(card.RequestedBy ?? "—")</MudText>
+                            <MudStack Row="true" Spacing="1" Class="mt-2" AlignItems="AlignItems.Center">
+                                <MudSelect T="string" Value="@card.Status" ValueChanged="@(v => Move(card, v))" Dense="true" Variant="Variant.Outlined">
+                                    <MudSelectItem Value="@("Backlog")">Backlog</MudSelectItem>
+                                    <MudSelectItem Value="@("In Progress")">In Progress</MudSelectItem>
+                                    <MudSelectItem Value="@("Done")">Done</MudSelectItem>
+                                </MudSelect>
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => Delete(card))" />
+                            </MudStack>
+                        </MudPaper>
+                    }
+                </MudPaper>
+            </MudItem>
+        }
+    </MudGrid>
+</MudStack>
+
+@code {
+    private static readonly string[] Columns = ["Backlog", "In Progress", "Done"];
+    private List<FeatureCard> rows = new();
+    private string? error;
+
+    private string newTitle = string.Empty;
+    private string? newDescription;
+    private string newStatus = "Backlog";
+    private string? newPriority;
+    private string? newRequestedBy;
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        error = null;
+        rows = await Http.GetFromJsonAsync<List<FeatureCard>>(Nav.ToAbsoluteUri("/api/admin/feature-requests")) ?? new();
+    }
+
+    private async Task Create()
+    {
+        error = null;
+        if (string.IsNullOrWhiteSpace(newTitle)) { error = "Title is required."; return; }
+
+        var res = await Http.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/admin/feature-requests"), new UpsertFeature(newTitle, newDescription, newStatus, newPriority, newRequestedBy, rows.Count + 1));
+        if (!res.IsSuccessStatusCode) { error = await res.Content.ReadAsStringAsync(); return; }
+
+        newTitle = string.Empty;
+        newDescription = null;
+        newPriority = null;
+        newRequestedBy = null;
+        newStatus = "Backlog";
+        await Load();
+    }
+
+    private async Task Move(FeatureCard card, string status)
+    {
+        var res = await Http.PutAsJsonAsync(Nav.ToAbsoluteUri($"/api/admin/feature-requests/{card.FeatureRequestId}"), new UpsertFeature(card.Title, card.Description, status, card.Priority, card.RequestedBy, card.SortOrder));
+        if (!res.IsSuccessStatusCode) { error = await res.Content.ReadAsStringAsync(); return; }
+        await Load();
+    }
+
+    private async Task Delete(FeatureCard card)
+    {
+        var res = await Http.DeleteAsync(Nav.ToAbsoluteUri($"/api/admin/feature-requests/{card.FeatureRequestId}"));
+        if (!res.IsSuccessStatusCode) { error = await res.Content.ReadAsStringAsync(); return; }
+        await Load();
+    }
+
+    private sealed record FeatureCard(int FeatureRequestId, string Title, string? Description, string Status, string? Priority, string? RequestedBy, int SortOrder, DateTime DateCreatedUtc, DateTime DateModifiedUtc);
+    private sealed record UpsertFeature(string Title, string? Description, string? Status, string? Priority, string? RequestedBy, int? SortOrder);
+}
