@@ -137,3 +137,18 @@ dotnet tool run dotnet-ef migrations add <Name> --context AppDbContext --msbuild
 ```bash
 docker compose -f docker-compose.postgres.yml down
 ```
+
+
+### 5) Migrate existing SQLite data into Postgres (dry-run capable)
+
+```bash
+RULEFORGE_PGURL='postgresql://ruleforge:ruleforge_dev_password@127.0.0.1:5432/ruleforge' RULEFORGE_SQLITE_PATH="$HOME/.ruleforge/ruleforge.db" scripts/migrate_sqlite_to_postgres.py
+```
+
+The script:
+
+- truncates target Postgres tables (in migration order)
+- copies table data from SQLite
+- converts integer-backed booleans to Postgres booleans where needed
+- resets identity sequences
+- prints SQLite vs Postgres row-count verification per table
