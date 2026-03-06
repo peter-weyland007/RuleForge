@@ -13,12 +13,28 @@
     </MudStack>
 
     <MudPaper Class="pa-4" Outlined="true">
-        <MudSelect T="int" Value="selectedSystemId" ValueChanged="OnSystemChanged" Label="Game System" Variant="Variant.Outlined">
-            @foreach (var s in systems) { <MudSelectItem Value="@s.GameSystemId">@s.Name</MudSelectItem> }
-        </MudSelect>
+        <MudGrid>
+            <MudItem xs="12" md="3">
+                <MudSelect T="int" Value="selectedSystemId" ValueChanged="OnSystemChanged" Label="Game System" Variant="Variant.Outlined">
+                    @foreach (var s in systems) { <MudSelectItem Value="@s.GameSystemId">@s.Name</MudSelectItem> }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="3"><MudTextField @bind-Value="nameFilter" Label="Name" Variant="Variant.Outlined" Immediate="true" /></MudItem>
+            <MudItem xs="12" md="2"><MudTextField @bind-Value="typeFilter" Label="Type" Variant="Variant.Outlined" Immediate="true" /></MudItem>
+            <MudItem xs="12" md="2"><MudTextField @bind-Value="crFilter" Label="CR" Variant="Variant.Outlined" Immediate="true" /></MudItem>
+            <MudItem xs="12" md="2">
+                <MudSelect T="string" @bind-Value="sourceFilter" Label="Source" Variant="Variant.Outlined">
+                    <MudSelectItem Value="@("All")">All</MudSelectItem>
+                    <MudSelectItem Value="@("Official")">Official</MudSelectItem>
+                    <MudSelectItem Value="@("Homebrew")">Homebrew</MudSelectItem>
+                    <MudSelectItem Value="@("ThirdParty")">Third Party</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="3"><MudCheckBox @bind-Value="officialOnly" Label="Official only" /></MudItem>
+        </MudGrid>
     </MudPaper>
 
-    <MudTable Items="rows" Dense="true" Hover="true">
+    <MudTable Items="filteredRows" Dense="true" Hover="true">
         <HeaderContent>
             <MudTh>Name</MudTh><MudTh>Type</MudTh><MudTh>CR</MudTh><MudTh>Source</MudTh>
             <AuthorizeView Context="auth"><Authorized><MudTh></MudTh></Authorized></AuthorizeView>
@@ -38,6 +54,14 @@
     private List<CreatureRowDto> rows = new();
     private int selectedSystemId;
 
+    private string? nameFilter;
+    private string? typeFilter;
+    private string? crFilter;
+    private string sourceFilter = "All";
+    private bool officialOnly;
+
+    private IEnumerable<CreatureRowDto> filteredRows => rows.Where(MatchFilters);
+
     protected override async Task OnInitializedAsync()
     {
         systems = await Http.GetFromJsonAsync<List<GameSystemDto>>(Nav.ToAbsoluteUri("/api/game-systems")) ?? new();
@@ -55,6 +79,23 @@
     {
         if (selectedSystemId <= 0) { rows = new(); return; }
         rows = await Http.GetFromJsonAsync<List<CreatureRowDto>>(Nav.ToAbsoluteUri($"/api/creatures?gameSystemId={selectedSystemId}")) ?? new();
+    }
+
+    private bool MatchFilters(CreatureRowDto row)
+    {
+        if (!string.IsNullOrWhiteSpace(nameFilter) && !(row.Name?.Contains(nameFilter, StringComparison.OrdinalIgnoreCase) ?? false)) return false;
+        if (!string.IsNullOrWhiteSpace(typeFilter) && !(row.CreatureType?.Contains(typeFilter, StringComparison.OrdinalIgnoreCase) ?? false)) return false;
+        if (!string.IsNullOrWhiteSpace(crFilter) && !(row.ChallengeRating?.Contains(crFilter, StringComparison.OrdinalIgnoreCase) ?? false)) return false;
+
+        if (officialOnly && row.SourceType != SourceType.Official) return false;
+
+        if (!string.Equals(sourceFilter, "All", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!Enum.TryParse<SourceType>(sourceFilter, ignoreCase: true, out var st)) return false;
+            if (row.SourceType != st) return false;
+        }
+
+        return true;
     }
 
     private sealed record GameSystemDto(int GameSystemId, string Name);
