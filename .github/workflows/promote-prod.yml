@@ -1,0 +1,52 @@
+name: Promote GHCR image to prod
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_tag:
+        description: "Existing image tag to promote (e.g. main or main-<sha>)"
+        required: true
+        default: "main"
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set variables
+        id: vars
+        run: |
+          IMAGE="ghcr.io/${{ github.repository_owner }}/ruleforge"
+          SRC="${{ github.event.inputs.source_tag }}"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          echo "src=$SRC" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Pull source image
+        run: docker pull "${{ steps.vars.outputs.image }}:${{ steps.vars.outputs.src }}"
+
+      - name: Resolve digest-like suffix
+        id: stamp
+        run: |
+          TS=$(date -u +%Y%m%d%H%M%S)
+          echo "stamp=$TS" >> "$GITHUB_OUTPUT"
+
+      - name: Tag prod aliases
+        run: |
+          IMAGE="${{ steps.vars.outputs.image }}"
+          SRC="${{ steps.vars.outputs.src }}"
+          TS="${{ steps.stamp.outputs.stamp }}"
+          docker tag "$IMAGE:$SRC" "$IMAGE:prod"
+          docker tag "$IMAGE:$SRC" "$IMAGE:prod-$TS"
+
+      - name: Push prod tags
+        run: |
+          IMAGE="${{ steps.vars.outputs.image }}"
+          TS="${{ steps.stamp.outputs.stamp }}"
+          docker push "$IMAGE:prod"
+          docker push "$IMAGE:prod-$TS"

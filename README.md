@@ -225,3 +225,19 @@ Use one of:
 - `ghcr.io/peter-weyland007/ruleforge:main` (internal/testing)
 - `ghcr.io/peter-weyland007/ruleforge:prod` (production)
 - `ghcr.io/peter-weyland007/ruleforge:main-<sha>` / `prod-<sha>` (pinned)
+
+
+### Manual production promotion (recommended)
+
+Use GitHub Actions workflow **Promote GHCR image to prod** to control go-live timing.
+
+- Workflow file: `.github/workflows/promote-prod.yml`
+- Input: `source_tag` (e.g. `main` or `main-<sha>`)
+- Output tags:
+  - `ghcr.io/peter-weyland007/ruleforge:prod`
+  - `ghcr.io/peter-weyland007/ruleforge:prod-<timestamp>`
+
+Suggested prod process:
+1. Validate candidate on internal/staging (`:main` or `:main-<sha>`)
+2. Run **Promote GHCR image to prod** with chosen source tag
+3. Update/restart Unraid prod container (tracking `:prod`)
