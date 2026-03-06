@@ -3262,6 +3262,42 @@ static async Task SeedStarterDataAsync(AppDbContext db, string contentRootPath)
         }
     }
 
+    // Seed starter feature backlog for scoped planning (idempotent)
+    {
+        var seedFeatures = new[]
+        {
+            new { Title = "Bestiary Phase 3: statblock gap fields (senses/saves/skills/languages)", Description = "Add core missing MM-style fields on creatures with minimal schema churn.", Status = "Backlog", Priority = "High", RequestedBy = "Product" },
+            new { Title = "Bestiary Phase 3: damage and condition interactions", Description = "Add vulnerabilities/resistances/immunities/condition immunities for creature statblocks.", Status = "Backlog", Priority = "High", RequestedBy = "Product" },
+            new { Title = "Bestiary: structured spellcasting model", Description = "Support innate/spellcasting blocks with slots/DC/attack bonus in structured form.", Status = "Backlog", Priority = "Medium", RequestedBy = "Product" },
+            new { Title = "Bestiary: lair actions and regional effects", Description = "Extend creature abilities for high-tier monsters and encounter context.", Status = "Backlog", Priority = "Medium", RequestedBy = "Product" },
+            new { Title = "Bestiary: export/import schema docs and templates", Description = "Provide copy-paste examples and schema docs to reduce malformed import payloads.", Status = "Backlog", Priority = "Low", RequestedBy = "Product" },
+            new { Title = "Bestiary: server-side filtered list endpoint", Description = "Promote current client filters to API query filters if dataset grows.", Status = "Backlog", Priority = "Low", RequestedBy = "Product" }
+        };
+
+        var order = 0;
+        foreach (var f in seedFeatures)
+        {
+            var title = f.Title.Trim();
+            var existing = await db.FeatureRequests.FirstOrDefaultAsync(x => x.DateDeletedUtc == null && x.Title == title);
+            if (existing is null)
+            {
+                db.FeatureRequests.Add(new FeatureRequest
+                {
+                    Title = title,
+                    Description = f.Description,
+                    Status = NormalizeFeatureStatus(f.Status),
+                    Priority = f.Priority,
+                    RequestedBy = f.RequestedBy,
+                    SortOrder = order++,
+                    DateCreatedUtc = now,
+                    DateModifiedUtc = now
+                });
+            }
+        }
+
+        await db.SaveChangesAsync();
+    }
+
     // Seed starter bestiary entries (idempotent)
     {
         var dnd = await ResolveSystemAsync("dungeons-dragons-5e");
