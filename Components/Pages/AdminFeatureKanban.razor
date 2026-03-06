@@ -97,7 +97,7 @@
     private string newEntity = "Creature";
     private string entityFilter = "All";
 
-    private static readonly string[] baseEntityOptions = ["Creature", "Item", "Campaign", "Auth", "Admin", "UI", "API", "Ops", "General"];
+    private static readonly string[] baseEntityOptions = ["Character", "Creature", "Item", "Campaign", "Auth", "Admin", "UI", "API", "Ops", "General"];
     private static readonly string[] priorityOptions = ["Low", "Medium", "High", "Critical"];
     private IEnumerable<string> entityOptions => rows.Select(r => r.Entity).Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x!).Distinct().OrderBy(x => x);
     private IEnumerable<string> entitySelectOptions => baseEntityOptions.Concat(entityOptions).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x);
