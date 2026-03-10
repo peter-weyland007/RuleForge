@@ -1,5 +1,134 @@
-@page "/LCharacters"
+@page "/characters"
+@inject IHttpClientFactory HttpFactory
+@inject NavigationManager Nav
 
 <PageTitle>Characters</PageTitle>
-<MudText Typo="Typo.h4" GutterBottom="true">Characters</MudText>
-<MudAlert Severity="Severity.Info">Characters page scaffolded. Feature implementation comes next.</MudAlert>
+
+<MudStack Spacing="3">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+        <MudText Typo="Typo.h4">Characters</MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="OpenCreate">Add Character</MudButton>
+    </MudStack>
+
+    @if (!string.IsNullOrWhiteSpace(error))
+    {
+        <MudAlert Severity="Severity.Error">@error</MudAlert>
+    }
+
+    <MudTable Items="rows" Dense="true" Hover="true" Outlined="true">
+        <HeaderContent>
+            <MudTh>Name</MudTh>
+            <MudTh>Type</MudTh>
+            <MudTh>Class</MudTh>
+            <MudTh>Lvl</MudTh>
+            <MudTh>AC</MudTh>
+            <MudTh>HP</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>@context.Name</MudTd>
+            <MudTd>@context.CharacterType</MudTd>
+            <MudTd>@context.ClassName</MudTd>
+            <MudTd>@context.Level</MudTd>
+            <MudTd>@context.ArmorClass</MudTd>
+            <MudTd>@($"{context.HitPointsCurrent}/{context.HitPointsMax}")</MudTd>
+        </RowTemplate>
+    </MudTable>
+
+    @if (isCreate)
+    {
+        <MudPaper Class="pa-4" Outlined="true">
+            <MudText Typo="Typo.h6">Create Character / NPC</MudText>
+            <MudGrid>
+                <MudItem xs="12" md="4"><MudTextField @bind-Value="form.Name" Label="Name" Variant="Variant.Outlined" /></MudItem>
+                <MudItem xs="12" md="2">
+                    <MudSelect T="string" Value="form.CharacterType" ValueChanged="OnTypeChanged" Label="Type" Variant="Variant.Outlined">
+                        <MudSelectItem Value="@("PC")">PC</MudSelectItem>
+                        <MudSelectItem Value="@("NPC")">NPC</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="2"><MudNumericField T="int" @bind-Value="form.CampaignId" Label="CampaignId" Variant="Variant.Outlined" /></MudItem>
+                <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="form.Level" Label="Level" Variant="Variant.Outlined" /></MudItem>
+                <MudItem xs="12" md="2"><MudTextField @bind-Value="form.ClassName" Label="Class" Variant="Variant.Outlined" /></MudItem>
+                <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="form.ArmorClass" Label="AC" Variant="Variant.Outlined" /></MudItem>
+                <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="form.HitPointsCurrent" Label="HP Current" Variant="Variant.Outlined" /></MudItem>
+                <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="form.HitPointsMax" Label="HP Max" Variant="Variant.Outlined" /></MudItem>
+                <MudItem xs="12" md="6"><MudTextField @bind-Value="form.Notes" Label="Notes" Variant="Variant.Outlined" /></MudItem>
+            </MudGrid>
+            <MudStack Row="true" Spacing="1" Class="mt-3">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Save">Save</MudButton>
+                <MudButton Variant="Variant.Outlined" OnClick="CloseCreate">Cancel</MudButton>
+            </MudStack>
+        </MudPaper>
+    }
+</MudStack>
+
+@code {
+    private List<CharacterRow> rows = new();
+    private string? error;
+    private bool isCreate;
+    private CharacterForm form = new();
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        try
+        {
+            error = null;
+            var http = HttpFactory.CreateClient();
+            rows = await http.GetFromJsonAsync<List<CharacterRow>>(Nav.ToAbsoluteUri("/api/characters")) ?? new();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            rows = new();
+        }
+    }
+
+    private void OpenCreate() { form = new CharacterForm { CharacterType = "PC", CampaignId = 1 }; isCreate = true; }
+    private void CloseCreate() => isCreate = false;
+    private void OnTypeChanged(string v) => form.CharacterType = v;
+
+    private async Task Save()
+    {
+        try
+        {
+            error = null;
+            var http = HttpFactory.CreateClient();
+            var req = new
+            {
+                campaignId = form.CampaignId,
+                characterType = form.CharacterType,
+                name = form.Name,
+                ownerAppUserId = (int?)null,
+                armorClass = form.ArmorClass,
+                hitPointsCurrent = form.HitPointsCurrent,
+                hitPointsMax = form.HitPointsMax,
+                level = form.Level,
+                className = form.ClassName,
+                notes = form.Notes
+            };
+            var res = await http.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/characters"), req);
+            var txt = await res.Content.ReadAsStringAsync();
+            if (!res.IsSuccessStatusCode) { error = string.IsNullOrWhiteSpace(txt) ? "Save failed." : txt; return; }
+            isCreate = false;
+            await Load();
+        }
+        catch (Exception ex) { error = ex.Message; }
+    }
+
+    private sealed class CharacterForm
+    {
+        public int CampaignId { get; set; }
+        public string CharacterType { get; set; } = "PC";
+        public string Name { get; set; } = string.Empty;
+        public int? ArmorClass { get; set; }
+        public int? HitPointsCurrent { get; set; }
+        public int? HitPointsMax { get; set; }
+        public int? Level { get; set; }
+        public string? ClassName { get; set; }
+        public string? Notes { get; set; }
+    }
+
+    private sealed record CharacterRow(int CharacterId, int CampaignId, string CharacterType, string Name, int? ArmorClass, int? HitPointsCurrent, int? HitPointsMax, int? Level, string? ClassName);
+}
