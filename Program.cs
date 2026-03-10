@@ -28,6 +28,9 @@ var dbProvider = string.IsNullOrWhiteSpace(configuredProvider)
     ? (builder.Environment.IsDevelopment() ? "sqlite" : "postgres")
     : configuredProvider.Trim().ToLowerInvariant();
 var isSqliteProvider = dbProvider == "sqlite";
+var destructiveInit = (builder.Configuration["Database:DestructiveInit"]
+    ?? Environment.GetEnvironmentVariable("RULEFORGE_DB_DESTRUCTIVE")
+    ?? "false").Equals("true", StringComparison.OrdinalIgnoreCase);
 
 builder.Services.AddDbContext<AppDbContext>(o =>
 {
@@ -68,6 +71,11 @@ app.MapStaticAssets();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    if (destructiveInit)
+    {
+        db.Database.EnsureDeleted();
+    }
+
     db.Database.EnsureCreated();
 
     if (isSqliteProvider)
