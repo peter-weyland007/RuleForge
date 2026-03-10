@@ -268,7 +268,7 @@ app.MapPost("/api/characters", async (UpsertCharacterRequest req, AppDbContext d
         CampaignId = req.CampaignId ?? 0,
         PartyId = req.PartyId ?? 0,
         CharacterType = req.CharacterType,
-        Name = req.Name.Trim(),
+        Name = TitleNormalization.ToPascalTitle(req.Name),
         OwnerAppUserId = req.OwnerAppUserId,
         PlayerName = string.IsNullOrWhiteSpace(req.PlayerName) ? null : req.PlayerName.Trim(),
         ArmorClass = req.ArmorClass,
@@ -308,7 +308,7 @@ app.MapPut("/api/characters/{id:int}", async (int id, UpsertCharacterRequest req
     row.CampaignId = req.CampaignId ?? 0;
     row.PartyId = req.PartyId ?? 0;
     row.CharacterType = req.CharacterType;
-    row.Name = req.Name.Trim();
+    row.Name = TitleNormalization.ToPascalTitle(req.Name);
     row.OwnerAppUserId = req.OwnerAppUserId;
     row.PlayerName = string.IsNullOrWhiteSpace(req.PlayerName) ? null : req.PlayerName.Trim();
     row.ArmorClass = req.ArmorClass;
