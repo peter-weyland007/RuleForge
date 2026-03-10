@@ -1,0 +1,219 @@
+@page "/quests/{QuestId:int}"
+@inject IHttpClientFactory HttpFactory
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>Quest Builder</PageTitle>
+
+<MudStack Spacing="3">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+        <MudText Typo="Typo.h4">@title</MudText>
+        <MudStack Row="true" Spacing="1">
+            <MudButton Variant="Variant.Outlined" Href="@($"/quests/{QuestId}/canvas")" StartIcon="@Icons.Material.Filled.AccountTree">Canvas View</MudButton>
+            <MudButton Variant="Variant.Outlined" Href="/quests" StartIcon="@Icons.Material.Filled.ArrowBack">Back to Quests</MudButton>
+        </MudStack>
+    </MudStack>
+
+    @if (!string.IsNullOrWhiteSpace(error))
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@error</MudAlert>
+    }
+
+    <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+        <MudText Typo="Typo.h6">Branch Graph (simple)</MudText>
+        <MudList T="string" Dense="true">
+            @foreach (var n in nodes.OrderBy(x => x.OrderIndex))
+            {
+                <MudListItem T="string">
+                    <MudText Typo="Typo.body2"><b>@n.QuestNodeId</b> · @n.Title (@NodeTypeLabel(n.NodeType))</MudText>
+                </MudListItem>
+                @foreach (var c in choices.Where(x => x.FromNodeId == n.QuestNodeId).OrderBy(x => x.OrderIndex))
+                {
+                    <MudListItem T="string" Class="pl-6">
+                        <MudText Typo="Typo.caption">↳ [@c.Label] → Node @c.ToNodeId</MudText>
+                    </MudListItem>
+                }
+            }
+        </MudList>
+    </MudPaper>
+
+    <MudGrid>
+        <MudItem xs="12" lg="6">
+            <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+                <MudText Typo="Typo.h6">Nodes</MudText>
+                <MudGrid>
+                    <MudItem xs="12" md="5"><MudTextField @bind-Value="nodeForm.Title" Label="Node Title" Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="12" md="3">
+                        <MudSelect T="int" @bind-Value="nodeForm.NodeType" Label="Type" Variant="Variant.Outlined">
+                            <MudSelectItem Value="1">Scene</MudSelectItem>
+                            <MudSelectItem Value="2">Choice</MudSelectItem>
+                            <MudSelectItem Value="3">Encounter</MudSelectItem>
+                            <MudSelectItem Value="4">SkillCheck</MudSelectItem>
+                            <MudSelectItem Value="5">Reward</MudSelectItem>
+                            <MudSelectItem Value="6">Note</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" md="2"><MudNumericField T="int" @bind-Value="nodeForm.OrderIndex" Label="Order" Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="12" md="2"><MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveNode" FullWidth="true">@(nodeForm.QuestNodeId.HasValue ? "Update" : "Add")</MudButton></MudItem>
+                </MudGrid>
+                <MudTextField @bind-Value="nodeForm.BodyMarkdown" Label="Body" Variant="Variant.Outlined" Lines="3" />
+                <MudTextField @bind-Value="nodeForm.DmHints" Label="DM Hints" Variant="Variant.Outlined" Lines="2" />
+
+                <MudTable Items="nodes" Dense="true" Hover="true" Outlined="true" Elevation="0">
+                    <HeaderContent><MudTh>ID</MudTh><MudTh>Title</MudTh><MudTh>Type</MudTh><MudTh>Order</MudTh><MudTh></MudTh></HeaderContent>
+                    <RowTemplate>
+                        <MudTd>@context.QuestNodeId</MudTd>
+                        <MudTd>@context.Title</MudTd>
+                        <MudTd>@NodeTypeLabel(context.NodeType)</MudTd>
+                        <MudTd>@context.OrderIndex</MudTd>
+                        <MudTd Style="text-align:right; white-space:nowrap;">
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" OnClick="() => EditNode(context)" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="() => DeleteNode(context.QuestNodeId)" />
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" lg="6">
+            <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+                <MudText Typo="Typo.h6">Choices (Branches)</MudText>
+                <MudGrid>
+                    <MudItem xs="12" md="3"><MudNumericField T="int" @bind-Value="choiceForm.FromNodeId" Label="From" Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="12" md="3"><MudNumericField T="int" @bind-Value="choiceForm.ToNodeId" Label="To" Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="12" md="4"><MudTextField @bind-Value="choiceForm.Label" Label="Choice Label" Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="12" md="2"><MudButton Variant="Variant.Filled" Color="Color.Secondary" OnClick="SaveChoice" FullWidth="true">@(choiceForm.QuestChoiceId.HasValue ? "Update" : "Add")</MudButton></MudItem>
+                </MudGrid>
+                <MudTextField @bind-Value="choiceForm.ConditionExpression" Label="Condition" Variant="Variant.Outlined" />
+                <MudTextField @bind-Value="choiceForm.EffectsJson" Label="Effects JSON" Variant="Variant.Outlined" />
+
+                <MudTable Items="choices" Dense="true" Hover="true" Outlined="true" Elevation="0">
+                    <HeaderContent><MudTh>ID</MudTh><MudTh>From</MudTh><MudTh>To</MudTh><MudTh>Label</MudTh><MudTh></MudTh></HeaderContent>
+                    <RowTemplate>
+                        <MudTd>@context.QuestChoiceId</MudTd>
+                        <MudTd>@context.FromNodeId</MudTd>
+                        <MudTd>@context.ToNodeId</MudTd>
+                        <MudTd>@context.Label</MudTd>
+                        <MudTd Style="text-align:right; white-space:nowrap;">
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" OnClick="() => EditChoice(context)" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="() => DeleteChoice(context.QuestChoiceId)" />
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+</MudStack>
+
+@code {
+    [Parameter] public int QuestId { get; set; }
+
+    private string title = "Quest Builder";
+    private string? error;
+    private List<QuestNodeRow> nodes = new();
+    private List<QuestChoiceRow> choices = new();
+    private NodeForm nodeForm = new() { NodeType = 1 };
+    private ChoiceForm choiceForm = new();
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        try
+        {
+            var h = HttpFactory.CreateClient();
+            var q = await h.GetFromJsonAsync<QuestDetail>(Nav.ToAbsoluteUri($"/api/quests/{QuestId}"));
+            if (q is null) { error = "Quest not found."; return; }
+            title = q.Title;
+            nodes = q.Nodes;
+            choices = q.Choices;
+        }
+        catch (Exception ex) { error = ex.Message; }
+    }
+
+    private void EditNode(QuestNodeRow n)
+    {
+        nodeForm = new NodeForm { QuestNodeId = n.QuestNodeId, Title = n.Title, NodeType = n.NodeType, OrderIndex = n.OrderIndex, BodyMarkdown = n.BodyMarkdown, DmHints = n.DmHints, EncounterId = n.EncounterId };
+    }
+
+    private async Task SaveNode()
+    {
+        var h = HttpFactory.CreateClient();
+        var req = new { title = nodeForm.Title, nodeType = nodeForm.NodeType, orderIndex = nodeForm.OrderIndex, bodyMarkdown = nodeForm.BodyMarkdown, dmHints = nodeForm.DmHints, encounterId = nodeForm.EncounterId };
+        HttpResponseMessage res = nodeForm.QuestNodeId.HasValue
+            ? await h.PutAsJsonAsync(Nav.ToAbsoluteUri($"/api/quests/{QuestId}/nodes/{nodeForm.QuestNodeId.Value}"), req)
+            : await h.PostAsJsonAsync(Nav.ToAbsoluteUri($"/api/quests/{QuestId}/nodes"), req);
+        if (!res.IsSuccessStatusCode) { error = await res.Content.ReadAsStringAsync(); return; }
+        nodeForm = new NodeForm { NodeType = 1 };
+        await Load();
+    }
+
+    private async Task DeleteNode(int nodeId)
+    {
+        var ok = await JS.InvokeAsync<bool>("confirm", "Delete this node?");
+        if (!ok) return;
+        var h = HttpFactory.CreateClient();
+        await h.DeleteAsync(Nav.ToAbsoluteUri($"/api/quests/{QuestId}/nodes/{nodeId}"));
+        await Load();
+    }
+
+    private void EditChoice(QuestChoiceRow c)
+    {
+        choiceForm = new ChoiceForm { QuestChoiceId = c.QuestChoiceId, FromNodeId = c.FromNodeId, ToNodeId = c.ToNodeId, Label = c.Label, ConditionExpression = c.ConditionExpression, EffectsJson = c.EffectsJson, OrderIndex = c.OrderIndex };
+    }
+
+    private async Task SaveChoice()
+    {
+        var h = HttpFactory.CreateClient();
+        var req = new { fromNodeId = choiceForm.FromNodeId, toNodeId = choiceForm.ToNodeId, label = choiceForm.Label, conditionExpression = choiceForm.ConditionExpression, effectsJson = choiceForm.EffectsJson, orderIndex = choiceForm.OrderIndex };
+        HttpResponseMessage res = choiceForm.QuestChoiceId.HasValue
+            ? await h.PutAsJsonAsync(Nav.ToAbsoluteUri($"/api/quests/{QuestId}/choices/{choiceForm.QuestChoiceId.Value}"), req)
+            : await h.PostAsJsonAsync(Nav.ToAbsoluteUri($"/api/quests/{QuestId}/choices"), req);
+        if (!res.IsSuccessStatusCode) { error = await res.Content.ReadAsStringAsync(); return; }
+        choiceForm = new ChoiceForm();
+        await Load();
+    }
+
+    private async Task DeleteChoice(int choiceId)
+    {
+        var ok = await JS.InvokeAsync<bool>("confirm", "Delete this choice?");
+        if (!ok) return;
+        var h = HttpFactory.CreateClient();
+        await h.DeleteAsync(Nav.ToAbsoluteUri($"/api/quests/{QuestId}/choices/{choiceId}"));
+        await Load();
+    }
+
+    private static string NodeTypeLabel(int t) => t switch { 1 => "Scene", 2 => "Choice", 3 => "Encounter", 4 => "SkillCheck", 5 => "Reward", 6 => "Note", _ => "Scene" };
+
+    private sealed class NodeForm
+    {
+        public int? QuestNodeId { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public int NodeType { get; set; }
+        public int OrderIndex { get; set; }
+        public string? BodyMarkdown { get; set; }
+        public string? DmHints { get; set; }
+        public int? EncounterId { get; set; }
+    }
+
+    private sealed class ChoiceForm
+    {
+        public int? QuestChoiceId { get; set; }
+        public int FromNodeId { get; set; }
+        public int ToNodeId { get; set; }
+        public string Label { get; set; } = string.Empty;
+        public string? ConditionExpression { get; set; }
+        public string? EffectsJson { get; set; }
+        public int OrderIndex { get; set; }
+    }
+
+    private sealed class QuestDetail
+    {
+        public string Title { get; set; } = string.Empty;
+        public List<QuestNodeRow> Nodes { get; set; } = new();
+        public List<QuestChoiceRow> Choices { get; set; } = new();
+    }
+
+    private sealed record QuestNodeRow(int QuestNodeId, string Title, int NodeType, int OrderIndex, string? BodyMarkdown, string? DmHints, int? EncounterId);
+    private sealed record QuestChoiceRow(int QuestChoiceId, int FromNodeId, int ToNodeId, string Label, string? ConditionExpression, string? EffectsJson, int OrderIndex);
+}

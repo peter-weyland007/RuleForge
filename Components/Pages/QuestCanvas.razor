@@ -1,0 +1,157 @@
+@page "/quests/{QuestId:int}/canvas"
+@inject IHttpClientFactory HttpFactory
+@inject NavigationManager Nav
+
+<PageTitle>Quest Canvas</PageTitle>
+
+<MudStack Spacing="2">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+        <MudText Typo="Typo.h4">@title · Canvas</MudText>
+        <MudStack Row="true" Spacing="1">
+            <MudButton Variant="Variant.Outlined" Href="@($"/quests/{QuestId}")" StartIcon="@Icons.Material.Filled.ViewList">Builder</MudButton>
+            <MudButton Variant="Variant.Outlined" Href="/quests" StartIcon="@Icons.Material.Filled.ArrowBack">Quests</MudButton>
+        </MudStack>
+    </MudStack>
+
+    @if (!string.IsNullOrWhiteSpace(error))
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@error</MudAlert>
+    }
+
+    <MudPaper Class="quest-canvas" @onmousemove="OnCanvasMouseMove" @onmouseup="StopDrag" @onmouseleave="StopDrag">
+        <svg class="edge-layer">
+            @foreach (var edge in edges)
+            {
+                var from = NodeCenter(edge.FromNodeId);
+                var to = NodeCenter(edge.ToNodeId);
+                <line x1="@from.X" y1="@from.Y" x2="@to.X" y2="@to.Y" stroke="#7E8CA5" stroke-width="2" />
+            }
+        </svg>
+
+        @foreach (var edge in edges)
+        {
+            var from = NodeCenter(edge.FromNodeId);
+            var to = NodeCenter(edge.ToNodeId);
+            var mx = (from.X + to.X) / 2;
+            var my = (from.Y + to.Y) / 2;
+            <div class="edge-label" style="@($"left:{mx - 70}px; top:{my - 16}px;")">@edge.Label</div>
+        }
+
+        @foreach (var node in nodes)
+        {
+            var p = positions[node.QuestNodeId];
+            <MudPaper Class="node-card" Style="@($"left:{p.X}px; top:{p.Y}px;")" Elevation="3" Outlined="true">
+                <div class="node-head" @onmousedown="(e => StartDrag(node.QuestNodeId, e))">
+                    <MudText Typo="Typo.caption">#@node.QuestNodeId · @NodeTypeLabel(node.NodeType)</MudText>
+                </div>
+                <div class="node-body">
+                    <MudText Typo="Typo.subtitle2">@node.Title</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Order: @node.OrderIndex</MudText>
+                </div>
+            </MudPaper>
+        }
+    </MudPaper>
+</MudStack>
+
+<style>
+.quest-canvas { position: relative; height: 72vh; overflow: auto; background: #0f1522; }
+.edge-layer { position: absolute; width: 2600px; height: 1800px; pointer-events: none; }
+.edge-label { position: absolute; max-width: 140px; text-align: center; font-size: 11px; line-height: 1.2; color: #d9e2f1; background: rgba(20,28,45,.82); border: 1px solid #2c3850; border-radius: 6px; padding: 2px 6px; white-space: normal; word-break: break-word; pointer-events: none; }
+.node-card { position: absolute; width: 220px; cursor: default; user-select: none; }
+.node-head { padding: 6px 10px; background: #1a2438; cursor: grab; border-bottom: 1px solid #2c3850; }
+.node-body { padding: 10px; background: #141c2d; }
+</style>
+
+@code {
+    [Parameter] public int QuestId { get; set; }
+
+    private string title = "Quest";
+    private string? error;
+    private List<NodeDto> nodes = new();
+    private List<EdgeDto> edges = new();
+    private Dictionary<int, Pos> positions = new();
+
+    private int? draggingNodeId;
+    private double dragOffsetX;
+    private double dragOffsetY;
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        try
+        {
+            var h = HttpFactory.CreateClient();
+            var q = await h.GetFromJsonAsync<QuestDetail>(Nav.ToAbsoluteUri($"/api/quests/{QuestId}"));
+            if (q is null) { error = "Quest not found."; return; }
+
+            title = q.Title;
+            nodes = q.Nodes.OrderBy(x => x.OrderIndex).ToList();
+            edges = q.Choices;
+
+            var i = 0;
+            foreach (var n in nodes)
+            {
+                if (n.CanvasX.HasValue && n.CanvasY.HasValue)
+                {
+                    positions[n.QuestNodeId] = new Pos(n.CanvasX.Value, n.CanvasY.Value);
+                }
+                else
+                {
+                    var col = i % 4;
+                    var row = i / 4;
+                    positions[n.QuestNodeId] = new Pos(60 + col * 300, 60 + row * 220);
+                }
+                i++;
+            }
+        }
+        catch (Exception ex) { error = ex.Message; }
+    }
+
+    private void StartDrag(int nodeId, MouseEventArgs e)
+    {
+        draggingNodeId = nodeId;
+        var p = positions[nodeId];
+        dragOffsetX = e.ClientX - p.X;
+        dragOffsetY = e.ClientY - p.Y;
+    }
+
+    private void OnCanvasMouseMove(MouseEventArgs e)
+    {
+        if (draggingNodeId is null) return;
+        positions[draggingNodeId.Value] = new Pos(Math.Max(0, e.ClientX - dragOffsetX), Math.Max(0, e.ClientY - dragOffsetY));
+    }
+
+    private async Task StopDrag(MouseEventArgs _)
+    {
+        if (draggingNodeId is null) return;
+        var nodeId = draggingNodeId.Value;
+        draggingNodeId = null;
+
+        if (!positions.TryGetValue(nodeId, out var p)) return;
+        try
+        {
+            var h = HttpFactory.CreateClient();
+            await h.PostAsJsonAsync(Nav.ToAbsoluteUri($"/api/quests/{QuestId}/nodes/{nodeId}/position"), new { x = p.X, y = p.Y });
+        }
+        catch { }
+    }
+
+    private Pos NodeCenter(int nodeId)
+    {
+        if (!positions.TryGetValue(nodeId, out var p)) return new Pos(0, 0);
+        return new Pos(p.X + 110, p.Y + 56);
+    }
+
+    private static string NodeTypeLabel(int t) => t switch { 1 => "Scene", 2 => "Choice", 3 => "Encounter", 4 => "SkillCheck", 5 => "Reward", 6 => "Note", _ => "Scene" };
+
+    private sealed record Pos(double X, double Y);
+    private sealed record NodeDto(int QuestNodeId, string Title, int NodeType, int OrderIndex, string? BodyMarkdown, string? DmHints, int? EncounterId, double? CanvasX, double? CanvasY);
+    private sealed record EdgeDto(int QuestChoiceId, int FromNodeId, int ToNodeId, string Label, string? ConditionExpression, string? EffectsJson, int OrderIndex);
+    private sealed class QuestDetail
+    {
+        public string Title { get; set; } = string.Empty;
+        public List<NodeDto> Nodes { get; set; } = new();
+        public List<EdgeDto> Choices { get; set; } = new();
+    }
+}

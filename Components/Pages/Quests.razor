@@ -1,0 +1,161 @@
+@page "/quests"
+@inject IHttpClientFactory HttpFactory
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>Quests</PageTitle>
+
+<MudStack Spacing="3">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+        <MudStack Spacing="0">
+            <MudText Typo="Typo.h4">Quests</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Structure campaign stories in linear or branching form.</MudText>
+        </MudStack>
+        <MudStack Row="true" Spacing="1">
+            <MudButton Variant="Variant.Outlined" Color="Color.Info" Href="/docs" StartIcon="@Icons.Material.Filled.HelpOutline">Docs</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreate">Add Quest</MudButton>
+        </MudStack>
+    </MudStack>
+
+    @if (!string.IsNullOrWhiteSpace(error))
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@error</MudAlert>
+    }
+
+    <MudTable Items="rows" Dense="true" Hover="true" Outlined="true" Elevation="0">
+        <HeaderContent>
+            <MudTh>Title</MudTh>
+            <MudTh>Campaign</MudTh>
+            <MudTh>Mode</MudTh>
+            <MudTh>Choices</MudTh>
+            <MudTh></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>@context.Title</MudTd>
+            <MudTd>@CampaignName(context.CampaignId)</MudTd>
+            <MudTd>@ModeLabel(context.Mode)</MudTd>
+            <MudTd>@(context.UseChoiceMode ? "On" : "Off")</MudTd>
+            <MudTd Style="text-align:right; white-space:nowrap;">
+                <MudIconButton Icon="@Icons.Material.Filled.AccountTree" Color="Color.Success" Size="Size.Small" Href="@($"/quests/{context.QuestId}")" />
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" OnClick="() => OpenEdit(context.QuestId)" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="() => Delete(context.QuestId)" />
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+
+    @if (isEdit)
+    {
+        <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+            <MudStack Spacing="2">
+                <MudText Typo="Typo.h6">@(form.QuestId.HasValue ? "Edit Quest" : "Create Quest")</MudText>
+                <MudGrid>
+                    <MudItem xs="12" md="5"><MudTextField @bind-Value="form.Title" Label="Title" Variant="Variant.Outlined" Required="true" /></MudItem>
+                    <MudItem xs="12" md="3">
+                        <MudSelect T="int?" @bind-Value="form.CampaignId" Label="Campaign" Variant="Variant.Outlined" Clearable="true" Disabled="@(!campaigns.Any())">
+                            @foreach (var c in campaigns)
+                            {
+                                <MudSelectItem T="int?" Value="c.CampaignId">@c.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" md="2">
+                        <MudSelect T="int" @bind-Value="form.Mode" Label="Mode" Variant="Variant.Outlined">
+                            <MudSelectItem Value="1">Linear</MudSelectItem>
+                            <MudSelectItem Value="2">Branching</MudSelectItem>
+                            <MudSelectItem Value="3">Hybrid</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" md="2">
+                        <MudCheckBox T="bool" @bind-Value="form.UseChoiceMode" Label="Use Choice Mode" />
+                    </MudItem>
+                </MudGrid>
+                <MudTextField @bind-Value="form.Summary" Label="Summary" Variant="Variant.Outlined" Lines="3" />
+                <MudStack Row="true" Spacing="1">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Save">Save</MudButton>
+                    <MudButton Variant="Variant.Outlined" OnClick="() => isEdit = false">Cancel</MudButton>
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+    }
+</MudStack>
+
+@code {
+    private List<QuestRow> rows = new();
+    private List<CampaignOption> campaigns = new();
+    private bool isEdit;
+    private string? error;
+    private QuestForm form = new();
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        try
+        {
+            error = null;
+            var h = HttpFactory.CreateClient();
+            rows = await h.GetFromJsonAsync<List<QuestRow>>(Nav.ToAbsoluteUri("/api/quests")) ?? new();
+            campaigns = await h.GetFromJsonAsync<List<CampaignOption>>(Nav.ToAbsoluteUri("/api/campaigns")) ?? new();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            rows = new();
+        }
+    }
+
+    private void OpenCreate() { form = new QuestForm { Mode = 3, UseChoiceMode = true }; isEdit = true; }
+
+    private async Task OpenEdit(int id)
+    {
+        var h = HttpFactory.CreateClient();
+        var row = await h.GetFromJsonAsync<QuestRow>(Nav.ToAbsoluteUri($"/api/quests/{id}"));
+        if (row is null) return;
+        form = new QuestForm { QuestId = row.QuestId, CampaignId = row.CampaignId, Title = row.Title, Summary = row.Summary, Mode = row.Mode, UseChoiceMode = row.UseChoiceMode, StartNodeId = row.StartNodeId };
+        isEdit = true;
+    }
+
+    private async Task Save()
+    {
+        var h = HttpFactory.CreateClient();
+        var req = new { campaignId = form.CampaignId, title = form.Title, summary = form.Summary, mode = form.Mode, useChoiceMode = form.UseChoiceMode, startNodeId = form.StartNodeId };
+        HttpResponseMessage res = form.QuestId.HasValue
+            ? await h.PutAsJsonAsync(Nav.ToAbsoluteUri($"/api/quests/{form.QuestId.Value}"), req)
+            : await h.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/quests"), req);
+
+        if (!res.IsSuccessStatusCode)
+        {
+            error = await res.Content.ReadAsStringAsync();
+            return;
+        }
+
+        isEdit = false;
+        await Load();
+    }
+
+    private async Task Delete(int id)
+    {
+        var ok = await JS.InvokeAsync<bool>("confirm", "Delete this quest?");
+        if (!ok) return;
+        var h = HttpFactory.CreateClient();
+        await h.DeleteAsync(Nav.ToAbsoluteUri($"/api/quests/{id}"));
+        await Load();
+    }
+
+    private string CampaignName(int? id) => id is null ? "—" : campaigns.FirstOrDefault(x => x.CampaignId == id)?.Name ?? $"#{id}";
+    private static string ModeLabel(int m) => m switch { 1 => "Linear", 2 => "Branching", 3 => "Hybrid", _ => "Hybrid" };
+
+    private sealed class QuestForm
+    {
+        public int? QuestId { get; set; }
+        public int? CampaignId { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public string? Summary { get; set; }
+        public int Mode { get; set; }
+        public bool UseChoiceMode { get; set; }
+        public int? StartNodeId { get; set; }
+    }
+
+    private sealed record QuestRow(int QuestId, int? CampaignId, string Title, string? Summary, int Mode, bool UseChoiceMode, int? StartNodeId);
+    private sealed record CampaignOption(int CampaignId, string Name);
+}

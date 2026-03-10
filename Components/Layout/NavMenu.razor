@@ -1,9 +1,11 @@
 <MudNavMenu Dense="true" Class="pa-2">
     <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">Dashboard</MudNavLink>
+    <MudNavLink Href="/docs" Icon="@Icons.Material.Filled.Description">Docs</MudNavLink>
 
     <MudNavGroup Title="Campaigns" Icon="@Icons.Material.Filled.Flag" Expanded="true">
         <MudNavLink Href="/campaigns" Icon="@Icons.Material.Filled.FlagCircle">Campaigns</MudNavLink>
         <MudNavLink Href="/encounters" Icon="@Icons.Material.Filled.EventNote">Encounters</MudNavLink>
+        <MudNavLink Href="/quests" Icon="@Icons.Material.Filled.MenuBook">Quests</MudNavLink>
     </MudNavGroup>
 
     <MudNavGroup Title="Compendium" Icon="@Icons.Material.Filled.AutoStories" Expanded="true">
@@ -15,4 +17,5 @@
 
     <MudDivider Class="my-2" />
     <MudNavLink Href="/settings" Icon="@Icons.Material.Filled.Settings">Settings</MudNavLink>
+    <MudNavLink Href="/settings/operations" Icon="@Icons.Material.Filled.AdminPanelSettings">Operations</MudNavLink>
 </MudNavMenu>

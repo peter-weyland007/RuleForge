@@ -1,0 +1,52 @@
+@page "/quests/docs/modes"
+
+<PageTitle>Quest Modes & Choice Mode</PageTitle>
+
+<MudStack Spacing="3">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+        <MudText Typo="Typo.h4">Quest Modes & Use Choice Mode</MudText>
+        <MudButton Variant="Variant.Outlined" Href="/quests" StartIcon="@Icons.Material.Filled.ArrowBack">Back to Quests</MudButton>
+    </MudStack>
+
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+        Quest mode defines how a quest is authored. Use Choice Mode defines how the DM runs it at the table.
+    </MudAlert>
+
+    <MudGrid>
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+                <MudText Typo="Typo.h6">Linear</MudText>
+                <MudText Typo="Typo.body2">Use ordered nodes like a traditional module/chapter flow. Branches are optional and minimal.</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+                <MudText Typo="Typo.h6">Branching</MudText>
+                <MudText Typo="Typo.body2">Use node choices as primary navigation. DM selects branches as players make decisions.</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+                <MudText Typo="Typo.h6">Hybrid</MudText>
+                <MudText Typo="Typo.body2">Best of both. Author linearly while still supporting branch points and optional paths.</MudText>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+        <MudText Typo="Typo.h6">Use Choice Mode (On/Off)</MudText>
+        <MudList T="string" Dense="true">
+            <MudListItem T="string"><b>On:</b> DM actively follows branch choices at each decision node (choose-your-own-adventure style).</MudListItem>
+            <MudListItem T="string"><b>Off:</b> DM can read through quest content traditionally and jump manually as needed.</MudListItem>
+        </MudList>
+    </MudPaper>
+
+    <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+        <MudText Typo="Typo.h6">Recommended Use</MudText>
+        <MudList T="string" Dense="true">
+            <MudListItem T="string">Story-heavy / fixed pacing: <b>Linear + Choice Mode Off</b></MudListItem>
+            <MudListItem T="string">Player-agency driven sessions: <b>Branching + Choice Mode On</b></MudListItem>
+            <MudListItem T="string">Most campaigns: <b>Hybrid + toggle Choice Mode per session</b></MudListItem>
+        </MudList>
+    </MudPaper>
+</MudStack>

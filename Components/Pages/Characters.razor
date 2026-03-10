@@ -1,6 +1,7 @@
 @page "/characters"
 @inject IHttpClientFactory HttpFactory
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>Characters</PageTitle>
 
@@ -215,6 +216,9 @@
     {
         try
         {
+            var ok = await JS.InvokeAsync<bool>("confirm", "Archive this character?");
+            if (!ok) return;
+
             error = null;
             var http = HttpFactory.CreateClient();
             var res = await http.DeleteAsync(Nav.ToAbsoluteUri($"/api/characters/{characterId}"));

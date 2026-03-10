@@ -1,6 +1,7 @@
 @page "/parties"
 @inject IHttpClientFactory HttpFactory
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>Parties</PageTitle>
 
@@ -128,7 +129,7 @@
 
     private void OpenCreate(){ form=new PartyForm(); isEdit=true; }
     private async Task OpenEdit(int id){ var h=HttpFactory.CreateClient(); var r=await h.GetFromJsonAsync<PartyRow>(Nav.ToAbsoluteUri($"/api/parties/{id}")); if(r is null)return; form=new PartyForm{PartyId=r.PartyId,Name=r.Name,Description=r.Description,CampaignId=r.CampaignId}; isEdit=true; }
-    private async Task Delete(int id){ var h=HttpFactory.CreateClient(); await h.DeleteAsync(Nav.ToAbsoluteUri($"/api/parties/{id}")); await Load(); }
+    private async Task Delete(int id){ var ok = await JS.InvokeAsync<bool>("confirm", "Delete this party?"); if (!ok) return; var h=HttpFactory.CreateClient(); await h.DeleteAsync(Nav.ToAbsoluteUri($"/api/parties/{id}")); await Load(); }
     private async Task Save(){ var h=HttpFactory.CreateClient(); var req=new{name=form.Name,description=form.Description,campaignId=form.CampaignId}; if(form.PartyId.HasValue) await h.PutAsJsonAsync(Nav.ToAbsoluteUri($"/api/parties/{form.PartyId.Value}"),req); else await h.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/parties"),req); isEdit=false; await Load(); }
 
     private void CloseMembers() => showMembers = false;

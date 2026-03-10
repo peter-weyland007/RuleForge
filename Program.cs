@@ -4,6 +4,7 @@ using RuleForge.Contracts.Campaigns;
 using RuleForge.Contracts.Bestiary;
 using RuleForge.Contracts.Encounters;
 using RuleForge.Contracts.Parties;
+using RuleForge.Contracts.Quests;
 using RuleForge.Data;
 using RuleForge.Domain.Characters;
 using RuleForge.Domain.Campaigns;
@@ -11,6 +12,7 @@ using RuleForge.Domain.Bestiary;
 using RuleForge.Domain.Encounters;
 using RuleForge.Domain.Common;
 using RuleForge.Domain.Parties;
+using RuleForge.Domain.Quests;
 using MudBlazor.Services;
 using RuleForge.Components;
 
@@ -161,6 +163,61 @@ using (var scope = app.Services.CreateScope())
         );
         CREATE INDEX IF NOT EXISTS IX_Encounters_Name ON Encounters (Name);
     """);
+
+
+    db.Database.ExecuteSqlRaw("""
+        CREATE TABLE IF NOT EXISTS Quests (
+            QuestId INTEGER NOT NULL CONSTRAINT PK_Quests PRIMARY KEY AUTOINCREMENT,
+            CampaignId INTEGER NOT NULL,
+            Title TEXT NOT NULL,
+            Summary TEXT NULL,
+            Mode INTEGER NOT NULL,
+            UseChoiceMode INTEGER NOT NULL,
+            StartNodeId INTEGER NULL,
+            DateCreatedUtc TEXT NOT NULL,
+            DateModifiedUtc TEXT NOT NULL,
+            DateDeletedUtc TEXT NULL
+        );
+        CREATE INDEX IF NOT EXISTS IX_Quests_CampaignId_Title ON Quests (CampaignId, Title);
+
+        CREATE TABLE IF NOT EXISTS QuestNodes (
+            QuestNodeId INTEGER NOT NULL CONSTRAINT PK_QuestNodes PRIMARY KEY AUTOINCREMENT,
+            QuestId INTEGER NOT NULL,
+            Title TEXT NOT NULL,
+            NodeType INTEGER NOT NULL,
+            OrderIndex INTEGER NOT NULL,
+            BodyMarkdown TEXT NULL,
+            DmHints TEXT NULL,
+            EncounterId INTEGER NULL,
+            DateCreatedUtc TEXT NOT NULL,
+            DateModifiedUtc TEXT NOT NULL,
+            DateDeletedUtc TEXT NULL,
+            CONSTRAINT FK_QuestNodes_Quests_QuestId FOREIGN KEY (QuestId) REFERENCES Quests (QuestId) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS IX_QuestNodes_QuestId_OrderIndex ON QuestNodes (QuestId, OrderIndex);
+        
+        -- canvas coordinates
+        
+
+        CREATE TABLE IF NOT EXISTS QuestChoices (
+            QuestChoiceId INTEGER NOT NULL CONSTRAINT PK_QuestChoices PRIMARY KEY AUTOINCREMENT,
+            QuestId INTEGER NOT NULL,
+            FromNodeId INTEGER NOT NULL,
+            ToNodeId INTEGER NOT NULL,
+            Label TEXT NOT NULL,
+            ConditionExpression TEXT NULL,
+            EffectsJson TEXT NULL,
+            OrderIndex INTEGER NOT NULL,
+            DateCreatedUtc TEXT NOT NULL,
+            DateModifiedUtc TEXT NOT NULL,
+            DateDeletedUtc TEXT NULL,
+            CONSTRAINT FK_QuestChoices_Quests_QuestId FOREIGN KEY (QuestId) REFERENCES Quests (QuestId) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS IX_QuestChoices_QuestId_FromNodeId_OrderIndex ON QuestChoices (QuestId, FromNodeId, OrderIndex);
+    """);
+
+    try { db.Database.ExecuteSqlRaw("ALTER TABLE QuestNodes ADD COLUMN CanvasX REAL NULL;"); } catch { }
+    try { db.Database.ExecuteSqlRaw("ALTER TABLE QuestNodes ADD COLUMN CanvasY REAL NULL;"); } catch { }
 
     db.Database.ExecuteSqlRaw("""
         CREATE TABLE IF NOT EXISTS EncounterParticipants (
@@ -634,6 +691,242 @@ app.MapGet("/api/parties/{id:int}/members", async (int id, AppDbContext db) =>
     return Results.Ok(rows);
 });
 
+
+app.MapGet("/api/quests", async (AppDbContext db) =>
+{
+    var rows = await db.Quests
+        .Where(x => x.DateDeletedUtc == null)
+        .OrderBy(x => x.Title)
+        .Select(x => new QuestResponse
+        {
+            QuestId = x.QuestId,
+            CampaignId = x.CampaignId == 0 ? null : x.CampaignId,
+            Title = x.Title,
+            Summary = x.Summary,
+            Mode = (int)x.Mode,
+            UseChoiceMode = x.UseChoiceMode,
+            StartNodeId = x.StartNodeId
+        })
+        .ToListAsync();
+    return Results.Ok(rows);
+});
+
+app.MapGet("/api/quests/{id:int}", async (int id, AppDbContext db) =>
+{
+    var quest = await db.Quests.FirstOrDefaultAsync(x => x.QuestId == id && x.DateDeletedUtc == null);
+    if (quest is null) return Results.NotFound();
+
+    var nodes = await db.QuestNodes.Where(x => x.QuestId == id && x.DateDeletedUtc == null)
+        .OrderBy(x => x.OrderIndex)
+        .Select(x => new QuestNodeResponse
+        {
+            QuestNodeId = x.QuestNodeId,
+            Title = x.Title,
+            NodeType = (int)x.NodeType,
+            OrderIndex = x.OrderIndex,
+            BodyMarkdown = x.BodyMarkdown,
+            DmHints = x.DmHints,
+            EncounterId = x.EncounterId,
+            CanvasX = x.CanvasX,
+            CanvasY = x.CanvasY
+        })
+        .ToListAsync();
+
+    var choices = await db.QuestChoices.Where(x => x.QuestId == id && x.DateDeletedUtc == null)
+        .OrderBy(x => x.FromNodeId).ThenBy(x => x.OrderIndex)
+        .Select(x => new QuestChoiceResponse
+        {
+            QuestChoiceId = x.QuestChoiceId,
+            FromNodeId = x.FromNodeId,
+            ToNodeId = x.ToNodeId,
+            Label = x.Label,
+            ConditionExpression = x.ConditionExpression,
+            EffectsJson = x.EffectsJson,
+            OrderIndex = x.OrderIndex
+        })
+        .ToListAsync();
+
+    return Results.Ok(new QuestResponse
+    {
+        QuestId = quest.QuestId,
+        CampaignId = quest.CampaignId == 0 ? null : quest.CampaignId,
+        Title = quest.Title,
+        Summary = quest.Summary,
+        Mode = (int)quest.Mode,
+        UseChoiceMode = quest.UseChoiceMode,
+        StartNodeId = quest.StartNodeId,
+        Nodes = nodes,
+        Choices = choices
+    });
+});
+
+app.MapPost("/api/quests", async (UpsertQuestRequest req, AppDbContext db) =>
+{
+    if (string.IsNullOrWhiteSpace(req.Title)) return Results.BadRequest("Quest title is required.");
+    var row = new Quest
+    {
+        CampaignId = req.CampaignId ?? 0,
+        Title = TitleNormalization.ToPascalTitle(req.Title),
+        Summary = string.IsNullOrWhiteSpace(req.Summary) ? null : req.Summary.Trim(),
+        Mode = Enum.IsDefined(typeof(QuestMode), req.Mode) ? (QuestMode)req.Mode : QuestMode.Hybrid,
+        UseChoiceMode = req.UseChoiceMode,
+        StartNodeId = req.StartNodeId,
+        DateCreatedUtc = DateTime.UtcNow,
+        DateModifiedUtc = DateTime.UtcNow
+    };
+    db.Quests.Add(row);
+    await db.SaveChangesAsync();
+    return Results.Ok(new { row.QuestId });
+});
+
+app.MapPut("/api/quests/{id:int}", async (int id, UpsertQuestRequest req, AppDbContext db) =>
+{
+    if (string.IsNullOrWhiteSpace(req.Title)) return Results.BadRequest("Quest title is required.");
+    var row = await db.Quests.FirstOrDefaultAsync(x => x.QuestId == id && x.DateDeletedUtc == null);
+    if (row is null) return Results.NotFound();
+
+    row.CampaignId = req.CampaignId ?? 0;
+    row.Title = TitleNormalization.ToPascalTitle(req.Title);
+    row.Summary = string.IsNullOrWhiteSpace(req.Summary) ? null : req.Summary.Trim();
+    row.Mode = Enum.IsDefined(typeof(QuestMode), req.Mode) ? (QuestMode)req.Mode : QuestMode.Hybrid;
+    row.UseChoiceMode = req.UseChoiceMode;
+    row.StartNodeId = req.StartNodeId;
+    row.DateModifiedUtc = DateTime.UtcNow;
+
+    await db.SaveChangesAsync();
+    return Results.Ok(new { row.QuestId });
+});
+
+app.MapDelete("/api/quests/{id:int}", async (int id, AppDbContext db) =>
+{
+    var row = await db.Quests.FirstOrDefaultAsync(x => x.QuestId == id && x.DateDeletedUtc == null);
+    if (row is null) return Results.NotFound();
+    row.DateDeletedUtc = DateTime.UtcNow;
+    row.DateModifiedUtc = DateTime.UtcNow;
+    await db.SaveChangesAsync();
+    return Results.NoContent();
+});
+
+app.MapPost("/api/quests/{questId:int}/nodes", async (int questId, UpsertQuestNodeRequest req, AppDbContext db) =>
+{
+    if (string.IsNullOrWhiteSpace(req.Title)) return Results.BadRequest("Node title is required.");
+    var quest = await db.Quests.FirstOrDefaultAsync(x => x.QuestId == questId && x.DateDeletedUtc == null);
+    if (quest is null) return Results.NotFound();
+
+    var row = new QuestNode
+    {
+        QuestId = questId,
+        Title = req.Title.Trim(),
+        NodeType = Enum.IsDefined(typeof(QuestNodeType), req.NodeType) ? (QuestNodeType)req.NodeType : QuestNodeType.Scene,
+        OrderIndex = req.OrderIndex,
+        BodyMarkdown = req.BodyMarkdown,
+        DmHints = req.DmHints,
+        EncounterId = req.EncounterId,
+        CanvasX = req.CanvasX,
+        CanvasY = req.CanvasY,
+        DateCreatedUtc = DateTime.UtcNow,
+        DateModifiedUtc = DateTime.UtcNow
+    };
+    db.QuestNodes.Add(row);
+    await db.SaveChangesAsync();
+    return Results.Ok(new { row.QuestNodeId });
+});
+
+app.MapPost("/api/quests/{questId:int}/choices", async (int questId, UpsertQuestChoiceRequest req, AppDbContext db) =>
+{
+    if (string.IsNullOrWhiteSpace(req.Label)) return Results.BadRequest("Choice label is required.");
+    var quest = await db.Quests.FirstOrDefaultAsync(x => x.QuestId == questId && x.DateDeletedUtc == null);
+    if (quest is null) return Results.NotFound();
+
+    var row = new QuestChoice
+    {
+        QuestId = questId,
+        FromNodeId = req.FromNodeId,
+        ToNodeId = req.ToNodeId,
+        Label = req.Label.Trim(),
+        ConditionExpression = req.ConditionExpression,
+        EffectsJson = req.EffectsJson,
+        OrderIndex = req.OrderIndex,
+        DateCreatedUtc = DateTime.UtcNow,
+        DateModifiedUtc = DateTime.UtcNow
+    };
+    db.QuestChoices.Add(row);
+    await db.SaveChangesAsync();
+    return Results.Ok(new { row.QuestChoiceId });
+});
+
+
+app.MapPut("/api/quests/{questId:int}/nodes/{nodeId:int}", async (int questId, int nodeId, UpsertQuestNodeRequest req, AppDbContext db) =>
+{
+    if (string.IsNullOrWhiteSpace(req.Title)) return Results.BadRequest("Node title is required.");
+    var row = await db.QuestNodes.FirstOrDefaultAsync(x => x.QuestId == questId && x.QuestNodeId == nodeId && x.DateDeletedUtc == null);
+    if (row is null) return Results.NotFound();
+
+    row.Title = req.Title.Trim();
+    row.NodeType = Enum.IsDefined(typeof(QuestNodeType), req.NodeType) ? (QuestNodeType)req.NodeType : QuestNodeType.Scene;
+    row.OrderIndex = req.OrderIndex;
+    row.BodyMarkdown = req.BodyMarkdown;
+    row.DmHints = req.DmHints;
+    row.EncounterId = req.EncounterId;
+    row.CanvasX = req.CanvasX;
+    row.CanvasY = req.CanvasY;
+    row.DateModifiedUtc = DateTime.UtcNow;
+
+    await db.SaveChangesAsync();
+    return Results.Ok(new { row.QuestNodeId });
+});
+
+app.MapDelete("/api/quests/{questId:int}/nodes/{nodeId:int}", async (int questId, int nodeId, AppDbContext db) =>
+{
+    var row = await db.QuestNodes.FirstOrDefaultAsync(x => x.QuestId == questId && x.QuestNodeId == nodeId && x.DateDeletedUtc == null);
+    if (row is null) return Results.NotFound();
+    row.DateDeletedUtc = DateTime.UtcNow;
+    row.DateModifiedUtc = DateTime.UtcNow;
+    await db.SaveChangesAsync();
+    return Results.NoContent();
+});
+
+app.MapPut("/api/quests/{questId:int}/choices/{choiceId:int}", async (int questId, int choiceId, UpsertQuestChoiceRequest req, AppDbContext db) =>
+{
+    if (string.IsNullOrWhiteSpace(req.Label)) return Results.BadRequest("Choice label is required.");
+    var row = await db.QuestChoices.FirstOrDefaultAsync(x => x.QuestId == questId && x.QuestChoiceId == choiceId && x.DateDeletedUtc == null);
+    if (row is null) return Results.NotFound();
+
+    row.FromNodeId = req.FromNodeId;
+    row.ToNodeId = req.ToNodeId;
+    row.Label = req.Label.Trim();
+    row.ConditionExpression = req.ConditionExpression;
+    row.EffectsJson = req.EffectsJson;
+    row.OrderIndex = req.OrderIndex;
+    row.DateModifiedUtc = DateTime.UtcNow;
+
+    await db.SaveChangesAsync();
+    return Results.Ok(new { row.QuestChoiceId });
+});
+
+app.MapDelete("/api/quests/{questId:int}/choices/{choiceId:int}", async (int questId, int choiceId, AppDbContext db) =>
+{
+    var row = await db.QuestChoices.FirstOrDefaultAsync(x => x.QuestId == questId && x.QuestChoiceId == choiceId && x.DateDeletedUtc == null);
+    if (row is null) return Results.NotFound();
+    row.DateDeletedUtc = DateTime.UtcNow;
+    row.DateModifiedUtc = DateTime.UtcNow;
+    await db.SaveChangesAsync();
+    return Results.NoContent();
+});
+
+
+app.MapPost("/api/quests/{questId:int}/nodes/{nodeId:int}/position", async (int questId, int nodeId, System.Text.Json.JsonElement req, AppDbContext db) =>
+{
+    var row = await db.QuestNodes.FirstOrDefaultAsync(x => x.QuestId == questId && x.QuestNodeId == nodeId && x.DateDeletedUtc == null);
+    if (row is null) return Results.NotFound();
+
+    row.CanvasX = req.GetProperty("x").GetDouble();
+    row.CanvasY = req.GetProperty("y").GetDouble();
+    row.DateModifiedUtc = DateTime.UtcNow;
+    await db.SaveChangesAsync();
+    return Results.Ok();
+});
+
 app.MapGet("/api/encounters/options", async (AppDbContext db) =>
 {
     var campaigns = await db.Campaigns.Where(x => x.DateDeletedUtc == null)
@@ -802,6 +1095,119 @@ app.MapDelete("/api/encounters/{id:int}", async (int id, AppDbContext db) =>
     row.DateModifiedUtc = DateTime.UtcNow;
     await db.SaveChangesAsync();
     return Results.NoContent();
+});
+
+
+
+app.MapGet("/api/admin/soft-deleted/{entity}", async (string entity, AppDbContext db) =>
+{
+    entity = entity.Trim().ToLowerInvariant();
+
+    return entity switch
+    {
+        "characters" => Results.Ok(await db.Characters.Where(x => x.DateDeletedUtc != null)
+            .OrderByDescending(x => x.DateDeletedUtc)
+            .Select(x => new { Id = x.CharacterId, Name = x.Name, DateDeletedUtc = x.DateDeletedUtc!.Value.ToString("u") })
+            .ToListAsync()),
+        "campaigns" => Results.Ok(await db.Campaigns.Where(x => x.DateDeletedUtc != null)
+            .OrderByDescending(x => x.DateDeletedUtc)
+            .Select(x => new { Id = x.CampaignId, Name = x.Name, DateDeletedUtc = x.DateDeletedUtc!.Value.ToString("u") })
+            .ToListAsync()),
+        "creatures" => Results.Ok(await db.Creatures.Where(x => x.DateDeletedUtc != null)
+            .OrderByDescending(x => x.DateDeletedUtc)
+            .Select(x => new { Id = x.CreatureId, Name = x.Name, DateDeletedUtc = x.DateDeletedUtc!.Value.ToString("u") })
+            .ToListAsync()),
+        "encounters" => Results.Ok(await db.Encounters.Where(x => x.DateDeletedUtc != null)
+            .OrderByDescending(x => x.DateDeletedUtc)
+            .Select(x => new { Id = x.EncounterId, Name = x.Name, DateDeletedUtc = x.DateDeletedUtc!.Value.ToString("u") })
+            .ToListAsync()),
+        "parties" => Results.Ok(await db.Parties.Where(x => x.DateDeletedUtc != null)
+            .OrderByDescending(x => x.DateDeletedUtc)
+            .Select(x => new { Id = x.PartyId, Name = x.Name, DateDeletedUtc = x.DateDeletedUtc!.Value.ToString("u") })
+            .ToListAsync()),
+        _ => Results.BadRequest("Unknown entity.")
+    };
+});
+
+app.MapPost("/api/admin/purge-soft-deleted/{entity}/selected", async (string entity, List<int> ids, AppDbContext db) =>
+{
+    entity = entity.Trim().ToLowerInvariant();
+    if (ids.Count == 0) return Results.BadRequest("No ids provided.");
+
+    int deleted;
+    switch (entity)
+    {
+        case "characters":
+            var chars = await db.Characters.Where(x => x.DateDeletedUtc != null && ids.Contains(x.CharacterId)).ToListAsync();
+            deleted = chars.Count;
+            db.Characters.RemoveRange(chars);
+            break;
+        case "campaigns":
+            var campaigns = await db.Campaigns.Where(x => x.DateDeletedUtc != null && ids.Contains(x.CampaignId)).ToListAsync();
+            deleted = campaigns.Count;
+            db.Campaigns.RemoveRange(campaigns);
+            break;
+        case "creatures":
+            var creatures = await db.Creatures.Where(x => x.DateDeletedUtc != null && ids.Contains(x.CreatureId)).ToListAsync();
+            deleted = creatures.Count;
+            db.Creatures.RemoveRange(creatures);
+            break;
+        case "encounters":
+            var encounters = await db.Encounters.Where(x => x.DateDeletedUtc != null && ids.Contains(x.EncounterId)).ToListAsync();
+            deleted = encounters.Count;
+            db.Encounters.RemoveRange(encounters);
+            break;
+        case "parties":
+            var parties = await db.Parties.Where(x => x.DateDeletedUtc != null && ids.Contains(x.PartyId)).ToListAsync();
+            deleted = parties.Count;
+            db.Parties.RemoveRange(parties);
+            break;
+        default:
+            return Results.BadRequest("Unknown entity.");
+    }
+
+    await db.SaveChangesAsync();
+    return Results.Ok($"Purged {deleted} selected {entity} record(s).");
+});
+
+app.MapPost("/api/admin/purge-soft-deleted/{entity}", async (string entity, AppDbContext db) =>
+{
+    entity = entity.Trim().ToLowerInvariant();
+
+    int deleted;
+    switch (entity)
+    {
+        case "characters":
+            var chars = await db.Characters.Where(x => x.DateDeletedUtc != null).ToListAsync();
+            deleted = chars.Count;
+            db.Characters.RemoveRange(chars);
+            break;
+        case "campaigns":
+            var campaigns = await db.Campaigns.Where(x => x.DateDeletedUtc != null).ToListAsync();
+            deleted = campaigns.Count;
+            db.Campaigns.RemoveRange(campaigns);
+            break;
+        case "creatures":
+            var creatures = await db.Creatures.Where(x => x.DateDeletedUtc != null).ToListAsync();
+            deleted = creatures.Count;
+            db.Creatures.RemoveRange(creatures);
+            break;
+        case "encounters":
+            var encounters = await db.Encounters.Where(x => x.DateDeletedUtc != null).ToListAsync();
+            deleted = encounters.Count;
+            db.Encounters.RemoveRange(encounters);
+            break;
+        case "parties":
+            var parties = await db.Parties.Where(x => x.DateDeletedUtc != null).ToListAsync();
+            deleted = parties.Count;
+            db.Parties.RemoveRange(parties);
+            break;
+        default:
+            return Results.BadRequest("Unknown entity.");
+    }
+
+    await db.SaveChangesAsync();
+    return Results.Ok($"Purged {deleted} soft-deleted {entity} record(s).");
 });
 
 app.MapRazorComponents<App>()

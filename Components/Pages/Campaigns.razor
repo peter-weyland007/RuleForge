@@ -1,6 +1,7 @@
 @page "/campaigns"
 @inject IHttpClientFactory HttpFactory
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>Campaigns</PageTitle>
 
@@ -120,6 +121,9 @@
     {
         try
         {
+            var ok = await JS.InvokeAsync<bool>("confirm", "Delete this campaign?");
+            if (!ok) return;
+
             error = null;
             var http = HttpFactory.CreateClient();
             var res = await http.DeleteAsync(Nav.ToAbsoluteUri($"/api/campaigns/{campaignId}"));

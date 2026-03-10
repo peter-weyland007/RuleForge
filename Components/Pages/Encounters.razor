@@ -1,6 +1,7 @@
 @page "/encounters"
 @inject IHttpClientFactory HttpFactory
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>Encounters</PageTitle>
 
@@ -231,6 +232,9 @@
 
     private async Task Delete(int encounterId)
     {
+        var ok = await JS.InvokeAsync<bool>("confirm", "Delete this encounter?");
+        if (!ok) return;
+
         var http = HttpFactory.CreateClient();
         await http.DeleteAsync(Nav.ToAbsoluteUri($"/api/encounters/{encounterId}"));
         await Load();
@@ -294,8 +298,10 @@
         }
     }
 
-    private void RemoveParticipant(int localId)
+    private async Task RemoveParticipant(int localId)
     {
+        var ok = await JS.InvokeAsync<bool>("confirm", "Remove this participant?");
+        if (!ok) return;
         form.Participants.RemoveAll(x => x.LocalId == localId);
     }
 

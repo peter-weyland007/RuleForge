@@ -1,0 +1,119 @@
+@page "/settings/operations/hard-delete"
+@inject IHttpClientFactory HttpFactory
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>Hard Delete Cleanup</PageTitle>
+
+<MudStack Spacing="3">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+        <MudText Typo="Typo.h4">Hard Delete Cleanup</MudText>
+        <MudButton Variant="Variant.Outlined" Href="/settings/operations" StartIcon="@Icons.Material.Filled.ArrowBack">Back to Operations</MudButton>
+    </MudStack>
+
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+        Permanently delete selected soft-deleted records. This cannot be undone.
+    </MudAlert>
+
+    @if (!string.IsNullOrWhiteSpace(message))
+    {
+        <MudAlert Severity="@messageSeverity" Variant="Variant.Outlined">@message</MudAlert>
+    }
+
+    <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.End">
+            <MudSelect T="string" @bind-Value="entityKey" Label="Entity" Variant="Variant.Outlined" Style="min-width:220px;">
+                @foreach (var e in entities)
+                {
+                    <MudSelectItem Value="@e.Key">@e.Label</MudSelectItem>
+                }
+            </MudSelect>
+            <MudButton Variant="Variant.Outlined" OnClick="LoadRows" StartIcon="@Icons.Material.Filled.Refresh">Load Soft-Deleted</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Error" OnClick="PurgeSelected" Disabled="@(!rows.Any(r => r.Selected))" StartIcon="@Icons.Material.Filled.DeleteForever">Purge Selected</MudButton>
+        </MudStack>
+    </MudPaper>
+
+    <MudTable Items="rows" Dense="true" Hover="true" Outlined="true" Elevation="0">
+        <HeaderContent>
+            <MudTh Style="width:44px;"><MudCheckBox T="bool" Value="@AllSelected" ValueChanged="SetAll" /></MudTh>
+            <MudTh>ID</MudTh>
+            <MudTh>Name</MudTh>
+            <MudTh>Deleted UTC</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd><MudCheckBox T="bool" @bind-Value="context.Selected" /></MudTd>
+            <MudTd>@context.Id</MudTd>
+            <MudTd>@context.Name</MudTd>
+            <MudTd>@context.DateDeletedUtc</MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Typo="Typo.body2" Class="pa-4">No soft-deleted rows loaded.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+</MudStack>
+
+@code {
+    private string entityKey = "characters";
+    private string? message;
+    private Severity messageSeverity = Severity.Info;
+    private List<SoftDeletedRow> rows = new();
+
+    private readonly List<EntityOption> entities =
+    [
+        new("characters", "Characters"),
+        new("campaigns", "Campaigns"),
+        new("creatures", "Creatures"),
+        new("encounters", "Encounters"),
+        new("parties", "Parties")
+    ];
+
+    private bool AllSelected => rows.Any() && rows.All(r => r.Selected);
+
+    protected override async Task OnInitializedAsync() => await LoadRows();
+
+    private async Task LoadRows()
+    {
+        var http = HttpFactory.CreateClient();
+        var data = await http.GetFromJsonAsync<List<SoftDeletedRow>>(Nav.ToAbsoluteUri($"/api/admin/soft-deleted/{entityKey}"));
+        rows = data ?? new();
+    }
+
+    private void SetAll(bool value)
+    {
+        foreach (var r in rows) r.Selected = value;
+    }
+
+    private async Task PurgeSelected()
+    {
+        var ids = rows.Where(x => x.Selected).Select(x => x.Id).ToList();
+        if (!ids.Any()) return;
+
+        var ok = await JS.InvokeAsync<bool>("confirm", $"Permanently purge {ids.Count} selected {entityKey}? This cannot be undone.");
+        if (!ok) return;
+
+        var http = HttpFactory.CreateClient();
+        var res = await http.PostAsJsonAsync(Nav.ToAbsoluteUri($"/api/admin/purge-soft-deleted/{entityKey}/selected"), ids);
+        var txt = await res.Content.ReadAsStringAsync();
+
+        if (!res.IsSuccessStatusCode)
+        {
+            messageSeverity = Severity.Error;
+            message = string.IsNullOrWhiteSpace(txt) ? "Purge failed." : txt;
+            return;
+        }
+
+        messageSeverity = Severity.Success;
+        message = string.IsNullOrWhiteSpace(txt) ? "Purge complete." : txt;
+        await LoadRows();
+    }
+
+    private sealed record EntityOption(string Key, string Label);
+
+    private sealed class SoftDeletedRow
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string DateDeletedUtc { get; set; } = string.Empty;
+        public bool Selected { get; set; }
+    }
+}
