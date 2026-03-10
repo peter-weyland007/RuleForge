@@ -21,7 +21,36 @@ builder.Services.AddRazorComponents()
 
 builder.Services.AddMudServices();
 builder.Services.AddHttpClient();
-builder.Services.AddDbContext<AppDbContext>(o => o.UseSqlite("Data Source=ruleforge.db"));
+
+var configuredProvider = builder.Configuration["Database:Provider"]
+    ?? Environment.GetEnvironmentVariable("RULEFORGE_DB_PROVIDER");
+var dbProvider = string.IsNullOrWhiteSpace(configuredProvider)
+    ? (builder.Environment.IsDevelopment() ? "sqlite" : "postgres")
+    : configuredProvider.Trim().ToLowerInvariant();
+var isSqliteProvider = dbProvider == "sqlite";
+
+builder.Services.AddDbContext<AppDbContext>(o =>
+{
+    if (isSqliteProvider)
+    {
+        var sqliteConn = builder.Configuration.GetConnectionString("Sqlite")
+            ?? builder.Configuration["Database:Sqlite"]
+            ?? Environment.GetEnvironmentVariable("RULEFORGE_SQLITE_PATH")
+            ?? "Data Source=ruleforge.db";
+
+        o.UseSqlite(sqliteConn);
+    }
+    else
+    {
+        var pgConn = builder.Configuration.GetConnectionString("Postgres")
+            ?? builder.Configuration.GetConnectionString("DefaultConnection")
+            ?? builder.Configuration["Database:ConnectionString"]
+            ?? Environment.GetEnvironmentVariable("RULEFORGE_CONNECTION_STRING")
+            ?? "Host=localhost;Port=5432;Database=ruleforge;Username=ruleforge;Password=ruleforge";
+
+        o.UseNpgsql(pgConn);
+    }
+});
 
 var app = builder.Build();
 
@@ -41,6 +70,8 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.EnsureCreated();
 
+    if (isSqliteProvider)
+    {
     db.Database.ExecuteSqlRaw("""
         CREATE TABLE IF NOT EXISTS Campaigns (
             CampaignId INTEGER NOT NULL CONSTRAINT PK_Campaigns PRIMARY KEY AUTOINCREMENT,
@@ -131,6 +162,7 @@ using (var scope = app.Services.CreateScope())
         );
         CREATE INDEX IF NOT EXISTS IX_EncounterParticipants_EncounterId ON EncounterParticipants (EncounterId);
     """);
+    }
 }
 
 app.MapGet("/api/characters", async (AppDbContext db) =>
