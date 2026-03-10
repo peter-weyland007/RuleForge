@@ -38,6 +38,9 @@
                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="() => Delete(context.PartyId)" />
             </MudTd>
         </RowTemplate>
+        <NoRecordsContent>
+            <MudText Typo="Typo.body2" Class="pa-4">No parties yet. Add your first one.</MudText>
+        </NoRecordsContent>
     </MudTable>
 
     @if (isEdit)
@@ -89,6 +92,9 @@
                             <MudTd>@context.ArmorClass</MudTd>
                             <MudTd>@($"{context.HitPointsCurrent}/{context.HitPointsMax}")</MudTd>
                         </RowTemplate>
+                        <NoRecordsContent>
+                            <MudText Typo="Typo.body2" Class="pa-4">No members yet. Add PCs to this party from Characters.</MudText>
+                        </NoRecordsContent>
                     </MudTable>
                 }
 

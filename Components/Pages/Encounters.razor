@@ -38,6 +38,9 @@
                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="() => Delete(context.EncounterId)" />
             </MudTd>
         </RowTemplate>
+        <NoRecordsContent>
+            <MudText Typo="Typo.body2" Class="pa-4">No encounters yet. Add your first one.</MudText>
+        </NoRecordsContent>
     </MudTable>
 
     @if (isEdit)
@@ -132,6 +135,9 @@
                             <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="() => RemoveParticipant(context.LocalId)" />
                         </MudTd>
                     </RowTemplate>
+                    <NoRecordsContent>
+                        <MudText Typo="Typo.body2" Class="pa-4">No participants yet. Add your first one.</MudText>
+                    </NoRecordsContent>
                 </MudTable>
 
                 <MudStack Row="true" Spacing="1" Class="mt-2">

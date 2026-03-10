@@ -54,23 +54,35 @@
                         </MudSelect>
                     </MudItem>
                     <MudItem xs="12" md="2"><MudNumericField T="int" @bind-Value="nodeForm.OrderIndex" Label="Order" Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="12" md="3">
+                        <MudSelect T="int?" @bind-Value="nodeForm.EncounterId" Label="Linked Encounter" Variant="Variant.Outlined" Clearable="true" Disabled="@(!encounters.Any())">
+                            @foreach (var e in encounters)
+                            {
+                                <MudSelectItem T="int?" Value="e.EncounterId">@e.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
                     <MudItem xs="12" md="2"><MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveNode" FullWidth="true">@(nodeForm.QuestNodeId.HasValue ? "Update" : "Add")</MudButton></MudItem>
                 </MudGrid>
                 <MudTextField @bind-Value="nodeForm.BodyMarkdown" Label="Body" Variant="Variant.Outlined" Lines="3" />
                 <MudTextField @bind-Value="nodeForm.DmHints" Label="DM Hints" Variant="Variant.Outlined" Lines="2" />
 
                 <MudTable Items="nodes" Dense="true" Hover="true" Outlined="true" Elevation="0">
-                    <HeaderContent><MudTh>ID</MudTh><MudTh>Title</MudTh><MudTh>Type</MudTh><MudTh>Order</MudTh><MudTh></MudTh></HeaderContent>
+                    <HeaderContent><MudTh>ID</MudTh><MudTh>Title</MudTh><MudTh>Type</MudTh><MudTh>Order</MudTh><MudTh>Encounter</MudTh><MudTh></MudTh></HeaderContent>
                     <RowTemplate>
                         <MudTd>@context.QuestNodeId</MudTd>
                         <MudTd>@context.Title</MudTd>
                         <MudTd>@NodeTypeLabel(context.NodeType)</MudTd>
                         <MudTd>@context.OrderIndex</MudTd>
+                        <MudTd>@EncounterName(context.EncounterId)</MudTd>
                         <MudTd Style="text-align:right; white-space:nowrap;">
                             <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" OnClick="() => EditNode(context)" />
                             <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="() => DeleteNode(context.QuestNodeId)" />
                         </MudTd>
                     </RowTemplate>
+                    <NoRecordsContent>
+                        <MudText Typo="Typo.body2" Class="pa-4">No nodes yet. Add your first one.</MudText>
+                    </NoRecordsContent>
                 </MudTable>
             </MudPaper>
         </MudItem>
@@ -99,6 +111,9 @@
                             <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="() => DeleteChoice(context.QuestChoiceId)" />
                         </MudTd>
                     </RowTemplate>
+                    <NoRecordsContent>
+                        <MudText Typo="Typo.body2" Class="pa-4">No choices yet. Add your first one.</MudText>
+                    </NoRecordsContent>
                 </MudTable>
             </MudPaper>
         </MudItem>
@@ -112,6 +127,7 @@
     private string? error;
     private List<QuestNodeRow> nodes = new();
     private List<QuestChoiceRow> choices = new();
+    private List<EncounterOption> encounters = new();
     private NodeForm nodeForm = new() { NodeType = 1 };
     private ChoiceForm choiceForm = new();
 
@@ -127,6 +143,7 @@
             title = q.Title;
             nodes = q.Nodes;
             choices = q.Choices;
+            encounters = await h.GetFromJsonAsync<List<EncounterOption>>(Nav.ToAbsoluteUri("/api/encounters")) ?? new();
         }
         catch (Exception ex) { error = ex.Message; }
     }
@@ -184,6 +201,7 @@
     }
 
     private static string NodeTypeLabel(int t) => t switch { 1 => "Scene", 2 => "Choice", 3 => "Encounter", 4 => "SkillCheck", 5 => "Reward", 6 => "Note", _ => "Scene" };
+    private string EncounterName(int? id) => id is null ? "—" : encounters.FirstOrDefault(x => x.EncounterId == id)?.Name ?? $"#{id}";
 
     private sealed class NodeForm
     {
@@ -216,4 +234,5 @@
 
     private sealed record QuestNodeRow(int QuestNodeId, string Title, int NodeType, int OrderIndex, string? BodyMarkdown, string? DmHints, int? EncounterId);
     private sealed record QuestChoiceRow(int QuestChoiceId, int FromNodeId, int ToNodeId, string Label, string? ConditionExpression, string? EffectsJson, int OrderIndex);
+    private sealed record EncounterOption(int EncounterId, string Name);
 }
