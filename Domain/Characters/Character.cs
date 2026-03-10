@@ -4,6 +4,7 @@ public sealed class Character
 {
     public int CharacterId { get; set; }
     public int CampaignId { get; set; }
+    public int PartyId { get; set; }
     public CharacterType CharacterType { get; set; } = CharacterType.PC;
 
     public string Name { get; set; } = string.Empty;

@@ -6,16 +6,19 @@
 
 <MudStack Spacing="3">
     <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-        <MudText Typo="Typo.h4">Characters</MudText>
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="OpenCreate">Add Character</MudButton>
+        <MudStack Spacing="0">
+            <MudText Typo="Typo.h4">Characters</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Track PCs and NPCs for your campaign.</MudText>
+        </MudStack>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreate">Add Character</MudButton>
     </MudStack>
 
     @if (!string.IsNullOrWhiteSpace(error))
     {
-        <MudAlert Severity="Severity.Error">@error</MudAlert>
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@error</MudAlert>
     }
 
-    <MudTable Items="rows" Dense="true" Hover="true" Outlined="true">
+    <MudTable Items="rows" Dense="true" Hover="true" Outlined="true" Elevation="0">
         <HeaderContent>
             <MudTh>Name</MudTh>
             <MudTh>Type</MudTh>
@@ -23,40 +26,95 @@
             <MudTh>Lvl</MudTh>
             <MudTh>AC</MudTh>
             <MudTh>HP</MudTh>
+            <MudTh></MudTh>
         </HeaderContent>
         <RowTemplate>
             <MudTd>@context.Name</MudTd>
-            <MudTd>@context.CharacterType</MudTd>
+            <MudTd>
+                <MudChip T="string" Size="Size.Small" Color="@(context.CharacterType == 1 ? Color.Primary : Color.Secondary)" Variant="Variant.Outlined">
+                    @(context.CharacterType == 1 ? "PC" : "NPC")
+                </MudChip>
+            </MudTd>
             <MudTd>@context.ClassName</MudTd>
             <MudTd>@context.Level</MudTd>
             <MudTd>@context.ArmorClass</MudTd>
             <MudTd>@($"{context.HitPointsCurrent}/{context.HitPointsMax}")</MudTd>
+            <MudTd Style="text-align: right; white-space: nowrap;">
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" OnClick="() => OpenEdit(context.CharacterId)" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="() => Archive(context.CharacterId)" />
+            </MudTd>
         </RowTemplate>
+        <NoRecordsContent>
+            <MudText Typo="Typo.body2" Class="pa-4">No characters yet. Add your first one.</MudText>
+        </NoRecordsContent>
     </MudTable>
 
     @if (isCreate)
     {
-        <MudPaper Class="pa-4" Outlined="true">
-            <MudText Typo="Typo.h6">Create Character / NPC</MudText>
-            <MudGrid>
-                <MudItem xs="12" md="4"><MudTextField @bind-Value="form.Name" Label="Name" Variant="Variant.Outlined" /></MudItem>
-                <MudItem xs="12" md="2">
-                    <MudSelect T="string" Value="form.CharacterType" ValueChanged="OnTypeChanged" Label="Type" Variant="Variant.Outlined">
-                        <MudSelectItem Value="@("PC")">PC</MudSelectItem>
-                        <MudSelectItem Value="@("NPC")">NPC</MudSelectItem>
-                    </MudSelect>
-                </MudItem>
-                <MudItem xs="12" md="2"><MudNumericField T="int" @bind-Value="form.CampaignId" Label="CampaignId" Variant="Variant.Outlined" /></MudItem>
-                <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="form.Level" Label="Level" Variant="Variant.Outlined" /></MudItem>
-                <MudItem xs="12" md="2"><MudTextField @bind-Value="form.ClassName" Label="Class" Variant="Variant.Outlined" /></MudItem>
-                <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="form.ArmorClass" Label="AC" Variant="Variant.Outlined" /></MudItem>
-                <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="form.HitPointsCurrent" Label="HP Current" Variant="Variant.Outlined" /></MudItem>
-                <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="form.HitPointsMax" Label="HP Max" Variant="Variant.Outlined" /></MudItem>
-                <MudItem xs="12" md="6"><MudTextField @bind-Value="form.Notes" Label="Notes" Variant="Variant.Outlined" /></MudItem>
-            </MudGrid>
-            <MudStack Row="true" Spacing="1" Class="mt-3">
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Save">Save</MudButton>
-                <MudButton Variant="Variant.Outlined" OnClick="CloseCreate">Cancel</MudButton>
+        <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+            <MudStack Spacing="2">
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                    <MudText Typo="Typo.h6">@(form.CharacterId.HasValue ? "Edit Character / NPC" : "Create Character / NPC")</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Text">Quick Create</MudChip>
+                </MudStack>
+
+                <MudDivider />
+
+                <MudText Typo="Typo.subtitle2">Identity</MudText>
+                <MudGrid>
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="form.Name" Label="Name" Placeholder="e.g., Sir Rowan" Variant="Variant.Outlined" Required="true" HelperText="Display name in party lists and encounter views." />
+                    </MudItem>
+                    <MudItem xs="12" md="3">
+                        <MudSelect T="string" Value="form.CharacterType" ValueChanged="OnTypeChanged" Label="Type" Variant="Variant.Outlined">
+                            <MudSelectItem Value="@("PC")">PC</MudSelectItem>
+                            <MudSelectItem Value="@("NPC")">NPC</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" md="3">
+                        <MudSelect T="int?" @bind-Value="form.CampaignId" Label="Campaign" Variant="Variant.Outlined" Disabled="@(!campaigns.Any())" HelperText="@(campaigns.Any() ? "Optional. Leave blank for no campaign association." : "No campaigns available yet. You can still save without one.")" Clearable="true">
+                            @foreach (var campaign in campaigns)
+                            {
+                                <MudSelectItem T="int?" Value="campaign.CampaignId">@campaign.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" md="3">
+                        <MudSelect T="int?" @bind-Value="form.PartyId" Label="Party" Variant="Variant.Outlined" Disabled="@(form.CharacterType != "PC" || !parties.Any())" HelperText="@(form.CharacterType != "PC" ? "Only PCs can be assigned to parties." : parties.Any() ? "Optional party assignment." : "No parties yet.")" Clearable="true">
+                            @foreach (var party in parties)
+                            {
+                                <MudSelectItem T="int?" Value="party.PartyId">@party.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                </MudGrid>
+
+                <MudText Typo="Typo.subtitle2" Class="mt-2">Build & Stats</MudText>
+                <MudGrid>
+                    <MudItem xs="12" md="3">
+                        <MudNumericField T="int?" @bind-Value="form.Level" Label="Level" Variant="Variant.Outlined" Min="1" />
+                    </MudItem>
+                    <MudItem xs="12" md="3">
+                        <MudTextField @bind-Value="form.ClassName" Label="Class" Placeholder="e.g., Ranger" Variant="Variant.Outlined" />
+                    </MudItem>
+                    <MudItem xs="12" md="2">
+                        <MudNumericField T="int?" @bind-Value="form.ArmorClass" Label="AC" Variant="Variant.Outlined" />
+                    </MudItem>
+                    <MudItem xs="12" md="2">
+                        <MudNumericField T="int?" @bind-Value="form.HitPointsCurrent" Label="HP Current" Variant="Variant.Outlined" />
+                    </MudItem>
+                    <MudItem xs="12" md="2">
+                        <MudNumericField T="int?" @bind-Value="form.HitPointsMax" Label="HP Max" Variant="Variant.Outlined" />
+                    </MudItem>
+                </MudGrid>
+
+                <MudText Typo="Typo.subtitle2" Class="mt-2">Notes</MudText>
+                <MudTextField @bind-Value="form.Notes" Label="Notes" Placeholder="Roleplay notes, hooks, quirks..." Variant="Variant.Outlined" Lines="3" />
+
+                <MudStack Row="true" Spacing="1" Class="mt-3">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="Save">Save</MudButton>
+                    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Close" OnClick="CloseCreate">Cancel</MudButton>
+                </MudStack>
             </MudStack>
         </MudPaper>
     }
@@ -64,6 +122,8 @@
 
 @code {
     private List<CharacterRow> rows = new();
+    private List<CampaignOption> campaigns = new();
+    private List<PartyOption> parties = new();
     private string? error;
     private bool isCreate;
     private CharacterForm form = new();
@@ -77,17 +137,84 @@
             error = null;
             var http = HttpFactory.CreateClient();
             rows = await http.GetFromJsonAsync<List<CharacterRow>>(Nav.ToAbsoluteUri("/api/characters")) ?? new();
+            campaigns = await http.GetFromJsonAsync<List<CampaignOption>>(Nav.ToAbsoluteUri("/api/campaigns")) ?? new();
+            parties = await http.GetFromJsonAsync<List<PartyOption>>(Nav.ToAbsoluteUri("/api/parties")) ?? new();
         }
         catch (Exception ex)
         {
             error = ex.Message;
             rows = new();
+            campaigns = new();
+            parties = new();
         }
     }
 
-    private void OpenCreate() { form = new CharacterForm { CharacterType = "PC", CampaignId = 1 }; isCreate = true; }
+    private void OpenCreate()
+    {
+        form = new CharacterForm { CharacterType = "PC", CampaignId = null };
+        isCreate = true;
+    }
+
+    private async Task OpenEdit(int characterId)
+    {
+        try
+        {
+            error = null;
+            var http = HttpFactory.CreateClient();
+            var row = await http.GetFromJsonAsync<CharacterDetail>(Nav.ToAbsoluteUri($"/api/characters/{characterId}"));
+            if (row is null)
+            {
+                error = "Character not found.";
+                return;
+            }
+
+            form = new CharacterForm
+            {
+                CharacterId = row.CharacterId,
+                CampaignId = row.CampaignId,
+                PartyId = row.PartyId,
+                CharacterType = row.CharacterType == 2 ? "NPC" : "PC",
+                Name = row.Name,
+                ArmorClass = row.ArmorClass,
+                HitPointsCurrent = row.HitPointsCurrent,
+                HitPointsMax = row.HitPointsMax,
+                Level = row.Level,
+                ClassName = row.ClassName,
+                Notes = row.Notes
+            };
+            isCreate = true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+    }
+
+
+    private async Task Archive(int characterId)
+    {
+        try
+        {
+            error = null;
+            var http = HttpFactory.CreateClient();
+            var res = await http.DeleteAsync(Nav.ToAbsoluteUri($"/api/characters/{characterId}"));
+            if (!res.IsSuccessStatusCode)
+            {
+                var txt = await res.Content.ReadAsStringAsync();
+                error = string.IsNullOrWhiteSpace(txt) ? "Archive failed." : txt;
+                return;
+            }
+
+            await Load();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+    }
+
     private void CloseCreate() => isCreate = false;
-    private void OnTypeChanged(string v) => form.CharacterType = v;
+    private void OnTypeChanged(string v) { form.CharacterType = v; if (v != "PC") form.PartyId = null; }
 
     private async Task Save()
     {
@@ -98,7 +225,8 @@
             var req = new
             {
                 campaignId = form.CampaignId,
-                characterType = form.CharacterType,
+                partyId = form.CharacterType == "PC" ? form.PartyId : null,
+                characterType = form.CharacterType == "NPC" ? 2 : 1,
                 name = form.Name,
                 ownerAppUserId = (int?)null,
                 armorClass = form.ArmorClass,
@@ -108,7 +236,17 @@
                 className = form.ClassName,
                 notes = form.Notes
             };
-            var res = await http.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/characters"), req);
+
+            HttpResponseMessage res;
+            if (form.CharacterId.HasValue)
+            {
+                res = await http.PutAsJsonAsync(Nav.ToAbsoluteUri($"/api/characters/{form.CharacterId.Value}"), req);
+            }
+            else
+            {
+                res = await http.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/characters"), req);
+            }
+
             var txt = await res.Content.ReadAsStringAsync();
             if (!res.IsSuccessStatusCode) { error = string.IsNullOrWhiteSpace(txt) ? "Save failed." : txt; return; }
             isCreate = false;
@@ -119,7 +257,9 @@
 
     private sealed class CharacterForm
     {
-        public int CampaignId { get; set; }
+        public int? CharacterId { get; set; }
+        public int? CampaignId { get; set; }
+        public int? PartyId { get; set; }
         public string CharacterType { get; set; } = "PC";
         public string Name { get; set; } = string.Empty;
         public int? ArmorClass { get; set; }
@@ -130,5 +270,8 @@
         public string? Notes { get; set; }
     }
 
-    private sealed record CharacterRow(int CharacterId, int CampaignId, string CharacterType, string Name, int? ArmorClass, int? HitPointsCurrent, int? HitPointsMax, int? Level, string? ClassName);
+    private sealed record CharacterRow(int CharacterId, int? CampaignId, int? PartyId, int CharacterType, string Name, int? ArmorClass, int? HitPointsCurrent, int? HitPointsMax, int? Level, string? ClassName);
+    private sealed record CharacterDetail(int CharacterId, int? CampaignId, int? PartyId, int CharacterType, string Name, int? ArmorClass, int? HitPointsCurrent, int? HitPointsMax, int? Level, string? ClassName, string? Notes);
+    private sealed record CampaignOption(int CampaignId, string Name);
+    private sealed record PartyOption(int PartyId, string Name);
 }

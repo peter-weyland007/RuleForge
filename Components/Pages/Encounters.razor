@@ -1,5 +1,450 @@
-@page "/LEncounters"
+@page "/encounters"
+@inject IHttpClientFactory HttpFactory
+@inject NavigationManager Nav
 
 <PageTitle>Encounters</PageTitle>
-<MudText Typo="Typo.h4" GutterBottom="true">Encounters</MudText>
-<MudAlert Severity="Severity.Info">Encounters page scaffolded. Feature implementation comes next.</MudAlert>
+
+<MudStack Spacing="3">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+        <MudStack Spacing="0">
+            <MudText Typo="Typo.h4">Encounters</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Build encounters with PCs, NPCs, and creatures.</MudText>
+        </MudStack>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreate">Add Encounter</MudButton>
+    </MudStack>
+
+    @if (!string.IsNullOrWhiteSpace(error))
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@error</MudAlert>
+    }
+
+    <MudTable Items="rows" Dense="true" Hover="true" Outlined="true" Elevation="0">
+        <HeaderContent>
+            <MudTh>Name</MudTh>
+            <MudTh>Type</MudTh>
+            <MudTh>Campaign</MudTh>
+            <MudTh>Participants</MudTh>
+            <MudTh></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>@context.Name</MudTd>
+            <MudTd>@TypeLabel(context.EncounterType)</MudTd>
+            <MudTd>@(CampaignLabel(context.CampaignId))</MudTd>
+            <MudTd>@context.Participants.Count</MudTd>
+            <MudTd Style="text-align:right; white-space:nowrap;">
+                <MudIconButton Icon="@Icons.Material.Filled.PlayArrow" Color="Color.Success" Size="Size.Small" Href="@($"/encounters/run/{context.EncounterId}")" />
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" OnClick="() => OpenEdit(context.EncounterId)" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="() => Delete(context.EncounterId)" />
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+
+    @if (isEdit)
+    {
+        <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+            <MudStack Spacing="2">
+                <MudText Typo="Typo.h6">@(form.EncounterId.HasValue ? "Edit Encounter" : "Create Encounter")</MudText>
+                <MudDivider />
+
+                <MudGrid>
+                    <MudItem xs="12" md="4">
+                        <MudTextField @bind-Value="form.Name" Label="Encounter Name" Variant="Variant.Outlined" Required="true" />
+                    </MudItem>
+                    <MudItem xs="12" md="4">
+                        <MudSelect T="int" @bind-Value="form.EncounterType" Label="Encounter Type" Variant="Variant.Outlined">
+                            <MudSelectItem Value="1">Combat</MudSelectItem>
+                            <MudSelectItem Value="2">Social</MudSelectItem>
+                            <MudSelectItem Value="3">Exploration</MudSelectItem>
+                            <MudSelectItem Value="4">Puzzle</MudSelectItem>
+                            <MudSelectItem Value="5">Chase</MudSelectItem>
+                            <MudSelectItem Value="6">Hazard</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" md="4">
+                        <MudSelect T="int?" @bind-Value="form.CampaignId" Label="Campaign (Optional)" Variant="Variant.Outlined" Clearable="true" Disabled="@(!campaigns.Any())">
+                            @foreach (var c in campaigns)
+                            {
+                                <MudSelectItem T="int?" Value="c.Id">@c.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                </MudGrid>
+
+                <MudTextField @bind-Value="form.Description" Label="Description" Variant="Variant.Outlined" Lines="3" />
+
+                <MudDivider />
+                <MudText Typo="Typo.subtitle2">Participants</MudText>
+
+                <MudGrid>
+                    <MudItem xs="12" md="3">
+                        <MudSelect T="int" Value="addType" ValueChanged="OnAddTypeChanged" Label="Participant Type" Variant="Variant.Outlined">
+                            <MudSelectItem Value="1">PC</MudSelectItem>
+                            <MudSelectItem Value="2">NPC</MudSelectItem>
+                            <MudSelectItem Value="3">Creature</MudSelectItem>
+                            <MudSelectItem Value="4">Party</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" md="5">
+                        <MudSelect T="int" @key="addType" @bind-Value="addSourceId" Label="Participant" Variant="Variant.Outlined" Strict="true">
+                            @foreach (var o in CurrentOptions())
+                            {
+                                <MudSelectItem Value="o.Id">@o.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" md="2">
+                        @if (addType == 3)
+                        {
+                            <MudNumericField T="int" @bind-Value="addCount" Label="Qty" Variant="Variant.Outlined" Min="1" Max="20" />
+                        }
+                        else
+                        {
+                            <MudTextField Value="1" Label="Qty" Variant="Variant.Outlined" Disabled="true" />
+                        }
+                    </MudItem>
+                    <MudItem xs="12" md="2">
+                        <MudButton Variant="Variant.Filled" Color="Color.Secondary" OnClick="AddParticipant" FullWidth="true">Add</MudButton>
+                    </MudItem>
+                </MudGrid>
+                
+
+                <MudTable Items="form.Participants" Dense="true" Hover="true" Outlined="true" Elevation="0">
+                    <HeaderContent>
+                        <MudTh>Name</MudTh>
+                        <MudTh>Type</MudTh>
+                        <MudTh>AC</MudTh>
+                        <MudTh>HP</MudTh>
+                        <MudTh>Init</MudTh>
+                        <MudTh></MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd>@context.NameSnapshot</MudTd>
+                        <MudTd>@ParticipantLabel(context.ParticipantType)</MudTd>
+                        <MudTd>@context.ArmorClassSnapshot</MudTd>
+                        <MudTd>@context.HitPointsCurrent</MudTd>
+                        <MudTd>@context.InitiativeModifierSnapshot</MudTd>
+                        <MudTd Style="white-space:nowrap;">
+                            @if (context.ParticipantType == 3)
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Color="Color.Secondary" Size="Size.Small" OnClick="() => OpenDuplicateDialog(context.LocalId)" />
+                            }
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="() => RemoveParticipant(context.LocalId)" />
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+
+                <MudStack Row="true" Spacing="1" Class="mt-2">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Save">Save</MudButton>
+                    <MudButton Variant="Variant.Outlined" OnClick="Close">Cancel</MudButton>
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+    }
+</MudStack>
+
+    @if (showDuplicateDialog)
+    {
+        <MudDialog Visible="true" Options="new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.ExtraSmall, FullWidth = true }">
+            <TitleContent>Set Creature Total</TitleContent>
+            <DialogContent>
+                <MudText Typo="Typo.body2" Class="mb-2">Enter total number of this creature you want in the encounter.</MudText>
+                <MudNumericField T="int" @bind-Value="duplicateTargetTotal" Label="Total Count" Variant="Variant.Outlined" Min="1" Max="99" />
+            </DialogContent>
+            <DialogActions>
+                <MudButton Variant="Variant.Outlined" OnClick="() => showDuplicateDialog = false">Cancel</MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ApplyDuplicateTotal">Apply</MudButton>
+            </DialogActions>
+        </MudDialog>
+    }
+
+
+@code {
+    private List<EncounterRow> rows = new();
+    private List<OptionItem> campaigns = new();
+    private List<OptionItem> parties = new();
+    private List<OptionItem> characters = new();
+    private List<OptionItem> creatures = new();
+    private string? error;
+    private bool isEdit;
+    private int addType = 1;
+    private int addSourceId;
+    private int addCount = 1;
+    private int _localId = 1;
+    private EncounterForm form = new();
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        try
+        {
+            error = null;
+            var http = HttpFactory.CreateClient();
+            rows = await http.GetFromJsonAsync<List<EncounterRow>>(Nav.ToAbsoluteUri("/api/encounters")) ?? new();
+            var opts = await http.GetFromJsonAsync<EncounterOptions>(Nav.ToAbsoluteUri("/api/encounters/options")) ?? new();
+            campaigns = opts.Campaigns;
+            parties = opts.Parties;
+            characters = opts.Characters;
+            creatures = opts.Creatures;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            rows = new();
+        }
+    }
+
+    private void OpenCreate()
+    {
+        form = new EncounterForm();
+        addType = 1;
+        addSourceId = CurrentOptions().FirstOrDefault()?.Id ?? 0;
+        addCount = 1;
+        isEdit = true;
+    }
+
+    private async Task OpenEdit(int encounterId)
+    {
+        var http = HttpFactory.CreateClient();
+        var row = await http.GetFromJsonAsync<EncounterRow>(Nav.ToAbsoluteUri($"/api/encounters/{encounterId}"));
+        if (row is null) return;
+        form = new EncounterForm
+        {
+            EncounterId = row.EncounterId,
+            CampaignId = row.CampaignId,
+            Name = row.Name,
+            EncounterType = row.EncounterType,
+            Description = row.Description,
+            Participants = row.Participants.Select(p => new EncounterParticipantForm
+            {
+                LocalId = _localId++,
+                ParticipantType = p.ParticipantType,
+                SourceId = p.SourceId,
+                NameSnapshot = p.NameSnapshot,
+                ArmorClassSnapshot = p.ArmorClassSnapshot,
+                HitPointsCurrent = p.HitPointsCurrent,
+                InitiativeModifierSnapshot = p.InitiativeModifierSnapshot
+            }).ToList()
+        };
+        isEdit = true;
+    }
+
+    private async Task Delete(int encounterId)
+    {
+        var http = HttpFactory.CreateClient();
+        await http.DeleteAsync(Nav.ToAbsoluteUri($"/api/encounters/{encounterId}"));
+        await Load();
+    }
+
+    private List<OptionItem> CurrentOptions()
+    {
+        if (addType == 3) return creatures;
+        if (addType == 4) return parties;
+        return characters.Where(x => x.ParticipantType == addType).ToList();
+    }
+
+
+    private void OnAddTypeChanged(int value)
+    {
+        addType = value;
+        var options = CurrentOptions();
+        addSourceId = options.Any() ? options[0].Id : 0;
+        addCount = addType == 3 ? addCount : 1;
+    }
+
+    private void AddParticipant()
+    {
+        var opt = CurrentOptions().FirstOrDefault(x => x.Id == addSourceId);
+        if (opt is null) return;
+
+        if (addType == 4)
+        {
+            var members = characters.Where(x => x.ParticipantType == 1 && x.PartyId == opt.Id).ToList();
+            foreach (var m in members)
+            {
+                var localId = _localId++;
+                form.Participants.Add(new EncounterParticipantForm
+                {
+                    LocalId = localId,
+                    ParticipantType = 1,
+                    SourceId = m.Id,
+                    NameSnapshot = m.Name,
+                    ArmorClassSnapshot = m.ArmorClass,
+                    HitPointsCurrent = m.HitPoints,
+                    InitiativeModifierSnapshot = m.InitiativeModifier
+                });
+                }
+            return;
+        }
+
+        var count = addType == 3 ? Math.Clamp(addCount, 1, 20) : 1;
+        for (var i = 0; i < count; i++)
+        {
+            var localId = _localId++;
+            form.Participants.Add(new EncounterParticipantForm
+            {
+                LocalId = localId,
+                ParticipantType = addType,
+                SourceId = opt.Id,
+                NameSnapshot = opt.Name,
+                ArmorClassSnapshot = opt.ArmorClass,
+                HitPointsCurrent = opt.HitPoints,
+                InitiativeModifierSnapshot = opt.InitiativeModifier
+            });
+        }
+    }
+
+    private void RemoveParticipant(int localId)
+    {
+        form.Participants.RemoveAll(x => x.LocalId == localId);
+    }
+
+
+    
+    private bool showDuplicateDialog;
+    private int duplicateTargetTotal = 2;
+    private int duplicateSourceLocalId;
+
+    private void OpenDuplicateDialog(int localId)
+    {
+        duplicateSourceLocalId = localId;
+        duplicateTargetTotal = 2;
+        showDuplicateDialog = true;
+    }
+
+    private void ApplyDuplicateTotal()
+    {
+        var src = form.Participants.FirstOrDefault(x => x.LocalId == duplicateSourceLocalId);
+        if (src is null || src.ParticipantType != 3)
+        {
+            showDuplicateDialog = false;
+            return;
+        }
+
+        var existing = form.Participants.Count(x => x.ParticipantType == 3 && x.SourceId == src.SourceId);
+        var target = Math.Clamp(duplicateTargetTotal, 1, 99);
+        var toAdd = Math.Max(0, target - existing);
+
+        for (var i = 0; i < toAdd; i++)
+        {
+            var newId = _localId++;
+            form.Participants.Add(new EncounterParticipantForm
+            {
+                LocalId = newId,
+                ParticipantType = src.ParticipantType,
+                SourceId = src.SourceId,
+                NameSnapshot = src.NameSnapshot,
+                ArmorClassSnapshot = src.ArmorClassSnapshot,
+                HitPointsCurrent = src.HitPointsCurrent,
+                InitiativeModifierSnapshot = src.InitiativeModifierSnapshot
+            });
+        }
+
+        showDuplicateDialog = false;
+    }
+
+    private async Task Save()
+    {
+        try
+        {
+            error = null;
+            var http = HttpFactory.CreateClient();
+            var req = new
+            {
+                campaignId = form.CampaignId,
+                name = form.Name,
+                encounterType = form.EncounterType,
+                description = form.Description,
+                participants = form.Participants.Select(p => new
+                {
+                    participantType = p.ParticipantType,
+                    sourceId = p.SourceId,
+                    nameSnapshot = p.NameSnapshot,
+                    armorClassSnapshot = p.ArmorClassSnapshot,
+                    hitPointsCurrent = p.HitPointsCurrent,
+                    initiativeModifierSnapshot = p.InitiativeModifierSnapshot
+                }).ToList()
+            };
+
+            HttpResponseMessage res = form.EncounterId.HasValue
+                ? await http.PutAsJsonAsync(Nav.ToAbsoluteUri($"/api/encounters/{form.EncounterId.Value}"), req)
+                : await http.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/encounters"), req);
+
+            if (!res.IsSuccessStatusCode)
+            {
+                error = await res.Content.ReadAsStringAsync();
+                return;
+            }
+
+            isEdit = false;
+            await Load();
+        }
+        catch (Exception ex) { error = ex.Message; }
+    }
+
+    private void Close() => isEdit = false;
+    private string TypeLabel(int t) => t switch { 1 => "Combat", 2 => "Social", 3 => "Exploration", 4 => "Puzzle", 5 => "Chase", 6 => "Hazard", _ => "Combat" };
+    private string ParticipantLabel(int t) => t switch { 1 => "PC", 2 => "NPC", 3 => "Creature", _ => "?" };
+    private string CampaignLabel(int? id) => id is null ? "—" : campaigns.FirstOrDefault(x => x.Id == id)?.Name ?? $"#{id}";
+
+    private sealed class EncounterForm
+    {
+        public int? EncounterId { get; set; }
+        public int? CampaignId { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public int EncounterType { get; set; } = 1;
+        public string? Description { get; set; }
+        public List<EncounterParticipantForm> Participants { get; set; } = new();
+    }
+
+    private sealed class EncounterParticipantForm
+    {
+        public int LocalId { get; set; }
+        public int ParticipantType { get; set; }
+        public int SourceId { get; set; }
+        public string NameSnapshot { get; set; } = string.Empty;
+        public int? ArmorClassSnapshot { get; set; }
+        public int? HitPointsCurrent { get; set; }
+        public int? InitiativeModifierSnapshot { get; set; }
+    }
+
+    private sealed class EncounterOptions
+    {
+        public List<OptionItem> Campaigns { get; set; } = new();
+        public List<OptionItem> Parties { get; set; } = new();
+        public List<OptionItem> Characters { get; set; } = new();
+        public List<OptionItem> Creatures { get; set; } = new();
+    }
+
+    private sealed class OptionItem
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public int? ArmorClass { get; set; }
+        public int? HitPoints { get; set; }
+        public int? InitiativeModifier { get; set; }
+        public int? ParticipantType { get; set; }
+        public int? PartyId { get; set; }
+    }
+
+    private sealed class EncounterRow
+    {
+        public int EncounterId { get; set; }
+        public int? CampaignId { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public int EncounterType { get; set; }
+        public string? Description { get; set; }
+        public List<EncounterParticipantRow> Participants { get; set; } = new();
+    }
+
+    private sealed class EncounterParticipantRow
+    {
+        public int EncounterParticipantId { get; set; }
+        public int ParticipantType { get; set; }
+        public int SourceId { get; set; }
+        public string NameSnapshot { get; set; } = string.Empty;
+        public int? ArmorClassSnapshot { get; set; }
+        public int? HitPointsCurrent { get; set; }
+        public int? InitiativeModifierSnapshot { get; set; }
+    }
+}

@@ -1,5 +1,189 @@
-@page "/LCampaigns"
+@page "/campaigns"
+@inject IHttpClientFactory HttpFactory
+@inject NavigationManager Nav
 
 <PageTitle>Campaigns</PageTitle>
-<MudText Typo="Typo.h4" GutterBottom="true">Campaigns</MudText>
-<MudAlert Severity="Severity.Info">Campaigns page scaffolded. Feature implementation comes next.</MudAlert>
+
+<MudStack Spacing="3">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+        <MudStack Spacing="0">
+            <MudText Typo="Typo.h4">Campaigns</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Manage campaign titles and descriptions.</MudText>
+        </MudStack>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreate">Add Campaign</MudButton>
+    </MudStack>
+
+    @if (!string.IsNullOrWhiteSpace(error))
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@error</MudAlert>
+    }
+
+    <MudTable Items="rows" Dense="true" Hover="true" Outlined="true" Elevation="0">
+        <HeaderContent>
+            <MudTh>Title</MudTh>
+            <MudTh>Description</MudTh>
+            <MudTh></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>@context.Name</MudTd>
+            <MudTd>@(string.IsNullOrWhiteSpace(context.Description) ? "—" : context.Description)</MudTd>
+            <MudTd Style="text-align: right; white-space: nowrap;">
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" OnClick="() => OpenEdit(context.CampaignId)" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="() => Delete(context.CampaignId)" />
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Typo="Typo.body2" Class="pa-4">No campaigns yet. Add your first one.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+
+    @if (isCreate)
+    {
+        <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+            <MudStack Spacing="2">
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                    <MudText Typo="Typo.h6">@(form.CampaignId.HasValue ? "Edit Campaign" : "Create Campaign")</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Text">Campaign</MudChip>
+                </MudStack>
+
+                <MudDivider />
+
+                <MudTextField @bind-Value="form.Name" Label="Title" Placeholder="e.g., Curse of the Crimson Moon" Variant="Variant.Outlined" Required="true" />
+                <MudTextField @bind-Value="form.Description" Label="Description" Placeholder="Campaign summary, tone, themes, house rules..." Variant="Variant.Outlined" Lines="4" />
+
+                <MudStack Row="true" Spacing="1" Class="mt-3">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="Save">Save</MudButton>
+                    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Close" OnClick="CloseCreate">Cancel</MudButton>
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+    }
+</MudStack>
+
+@code {
+    private List<CampaignRow> rows = new();
+    private string? error;
+    private bool isCreate;
+    private CampaignForm form = new();
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        try
+        {
+            error = null;
+            var http = HttpFactory.CreateClient();
+            rows = await http.GetFromJsonAsync<List<CampaignRow>>(Nav.ToAbsoluteUri("/api/campaigns")) ?? new();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            rows = new();
+        }
+    }
+
+    private void OpenCreate()
+    {
+        form = new CampaignForm();
+        isCreate = true;
+    }
+
+    private async Task OpenEdit(int campaignId)
+    {
+        try
+        {
+            error = null;
+            var http = HttpFactory.CreateClient();
+            var row = await http.GetFromJsonAsync<CampaignRow>(Nav.ToAbsoluteUri($"/api/campaigns/{campaignId}"));
+            if (row is null)
+            {
+                error = "Campaign not found.";
+                return;
+            }
+
+            form = new CampaignForm
+            {
+                CampaignId = row.CampaignId,
+                Name = row.Name,
+                Description = row.Description
+            };
+            isCreate = true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+    }
+
+    private async Task Delete(int campaignId)
+    {
+        try
+        {
+            error = null;
+            var http = HttpFactory.CreateClient();
+            var res = await http.DeleteAsync(Nav.ToAbsoluteUri($"/api/campaigns/{campaignId}"));
+            if (!res.IsSuccessStatusCode)
+            {
+                var txt = await res.Content.ReadAsStringAsync();
+                error = string.IsNullOrWhiteSpace(txt) ? "Delete failed." : txt;
+                return;
+            }
+
+            await Load();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+    }
+
+    private void CloseCreate() => isCreate = false;
+
+    private async Task Save()
+    {
+        try
+        {
+            error = null;
+            var http = HttpFactory.CreateClient();
+            var req = new
+            {
+                name = form.Name,
+                description = form.Description
+            };
+
+            HttpResponseMessage res;
+            if (form.CampaignId.HasValue)
+            {
+                res = await http.PutAsJsonAsync(Nav.ToAbsoluteUri($"/api/campaigns/{form.CampaignId.Value}"), req);
+            }
+            else
+            {
+                res = await http.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/campaigns"), req);
+            }
+
+            var txt = await res.Content.ReadAsStringAsync();
+            if (!res.IsSuccessStatusCode)
+            {
+                error = string.IsNullOrWhiteSpace(txt) ? "Save failed." : txt;
+                return;
+            }
+
+            isCreate = false;
+            await Load();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+    }
+
+    private sealed class CampaignForm
+    {
+        public int? CampaignId { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+    }
+
+    private sealed record CampaignRow(int CampaignId, string Name, string? Description);
+}

@@ -1,5 +1,259 @@
-@page "/LBestiary"
+@page "/bestiary"
+@inject IHttpClientFactory HttpFactory
+@inject NavigationManager Nav
 
 <PageTitle>Bestiary</PageTitle>
-<MudText Typo="Typo.h4" GutterBottom="true">Bestiary</MudText>
-<MudAlert Severity="Severity.Info">Bestiary page scaffolded. Feature implementation comes next.</MudAlert>
+
+<MudStack Spacing="3">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+        <MudStack Spacing="0">
+            <MudText Typo="Typo.h4">Bestiary</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Manage creatures for your worlds and encounters.</MudText>
+        </MudStack>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreate">Add Creature</MudButton>
+    </MudStack>
+
+    @if (!string.IsNullOrWhiteSpace(error))
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@error</MudAlert>
+    }
+
+    <MudTable Items="rows" Dense="true" Hover="true" Outlined="true" Elevation="0">
+        <HeaderContent>
+            <MudTh>Name</MudTh>
+            <MudTh>CR</MudTh>
+            <MudTh>AC</MudTh>
+            <MudTh>HP</MudTh>
+            <MudTh>Init</MudTh>
+            <MudTh>XP</MudTh>
+            <MudTh></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>@context.Name</MudTd>
+            <MudTd>@(context.ChallengeRating ?? "—")</MudTd>
+            <MudTd>@(context.ArmorClass?.ToString() ?? "—")</MudTd>
+            <MudTd>@(context.HitPoints?.ToString() ?? "—")</MudTd>
+            <MudTd>@(context.InitiativeModifier?.ToString() ?? "—")</MudTd>
+            <MudTd>@(context.ExperiencePoints?.ToString() ?? "—")</MudTd>
+            <MudTd Style="text-align: right; white-space: nowrap;">
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" OnClick="() => OpenEdit(context.CreatureId)" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="() => Delete(context.CreatureId)" />
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Typo="Typo.body2" Class="pa-4">No creatures yet. Add your first one.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+
+    @if (isCreate)
+    {
+        <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+            <MudStack Spacing="2">
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                    <MudText Typo="Typo.h6">@(form.CreatureId.HasValue ? "Edit Creature" : "Create Creature")</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Text">Bestiary</MudChip>
+                </MudStack>
+
+                <MudDivider />
+
+                <MudText Typo="Typo.subtitle2">Identity</MudText>
+                <MudGrid>
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="form.Name" Label="Name" Placeholder="e.g., Ancient Red Dragon" Variant="Variant.Outlined" Required="true" />
+                    </MudItem>
+                    <MudItem xs="12" md="3">
+                        <MudTextField @bind-Value="form.ChallengeRating" Label="CR" Placeholder="e.g., 5, 1/2, 21" Variant="Variant.Outlined" />
+                    </MudItem>
+                    <MudItem xs="12" md="3">
+                        <MudNumericField T="int?" @bind-Value="form.ExperiencePoints" Label="XP" Variant="Variant.Outlined" Min="0" />
+                    </MudItem>
+                </MudGrid>
+
+                <MudText Typo="Typo.subtitle2" Class="mt-2">Combat Stats</MudText>
+                <MudGrid>
+                    <MudItem xs="12" md="3">
+                        <MudNumericField T="int?" @bind-Value="form.ArmorClass" Label="AC" Variant="Variant.Outlined" />
+                    </MudItem>
+                    <MudItem xs="12" md="3">
+                        <MudNumericField T="int?" @bind-Value="form.HitPoints" Label="HP" Variant="Variant.Outlined" />
+                    </MudItem>
+                    <MudItem xs="12" md="3">
+                        <MudNumericField T="int?" @bind-Value="form.InitiativeModifier" Label="Initiative Mod" Variant="Variant.Outlined" />
+                    </MudItem>
+                    <MudItem xs="12" md="3">
+                        <MudNumericField T="int?" @bind-Value="form.PassivePerception" Label="Passive Perception" Variant="Variant.Outlined" />
+                    </MudItem>
+                </MudGrid>
+
+                <MudTextField @bind-Value="form.Speed" Label="Speed" Placeholder="e.g., 30 ft., fly 60 ft." Variant="Variant.Outlined" />
+
+                <MudText Typo="Typo.subtitle2" Class="mt-2">Notes</MudText>
+                <MudTextField @bind-Value="form.Description" Label="Description" Placeholder="Lore, behavior, abilities, hooks..." Variant="Variant.Outlined" Lines="4" />
+
+                <MudStack Row="true" Spacing="1" Class="mt-3">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="Save">Save</MudButton>
+                    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Close" OnClick="CloseCreate">Cancel</MudButton>
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+    }
+</MudStack>
+
+@code {
+    private List<CreatureRow> rows = new();
+    private string? error;
+    private bool isCreate;
+    private CreatureForm form = new();
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        try
+        {
+            error = null;
+            var http = HttpFactory.CreateClient();
+            rows = await http.GetFromJsonAsync<List<CreatureRow>>(Nav.ToAbsoluteUri("/api/creatures")) ?? new();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            rows = new();
+        }
+    }
+
+    private void OpenCreate()
+    {
+        form = new CreatureForm();
+        isCreate = true;
+    }
+
+    private async Task OpenEdit(int creatureId)
+    {
+        try
+        {
+            error = null;
+            var http = HttpFactory.CreateClient();
+            var row = await http.GetFromJsonAsync<CreatureRow>(Nav.ToAbsoluteUri($"/api/creatures/{creatureId}"));
+            if (row is null)
+            {
+                error = "Creature not found.";
+                return;
+            }
+
+            form = new CreatureForm
+            {
+                CreatureId = row.CreatureId,
+                Name = row.Name,
+                Description = row.Description,
+                ArmorClass = row.ArmorClass,
+                HitPoints = row.HitPoints,
+                InitiativeModifier = row.InitiativeModifier,
+                Speed = row.Speed,
+                ChallengeRating = row.ChallengeRating,
+                ExperiencePoints = row.ExperiencePoints,
+                PassivePerception = row.PassivePerception
+            };
+            isCreate = true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+    }
+
+    private async Task Delete(int creatureId)
+    {
+        try
+        {
+            error = null;
+            var http = HttpFactory.CreateClient();
+            var res = await http.DeleteAsync(Nav.ToAbsoluteUri($"/api/creatures/{creatureId}"));
+            if (!res.IsSuccessStatusCode)
+            {
+                var txt = await res.Content.ReadAsStringAsync();
+                error = string.IsNullOrWhiteSpace(txt) ? "Delete failed." : txt;
+                return;
+            }
+
+            await Load();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+    }
+
+    private void CloseCreate() => isCreate = false;
+
+    private async Task Save()
+    {
+        try
+        {
+            error = null;
+            var http = HttpFactory.CreateClient();
+            var req = new
+            {
+                name = form.Name,
+                description = form.Description,
+                armorClass = form.ArmorClass,
+                hitPoints = form.HitPoints,
+                initiativeModifier = form.InitiativeModifier,
+                speed = form.Speed,
+                challengeRating = form.ChallengeRating,
+                experiencePoints = form.ExperiencePoints,
+                passivePerception = form.PassivePerception
+            };
+
+            HttpResponseMessage res;
+            if (form.CreatureId.HasValue)
+            {
+                res = await http.PutAsJsonAsync(Nav.ToAbsoluteUri($"/api/creatures/{form.CreatureId.Value}"), req);
+            }
+            else
+            {
+                res = await http.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/creatures"), req);
+            }
+
+            var txt = await res.Content.ReadAsStringAsync();
+            if (!res.IsSuccessStatusCode)
+            {
+                error = string.IsNullOrWhiteSpace(txt) ? "Save failed." : txt;
+                return;
+            }
+
+            isCreate = false;
+            await Load();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+    }
+
+    private sealed class CreatureForm
+    {
+        public int? CreatureId { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public int? ArmorClass { get; set; }
+        public int? HitPoints { get; set; }
+        public int? InitiativeModifier { get; set; }
+        public string? Speed { get; set; }
+        public string? ChallengeRating { get; set; }
+        public int? ExperiencePoints { get; set; }
+        public int? PassivePerception { get; set; }
+    }
+
+    private sealed record CreatureRow(
+        int CreatureId,
+        string Name,
+        string? Description,
+        int? ArmorClass,
+        int? HitPoints,
+        int? InitiativeModifier,
+        string? Speed,
+        string? ChallengeRating,
+        int? ExperiencePoints,
+        int? PassivePerception);
+}

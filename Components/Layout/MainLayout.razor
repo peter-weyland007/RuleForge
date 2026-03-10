@@ -1,6 +1,7 @@
 @inherits LayoutComponentBase
 
 <MudThemeProvider Theme="_theme" @bind-IsDarkMode="_isDark" />
+<MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
 
@@ -12,7 +13,11 @@
         <MudIconButton Icon="@(_isDark ? Icons.Material.Filled.DarkMode : Icons.Material.Filled.LightMode)" Color="Color.Inherit" OnClick="ToggleTheme" />
     </MudAppBar>
 
-    <MudDrawer @bind-Open="_drawerOpen" Elevation="1" ClipMode="DrawerClipMode.Always" Variant="DrawerVariant.Responsive">
+    <MudDrawer @bind-Open="_drawerOpen"
+               Elevation="1"
+               Variant="DrawerVariant.Persistent"
+               ClipMode="DrawerClipMode.Always"
+               Width="280px">
         <NavMenu />
     </MudDrawer>
 
@@ -29,22 +34,9 @@
 
     private readonly MudTheme _theme = new()
     {
-        PaletteLight = new PaletteLight
-        {
-            Primary = "#5B8DEF",
-            Secondary = "#8C6FF7",
-            Background = "#F6F8FC",
-            Surface = "#FFFFFF"
-        },
-        PaletteDark = new PaletteDark
-        {
-            Primary = "#8FB6FF",
-            Secondary = "#B39DFF"
-        },
-        LayoutProperties = new LayoutProperties
-        {
-            DrawerWidthLeft = "280px"
-        }
+        PaletteLight = new PaletteLight { Primary = "#5B8DEF", Secondary = "#8C6FF7", Background = "#F6F8FC", Surface = "#FFFFFF" },
+        PaletteDark = new PaletteDark { Primary = "#8FB6FF", Secondary = "#B39DFF", Background = "#121826", Surface = "#1B2335", AppbarBackground = "#1B2335" },
+        LayoutProperties = new LayoutProperties { DrawerWidthLeft = "280px" }
     };
 
     private void ToggleDrawer() => _drawerOpen = !_drawerOpen;

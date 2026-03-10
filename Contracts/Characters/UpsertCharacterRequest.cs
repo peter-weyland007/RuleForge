@@ -5,8 +5,8 @@ namespace RuleForge.Contracts.Characters;
 
 public sealed class UpsertCharacterRequest
 {
-    [Required]
-    public int CampaignId { get; set; }
+    public int? CampaignId { get; set; }
+    public int? PartyId { get; set; }
 
     [Required]
     public CharacterType CharacterType { get; set; } = CharacterType.PC;

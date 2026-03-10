@@ -1,0 +1,150 @@
+@page "/parties"
+@inject IHttpClientFactory HttpFactory
+@inject NavigationManager Nav
+
+<PageTitle>Parties</PageTitle>
+
+<MudStack Spacing="3">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+        <MudStack Spacing="0">
+            <MudText Typo="Typo.h4">Parties</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Group PCs into adventuring parties.</MudText>
+        </MudStack>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreate">Add Party</MudButton>
+    </MudStack>
+
+    @if (!string.IsNullOrWhiteSpace(error))
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@error</MudAlert>
+    }
+
+    <MudTable Items="rows" Dense="true" Hover="true" Outlined="true" Elevation="0">
+        <HeaderContent>
+            <MudTh>Name</MudTh>
+            <MudTh>Campaign</MudTh>
+            <MudTh>Members</MudTh>
+            <MudTh>Description</MudTh>
+            <MudTh></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>@context.Name</MudTd>
+            <MudTd>@CampaignName(context.CampaignId)</MudTd>
+            <MudTd>@context.MemberCount</MudTd>
+            <MudTd>@(string.IsNullOrWhiteSpace(context.Description) ? "—" : context.Description)</MudTd>
+            <MudTd Style="text-align:right; white-space:nowrap;">
+                <MudIconButton Icon="@Icons.Material.Filled.People" Color="Color.Info" Size="Size.Small" OnClick="() => ViewMembers(context.PartyId, context.Name)" />
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" OnClick="() => OpenEdit(context.PartyId)" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="() => Delete(context.PartyId)" />
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+
+    @if (isEdit)
+    {
+        <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+            <MudStack Spacing="2">
+                <MudText Typo="Typo.h6">@(form.PartyId.HasValue ? "Edit Party" : "Create Party")</MudText>
+                <MudTextField @bind-Value="form.Name" Label="Party Name" Variant="Variant.Outlined" Required="true" />
+                <MudSelect T="int?" @bind-Value="form.CampaignId" Label="Campaign (Optional)" Variant="Variant.Outlined" Clearable="true" Disabled="@(!campaigns.Any())">
+                    @foreach (var c in campaigns)
+                    {
+                        <MudSelectItem T="int?" Value="c.CampaignId">@c.Name</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudTextField @bind-Value="form.Description" Label="Description" Variant="Variant.Outlined" Lines="3" />
+                <MudStack Row="true" Spacing="1">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Save">Save</MudButton>
+                    <MudButton Variant="Variant.Outlined" OnClick="() => isEdit=false">Cancel</MudButton>
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+    }
+
+    @if (showMembers)
+    {
+        <MudOverlay Visible="true" DarkBackground="true" AutoClose="true" OnClosed="CloseMembers" />
+        <MudPaper Class="pa-4" Outlined="true" Elevation="8" Style="position: fixed; right: 16px; top: 80px; width: 420px; max-height: calc(100vh - 110px); overflow: auto; z-index: 1400;">
+            <MudStack Spacing="2">
+                <MudText Typo="Typo.h6">@memberDrawerTitle</MudText>
+
+                @if (!partyMembers.Any())
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">No PCs assigned to this party yet.</MudText>
+                }
+                else
+                {
+                    <MudTable Items="partyMembers" Dense="true" Hover="true" Outlined="true" Elevation="0">
+                        <HeaderContent>
+                            <MudTh>Name</MudTh>
+                            <MudTh>Class</MudTh>
+                            <MudTh>Lvl</MudTh>
+                            <MudTh>AC</MudTh>
+                            <MudTh>HP</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd>@context.Name</MudTd>
+                            <MudTd>@context.ClassName</MudTd>
+                            <MudTd>@context.Level</MudTd>
+                            <MudTd>@context.ArmorClass</MudTd>
+                            <MudTd>@($"{context.HitPointsCurrent}/{context.HitPointsMax}")</MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                }
+
+                <MudButton Variant="Variant.Outlined" OnClick="CloseMembers">Close</MudButton>
+            </MudStack>
+        </MudPaper>
+    }
+</MudStack>
+
+@code {
+    private List<PartyRow> rows = new();
+    private List<CampaignRow> campaigns = new();
+    private List<PartyMemberRow> partyMembers = new();
+    private string? error;
+    private bool isEdit;
+    private bool showMembers;
+    private string memberDrawerTitle = "Party Members";
+    private PartyForm form = new();
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        try
+        {
+            error = null;
+            var h = HttpFactory.CreateClient();
+            rows = await h.GetFromJsonAsync<List<PartyRow>>(Nav.ToAbsoluteUri("/api/parties")) ?? new();
+            campaigns = await h.GetFromJsonAsync<List<CampaignRow>>(Nav.ToAbsoluteUri("/api/campaigns")) ?? new();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            rows = new();
+            campaigns = new();
+        }
+    }
+
+    private void OpenCreate(){ form=new PartyForm(); isEdit=true; }
+    private async Task OpenEdit(int id){ var h=HttpFactory.CreateClient(); var r=await h.GetFromJsonAsync<PartyRow>(Nav.ToAbsoluteUri($"/api/parties/{id}")); if(r is null)return; form=new PartyForm{PartyId=r.PartyId,Name=r.Name,Description=r.Description,CampaignId=r.CampaignId}; isEdit=true; }
+    private async Task Delete(int id){ var h=HttpFactory.CreateClient(); await h.DeleteAsync(Nav.ToAbsoluteUri($"/api/parties/{id}")); await Load(); }
+    private async Task Save(){ var h=HttpFactory.CreateClient(); var req=new{name=form.Name,description=form.Description,campaignId=form.CampaignId}; if(form.PartyId.HasValue) await h.PutAsJsonAsync(Nav.ToAbsoluteUri($"/api/parties/{form.PartyId.Value}"),req); else await h.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/parties"),req); isEdit=false; await Load(); }
+
+    private void CloseMembers() => showMembers = false;
+
+    private async Task ViewMembers(int partyId, string partyName)
+    {
+        var h = HttpFactory.CreateClient();
+        partyMembers = await h.GetFromJsonAsync<List<PartyMemberRow>>(Nav.ToAbsoluteUri($"/api/parties/{partyId}/members")) ?? new();
+        memberDrawerTitle = $"{partyName} Members";
+        showMembers = true;
+    }
+
+    private string CampaignName(int? id) => id is null ? "—" : campaigns.FirstOrDefault(x => x.CampaignId == id)?.Name ?? $"#{id}";
+
+    private sealed class PartyForm { public int? PartyId {get;set;} public string Name {get;set;} = string.Empty; public string? Description {get;set;} public int? CampaignId {get;set;} }
+    private sealed record PartyRow(int PartyId, string Name, string? Description, int? CampaignId, int MemberCount);
+    private sealed record CampaignRow(int CampaignId, string Name);
+    private sealed record PartyMemberRow(int CharacterId, string Name, string? ClassName, int? Level, int? ArmorClass, int? HitPointsCurrent, int? HitPointsMax);
+}

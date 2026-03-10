@@ -5,7 +5,8 @@ namespace RuleForge.Contracts.Characters;
 public sealed class CharacterResponse
 {
     public int CharacterId { get; set; }
-    public int CampaignId { get; set; }
+    public int? CampaignId { get; set; }
+    public int? PartyId { get; set; }
     public CharacterType CharacterType { get; set; }
     public string Name { get; set; } = string.Empty;
     public int? OwnerAppUserId { get; set; }
