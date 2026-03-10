@@ -1,0 +1,41 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v10.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v10.0": {
+      "RuleForge/1.0.0": {
+        "dependencies": {
+          "MudBlazor": "9.1.0"
+        },
+        "runtime": {
+          "RuleForge.dll": {}
+        }
+      },
+      "MudBlazor/9.1.0": {
+        "runtime": {
+          "lib/net10.0/MudBlazor.dll": {
+            "assemblyVersion": "9.1.0.0",
+            "fileVersion": "9.1.0.0"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "RuleForge/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "MudBlazor/9.1.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-iy+kj3IWQsVh2r+xO9Yc8lUNuZWFy/zSGY+DV8uessNJrOrvmKef3+bDPEU0a+WmhP1xWU3bOThyiTlEhcco5A==",
+      "path": "mudblazor/9.1.0",
+      "hashPath": "mudblazor.9.1.0.nupkg.sha512"
+    }
+  }
+}

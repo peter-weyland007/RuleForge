@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "dgSpecHash": "cBTGGQB3EHI=",
+  "success": true,
+  "projectFilePath": "/Users/peter/Desktop/OpenclawVault/agents/bishop/RuleForge/RuleForge.csproj",
+  "expectedPackageFiles": [
+    "/Users/peter/.nuget/packages/microsoft.aspnetcore.app.internal.assets/10.0.3/microsoft.aspnetcore.app.internal.assets.10.0.3.nupkg.sha512",
+    "/Users/peter/.nuget/packages/mudblazor/9.1.0/mudblazor.9.1.0.nupkg.sha512"
+  ],
+  "logs": []
+}
