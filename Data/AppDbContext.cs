@@ -21,6 +21,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         var c = modelBuilder.Entity<Character>();
         c.HasKey(x => x.CharacterId);
         c.Property(x => x.Name).HasMaxLength(120).IsRequired();
+        c.Property(x => x.PlayerName).HasMaxLength(120);
         c.HasIndex(x => new { x.CampaignId, x.Name });
 
         var cp = modelBuilder.Entity<Campaign>();
@@ -35,6 +36,12 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         cr.Property(x => x.Description).HasMaxLength(4000);
         cr.Property(x => x.Speed).HasMaxLength(80);
         cr.Property(x => x.ChallengeRating).HasMaxLength(32);
+        cr.Property(x => x.Strength);
+        cr.Property(x => x.Dexterity);
+        cr.Property(x => x.Constitution);
+        cr.Property(x => x.Intelligence);
+        cr.Property(x => x.Wisdom);
+        cr.Property(x => x.Charisma);
         cr.HasIndex(x => x.Name);
 
         var e = modelBuilder.Entity<Encounter>();

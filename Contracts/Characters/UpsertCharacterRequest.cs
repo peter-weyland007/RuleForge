@@ -15,6 +15,7 @@ public sealed class UpsertCharacterRequest
     public string Name { get; set; } = string.Empty;
 
     public int? OwnerAppUserId { get; set; }
+    public string? PlayerName { get; set; }
 
     public int? ArmorClass { get; set; }
     public int? HitPointsCurrent { get; set; }

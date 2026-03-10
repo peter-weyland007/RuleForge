@@ -87,6 +87,16 @@
 
                 <MudTextField @bind-Value="form.Speed" Label="Speed" Placeholder="e.g., 30 ft., fly 60 ft." Variant="Variant.Outlined" />
 
+                <MudText Typo="Typo.subtitle2" Class="mt-2">Ability Scores</MudText>
+                <MudGrid>
+                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Strength" Label="STR" Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Dexterity" Label="DEX" Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Constitution" Label="CON" Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Intelligence" Label="INT" Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Wisdom" Label="WIS" Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Charisma" Label="CHA" Variant="Variant.Outlined" /></MudItem>
+                </MudGrid>
+
                 <MudText Typo="Typo.subtitle2" Class="mt-2">Notes</MudText>
                 <MudTextField @bind-Value="form.Description" Label="Description" Placeholder="Lore, behavior, abilities, hooks..." Variant="Variant.Outlined" Lines="4" />
 
@@ -152,7 +162,13 @@
                 Speed = row.Speed,
                 ChallengeRating = row.ChallengeRating,
                 ExperiencePoints = row.ExperiencePoints,
-                PassivePerception = row.PassivePerception
+                PassivePerception = row.PassivePerception,
+                Strength = row.Strength,
+                Dexterity = row.Dexterity,
+                Constitution = row.Constitution,
+                Intelligence = row.Intelligence,
+                Wisdom = row.Wisdom,
+                Charisma = row.Charisma
             };
             isCreate = true;
         }
@@ -202,7 +218,13 @@
                 speed = form.Speed,
                 challengeRating = form.ChallengeRating,
                 experiencePoints = form.ExperiencePoints,
-                passivePerception = form.PassivePerception
+                passivePerception = form.PassivePerception,
+                strength = form.Strength,
+                dexterity = form.Dexterity,
+                constitution = form.Constitution,
+                intelligence = form.Intelligence,
+                wisdom = form.Wisdom,
+                charisma = form.Charisma
             };
 
             HttpResponseMessage res;
@@ -243,6 +265,12 @@
         public string? ChallengeRating { get; set; }
         public int? ExperiencePoints { get; set; }
         public int? PassivePerception { get; set; }
+        public int? Strength { get; set; }
+        public int? Dexterity { get; set; }
+        public int? Constitution { get; set; }
+        public int? Intelligence { get; set; }
+        public int? Wisdom { get; set; }
+        public int? Charisma { get; set; }
     }
 
     private sealed record CreatureRow(
@@ -255,5 +283,11 @@
         string? Speed,
         string? ChallengeRating,
         int? ExperiencePoints,
-        int? PassivePerception);
+        int? PassivePerception,
+        int? Strength,
+        int? Dexterity,
+        int? Constitution,
+        int? Intelligence,
+        int? Wisdom,
+        int? Charisma);
 }

@@ -29,7 +29,7 @@
             <MudTh></MudTh>
         </HeaderContent>
         <RowTemplate>
-            <MudTd>@context.Name</MudTd>
+            <MudTd>@DisplayName(context)</MudTd>
             <MudTd>
                 <MudChip T="string" Size="Size.Small" Color="@(context.CharacterType == 1 ? Color.Primary : Color.Secondary)" Variant="Variant.Outlined">
                     @(context.CharacterType == 1 ? "PC" : "NPC")
@@ -64,6 +64,9 @@
                 <MudGrid>
                     <MudItem xs="12" md="6">
                         <MudTextField @bind-Value="form.Name" Label="Name" Placeholder="e.g., Sir Rowan" Variant="Variant.Outlined" Required="true" HelperText="Display name in party lists and encounter views." />
+                    </MudItem>
+                    <MudItem xs="12" md="3">
+                        <MudTextField @bind-Value="form.PlayerName" Label="Player Name" Placeholder="e.g., Peter" Variant="Variant.Outlined" Disabled="@(form.CharacterType != "PC")" HelperText="Optional for now; later replaced by user account link." />
                     </MudItem>
                     <MudItem xs="12" md="3">
                         <MudSelect T="string" Value="form.CharacterType" ValueChanged="OnTypeChanged" Label="Type" Variant="Variant.Outlined">
@@ -106,6 +109,16 @@
                     <MudItem xs="12" md="2">
                         <MudNumericField T="int?" @bind-Value="form.HitPointsMax" Label="HP Max" Variant="Variant.Outlined" />
                     </MudItem>
+                </MudGrid>
+
+                <MudText Typo="Typo.subtitle2" Class="mt-2">Ability Scores</MudText>
+                <MudGrid>
+                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Strength" Label="STR" Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Dexterity" Label="DEX" Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Constitution" Label="CON" Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Intelligence" Label="INT" Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Wisdom" Label="WIS" Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Charisma" Label="CHA" Variant="Variant.Outlined" /></MudItem>
                 </MudGrid>
 
                 <MudText Typo="Typo.subtitle2" Class="mt-2">Notes</MudText>
@@ -175,11 +188,18 @@
                 PartyId = row.PartyId,
                 CharacterType = row.CharacterType == 2 ? "NPC" : "PC",
                 Name = row.Name,
+                PlayerName = row.PlayerName,
                 ArmorClass = row.ArmorClass,
                 HitPointsCurrent = row.HitPointsCurrent,
                 HitPointsMax = row.HitPointsMax,
                 Level = row.Level,
                 ClassName = row.ClassName,
+                Strength = row.Strength,
+                Dexterity = row.Dexterity,
+                Constitution = row.Constitution,
+                Intelligence = row.Intelligence,
+                Wisdom = row.Wisdom,
+                Charisma = row.Charisma,
                 Notes = row.Notes
             };
             isCreate = true;
@@ -214,7 +234,7 @@
     }
 
     private void CloseCreate() => isCreate = false;
-    private void OnTypeChanged(string v) { form.CharacterType = v; if (v != "PC") form.PartyId = null; }
+    private void OnTypeChanged(string v) { form.CharacterType = v; if (v != "PC") { form.PartyId = null; form.PlayerName = null; } }
 
     private async Task Save()
     {
@@ -228,12 +248,19 @@
                 partyId = form.CharacterType == "PC" ? form.PartyId : null,
                 characterType = form.CharacterType == "NPC" ? 2 : 1,
                 name = form.Name,
+                playerName = form.CharacterType == "PC" ? form.PlayerName : null,
                 ownerAppUserId = (int?)null,
                 armorClass = form.ArmorClass,
                 hitPointsCurrent = form.HitPointsCurrent,
                 hitPointsMax = form.HitPointsMax,
                 level = form.Level,
                 className = form.ClassName,
+                strength = form.Strength,
+                dexterity = form.Dexterity,
+                constitution = form.Constitution,
+                intelligence = form.Intelligence,
+                wisdom = form.Wisdom,
+                charisma = form.Charisma,
                 notes = form.Notes
             };
 
@@ -255,6 +282,8 @@
         catch (Exception ex) { error = ex.Message; }
     }
 
+    private static string DisplayName(CharacterRow row) => row.CharacterType == 1 && !string.IsNullOrWhiteSpace(row.PlayerName) ? $"{row.Name} ({row.PlayerName})" : row.Name;
+
     private sealed class CharacterForm
     {
         public int? CharacterId { get; set; }
@@ -262,16 +291,23 @@
         public int? PartyId { get; set; }
         public string CharacterType { get; set; } = "PC";
         public string Name { get; set; } = string.Empty;
+        public string? PlayerName { get; set; }
         public int? ArmorClass { get; set; }
         public int? HitPointsCurrent { get; set; }
         public int? HitPointsMax { get; set; }
         public int? Level { get; set; }
         public string? ClassName { get; set; }
+        public int? Strength { get; set; }
+        public int? Dexterity { get; set; }
+        public int? Constitution { get; set; }
+        public int? Intelligence { get; set; }
+        public int? Wisdom { get; set; }
+        public int? Charisma { get; set; }
         public string? Notes { get; set; }
     }
 
-    private sealed record CharacterRow(int CharacterId, int? CampaignId, int? PartyId, int CharacterType, string Name, int? ArmorClass, int? HitPointsCurrent, int? HitPointsMax, int? Level, string? ClassName);
-    private sealed record CharacterDetail(int CharacterId, int? CampaignId, int? PartyId, int CharacterType, string Name, int? ArmorClass, int? HitPointsCurrent, int? HitPointsMax, int? Level, string? ClassName, string? Notes);
+    private sealed record CharacterRow(int CharacterId, int? CampaignId, int? PartyId, int CharacterType, string Name, string? PlayerName, int? ArmorClass, int? HitPointsCurrent, int? HitPointsMax, int? Level, string? ClassName);
+    private sealed record CharacterDetail(int CharacterId, int? CampaignId, int? PartyId, int CharacterType, string Name, string? PlayerName, int? ArmorClass, int? HitPointsCurrent, int? HitPointsMax, int? Level, string? ClassName, int? Strength, int? Dexterity, int? Constitution, int? Intelligence, int? Wisdom, int? Charisma, string? Notes);
     private sealed record CampaignOption(int CampaignId, string Name);
     private sealed record PartyOption(int PartyId, string Name);
 }

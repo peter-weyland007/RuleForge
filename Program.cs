@@ -124,6 +124,7 @@ using (var scope = app.Services.CreateScope())
     try { db.Database.ExecuteSqlRaw("ALTER TABLE Creatures ADD COLUMN ChallengeRating TEXT NULL;"); } catch { }
     try { db.Database.ExecuteSqlRaw("ALTER TABLE Creatures ADD COLUMN ExperiencePoints INTEGER NULL;"); } catch { }
     try { db.Database.ExecuteSqlRaw("ALTER TABLE Characters ADD COLUMN PartyId INTEGER NOT NULL DEFAULT 0;"); } catch { }
+    try { db.Database.ExecuteSqlRaw("ALTER TABLE Characters ADD COLUMN PlayerName TEXT NULL;"); } catch { }
 
     db.Database.ExecuteSqlRaw("""
         CREATE TABLE IF NOT EXISTS Parties (
@@ -140,6 +141,12 @@ using (var scope = app.Services.CreateScope())
     try { db.Database.ExecuteSqlRaw("DROP INDEX IF EXISTS IX_Parties_Name;"); } catch { }
 
     try { db.Database.ExecuteSqlRaw("ALTER TABLE Creatures ADD COLUMN PassivePerception INTEGER NULL;"); } catch { }
+    try { db.Database.ExecuteSqlRaw("ALTER TABLE Creatures ADD COLUMN Strength INTEGER NULL;"); } catch { }
+    try { db.Database.ExecuteSqlRaw("ALTER TABLE Creatures ADD COLUMN Dexterity INTEGER NULL;"); } catch { }
+    try { db.Database.ExecuteSqlRaw("ALTER TABLE Creatures ADD COLUMN Constitution INTEGER NULL;"); } catch { }
+    try { db.Database.ExecuteSqlRaw("ALTER TABLE Creatures ADD COLUMN Intelligence INTEGER NULL;"); } catch { }
+    try { db.Database.ExecuteSqlRaw("ALTER TABLE Creatures ADD COLUMN Wisdom INTEGER NULL;"); } catch { }
+    try { db.Database.ExecuteSqlRaw("ALTER TABLE Creatures ADD COLUMN Charisma INTEGER NULL;"); } catch { }
 
     db.Database.ExecuteSqlRaw("""
         CREATE TABLE IF NOT EXISTS Encounters (
@@ -186,6 +193,7 @@ app.MapGet("/api/characters", async (AppDbContext db) =>
             CharacterType = x.CharacterType,
             Name = x.Name,
             OwnerAppUserId = x.OwnerAppUserId,
+            PlayerName = x.PlayerName,
             ArmorClass = x.ArmorClass,
             HitPointsCurrent = x.HitPointsCurrent,
             HitPointsMax = x.HitPointsMax,
@@ -224,6 +232,7 @@ app.MapGet("/api/characters/{id:int}", async (int id, AppDbContext db) =>
             CharacterType = x.CharacterType,
             Name = x.Name,
             OwnerAppUserId = x.OwnerAppUserId,
+            PlayerName = x.PlayerName,
             ArmorClass = x.ArmorClass,
             HitPointsCurrent = x.HitPointsCurrent,
             HitPointsMax = x.HitPointsMax,
@@ -261,6 +270,7 @@ app.MapPost("/api/characters", async (UpsertCharacterRequest req, AppDbContext d
         CharacterType = req.CharacterType,
         Name = req.Name.Trim(),
         OwnerAppUserId = req.OwnerAppUserId,
+        PlayerName = string.IsNullOrWhiteSpace(req.PlayerName) ? null : req.PlayerName.Trim(),
         ArmorClass = req.ArmorClass,
         HitPointsCurrent = req.HitPointsCurrent,
         HitPointsMax = req.HitPointsMax,
@@ -300,6 +310,7 @@ app.MapPut("/api/characters/{id:int}", async (int id, UpsertCharacterRequest req
     row.CharacterType = req.CharacterType;
     row.Name = req.Name.Trim();
     row.OwnerAppUserId = req.OwnerAppUserId;
+    row.PlayerName = string.IsNullOrWhiteSpace(req.PlayerName) ? null : req.PlayerName.Trim();
     row.ArmorClass = req.ArmorClass;
     row.HitPointsCurrent = req.HitPointsCurrent;
     row.HitPointsMax = req.HitPointsMax;
@@ -316,6 +327,12 @@ app.MapPut("/api/characters/{id:int}", async (int id, UpsertCharacterRequest req
     row.Level = req.Level;
     row.ClassName = req.ClassName;
     row.PassivePerception = req.PassivePerception;
+    row.Strength = req.Strength;
+    row.Dexterity = req.Dexterity;
+    row.Constitution = req.Constitution;
+    row.Intelligence = req.Intelligence;
+    row.Wisdom = req.Wisdom;
+    row.Charisma = req.Charisma;
     row.Conditions = req.Conditions;
     row.Notes = req.Notes;
     row.DateModifiedUtc = DateTime.UtcNow;
@@ -427,7 +444,13 @@ app.MapGet("/api/creatures", async (AppDbContext db) =>
             Speed = x.Speed,
             ChallengeRating = x.ChallengeRating,
             ExperiencePoints = x.ExperiencePoints,
-            PassivePerception = x.PassivePerception
+            PassivePerception = x.PassivePerception,
+            Strength = x.Strength,
+            Dexterity = x.Dexterity,
+            Constitution = x.Constitution,
+            Intelligence = x.Intelligence,
+            Wisdom = x.Wisdom,
+            Charisma = x.Charisma
         })
         .ToListAsync();
 
@@ -449,7 +472,13 @@ app.MapGet("/api/creatures/{id:int}", async (int id, AppDbContext db) =>
             Speed = x.Speed,
             ChallengeRating = x.ChallengeRating,
             ExperiencePoints = x.ExperiencePoints,
-            PassivePerception = x.PassivePerception
+            PassivePerception = x.PassivePerception,
+            Strength = x.Strength,
+            Dexterity = x.Dexterity,
+            Constitution = x.Constitution,
+            Intelligence = x.Intelligence,
+            Wisdom = x.Wisdom,
+            Charisma = x.Charisma
         })
         .FirstOrDefaultAsync();
 
@@ -471,6 +500,12 @@ app.MapPost("/api/creatures", async (UpsertCreatureRequest req, AppDbContext db)
         ChallengeRating = string.IsNullOrWhiteSpace(req.ChallengeRating) ? null : req.ChallengeRating.Trim(),
         ExperiencePoints = req.ExperiencePoints,
         PassivePerception = req.PassivePerception,
+        Strength = req.Strength,
+        Dexterity = req.Dexterity,
+        Constitution = req.Constitution,
+        Intelligence = req.Intelligence,
+        Wisdom = req.Wisdom,
+        Charisma = req.Charisma,
         DateCreatedUtc = DateTime.UtcNow,
         DateModifiedUtc = DateTime.UtcNow
     };
@@ -496,6 +531,12 @@ app.MapPut("/api/creatures/{id:int}", async (int id, UpsertCreatureRequest req, 
     row.ChallengeRating = string.IsNullOrWhiteSpace(req.ChallengeRating) ? null : req.ChallengeRating.Trim();
     row.ExperiencePoints = req.ExperiencePoints;
     row.PassivePerception = req.PassivePerception;
+    row.Strength = req.Strength;
+    row.Dexterity = req.Dexterity;
+    row.Constitution = req.Constitution;
+    row.Intelligence = req.Intelligence;
+    row.Wisdom = req.Wisdom;
+    row.Charisma = req.Charisma;
     row.DateModifiedUtc = DateTime.UtcNow;
 
     await db.SaveChangesAsync();
