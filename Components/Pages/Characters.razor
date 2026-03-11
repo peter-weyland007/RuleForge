@@ -1,7 +1,9 @@
+@using Microsoft.AspNetCore.Components.Authorization
 @page "/characters"
 @inject IHttpClientFactory HttpFactory
 @inject NavigationManager Nav
 @inject IJSRuntime JS
+@inject AuthenticationStateProvider AuthStateProvider
 
 <PageTitle>Characters</PageTitle>
 
@@ -15,6 +17,11 @@
     </MudStack>
 
     <ApiErrorAlert Message="@error" />
+
+    @if (isAdmin)
+    {
+        <MudSwitch T="bool" Value="showAllAdmin" ValueChanged="OnShowAllChanged" Color="Color.Info" Label="Show All (Admin)" />
+    }
 
     <MudTable Items="rows" Dense="true" Hover="true" Outlined="true" Elevation="0">
         <HeaderContent>
@@ -164,6 +171,8 @@
     private List<PartyOption> parties = new();
     private string? error;
     private bool isSaving;
+    private bool isAdmin;
+    private bool showAllAdmin;
     private bool isCreate;
     private CharacterForm form = new();
     private bool isShare;
@@ -178,6 +187,8 @@
     {
         if (!firstRender || _loaded) return;
         _loaded = true;
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        isAdmin = auth.User.IsInRole("Admin");
         await Load();
         StateHasChanged();
     }
@@ -187,7 +198,8 @@
         try
         {
             error = null;
-            var r1 = await JS.InvokeAsync<ApiResult<List<CharacterRow>>>("ruleforgeApi.get", "/api/characters");
+            var endpoint = showAllAdmin && isAdmin ? "/api/characters?showAll=true" : "/api/characters";
+            var r1 = await JS.InvokeAsync<ApiResult<List<CharacterRow>>>("ruleforgeApi.get", endpoint);
             var r2 = await JS.InvokeAsync<ApiResult<List<CampaignOption>>>("ruleforgeApi.get", "/api/campaigns");
             var r3 = await JS.InvokeAsync<ApiResult<List<PartyOption>>>("ruleforgeApi.get", "/api/parties");
             var r4 = await JS.InvokeAsync<ApiResult<FriendsOverview>>("ruleforgeApi.get", "/api/friends");
@@ -205,6 +217,13 @@
             parties = new();
             friends = new();
         }
+    }
+
+    private async Task OnShowAllChanged(bool value)
+    {
+        showAllAdmin = value;
+        await Load();
+        StateHasChanged();
     }
 
     private void OpenCreate()

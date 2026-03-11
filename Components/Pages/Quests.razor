@@ -1,7 +1,9 @@
+@using Microsoft.AspNetCore.Components.Authorization
 @page "/quests"
 @inject IHttpClientFactory HttpFactory
 @inject NavigationManager Nav
 @inject IJSRuntime JS
+@inject AuthenticationStateProvider AuthStateProvider
 
 <PageTitle>Quests</PageTitle>
 
@@ -18,6 +20,11 @@
     </MudStack>
 
     <ApiErrorAlert Message="@error" />
+
+    @if (isAdmin)
+    {
+        <MudSwitch T="bool" Value="showAllAdmin" ValueChanged="OnShowAllChanged" Color="Color.Info" Label="Show All (Admin)" />
+    }
 
     <MudTable Items="rows" Dense="true" Hover="true" Outlined="true" Elevation="0">
         <HeaderContent>
@@ -111,6 +118,8 @@
     private bool isEdit;
     private string? error;
     private bool isSaving;
+    private bool isAdmin;
+    private bool showAllAdmin;
     private bool isShare;
     private int? shareId;
     private int? shareUserId;
@@ -124,6 +133,8 @@
     {
         if (!firstRender || _loaded) return;
         _loaded = true;
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        isAdmin = auth.User.IsInRole("Admin");
         await Load();
         StateHasChanged();
     }
@@ -133,7 +144,8 @@
         try
         {
             error = null;
-            var r1 = await JS.InvokeAsync<ApiResult<List<QuestRow>>>("ruleforgeApi.get", "/api/quests");
+            var endpoint = showAllAdmin && isAdmin ? "/api/quests?showAll=true" : "/api/quests";
+            var r1 = await JS.InvokeAsync<ApiResult<List<QuestRow>>>("ruleforgeApi.get", endpoint);
             var r2 = await JS.InvokeAsync<ApiResult<List<CampaignOption>>>("ruleforgeApi.get", "/api/campaigns");
             var fr = await JS.InvokeAsync<ApiResult<FriendsOverview>>("ruleforgeApi.get", "/api/friends");
             if (!r1.Ok) { error = ApiErrorMessage(r1, "Failed to load quests."); rows = new(); return; }
@@ -146,6 +158,13 @@
             error = ex.Message;
             rows = new();
         }
+    }
+
+    private async Task OnShowAllChanged(bool value)
+    {
+        showAllAdmin = value;
+        await Load();
+        StateHasChanged();
     }
 
     private void OpenCreate() { form = new QuestForm { Mode = 3, UseChoiceMode = true }; isEdit = true; }
