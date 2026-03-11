@@ -14,10 +14,7 @@
         <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreate">Add Creature</MudButton>
     </MudStack>
 
-    @if (!string.IsNullOrWhiteSpace(error))
-    {
-        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@error</MudAlert>
-    }
+    <ApiErrorAlert Message="@error" />
 
     <MudTable Items="rows" Dense="true" Hover="true" Outlined="true" Elevation="0">
         <HeaderContent>
@@ -102,7 +99,7 @@
                 <MudTextField @bind-Value="form.Description" Label="Description" Placeholder="Lore, behavior, abilities, hooks..." Variant="Variant.Outlined" Lines="4" />
 
                 <MudStack Row="true" Spacing="1" Class="mt-3">
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="Save">Save</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="Save" Disabled="@isSaving">@(isSaving ? "Saving..." : "Save")</MudButton>
                     <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Close" OnClick="CloseCreate">Cancel</MudButton>
                 </MudStack>
             </MudStack>
@@ -113,6 +110,7 @@
 @code {
     private List<CreatureRow> rows = new();
     private string? error;
+    private bool isSaving;
     private bool isCreate;
     private CreatureForm form = new();
 
@@ -123,8 +121,9 @@
         try
         {
             error = null;
-            var http = HttpFactory.CreateClient();
-            rows = await http.GetFromJsonAsync<List<CreatureRow>>(Nav.ToAbsoluteUri("/api/creatures")) ?? new();
+            var r = await JS.InvokeAsync<ApiResult<List<CreatureRow>>>("ruleforgeApi.get", "/api/creatures");
+            if (!r.Ok) { error = ApiErrorMessage(r, "Failed to load creatures."); rows = new(); return; }
+            rows = r.Data ?? new();
         }
         catch (Exception ex)
         {
@@ -144,11 +143,11 @@
         try
         {
             error = null;
-            var http = HttpFactory.CreateClient();
-            var row = await http.GetFromJsonAsync<CreatureRow>(Nav.ToAbsoluteUri($"/api/creatures/{creatureId}"));
-            if (row is null)
+            var res = await JS.InvokeAsync<ApiResult<CreatureRow>>("ruleforgeApi.get", $"/api/creatures/{creatureId}");
+            var row = res.Data;
+            if (!res.Ok || row is null)
             {
-                error = "Creature not found.";
+                error = string.IsNullOrWhiteSpace(res.Text) ? "Creature not found." : res.Text;
                 return;
             }
 
@@ -187,12 +186,10 @@
             if (!ok) return;
 
             error = null;
-            var http = HttpFactory.CreateClient();
-            var res = await http.DeleteAsync(Nav.ToAbsoluteUri($"/api/creatures/{creatureId}"));
-            if (!res.IsSuccessStatusCode)
+            var res = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.delete", $"/api/creatures/{creatureId}");
+            if (!res.Ok)
             {
-                var txt = await res.Content.ReadAsStringAsync();
-                error = string.IsNullOrWhiteSpace(txt) ? "Delete failed." : txt;
+                error = ApiErrorMessage(res, "Delete failed.");
                 return;
             }
 
@@ -208,10 +205,11 @@
 
     private async Task Save()
     {
+        if (isSaving) return;
+        isSaving = true;
         try
         {
             error = null;
-            var http = HttpFactory.CreateClient();
             var req = new
             {
                 name = form.Name,
@@ -231,20 +229,15 @@
                 charisma = form.Charisma
             };
 
-            HttpResponseMessage res;
+            ApiResult<object> res;
             if (form.CreatureId.HasValue)
-            {
-                res = await http.PutAsJsonAsync(Nav.ToAbsoluteUri($"/api/creatures/{form.CreatureId.Value}"), req);
-            }
+                res = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.put", $"/api/creatures/{form.CreatureId.Value}", req);
             else
-            {
-                res = await http.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/creatures"), req);
-            }
+                res = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.post", "/api/creatures", req);
 
-            var txt = await res.Content.ReadAsStringAsync();
-            if (!res.IsSuccessStatusCode)
+            if (!res.Ok)
             {
-                error = string.IsNullOrWhiteSpace(txt) ? "Save failed." : txt;
+                error = ApiErrorMessage(res, "Save failed.");
                 return;
             }
 
@@ -256,6 +249,44 @@
             error = ex.Message;
         }
     }
+
+    private static string ApiErrorMessage<T>(ApiResult<T> res, string fallback)
+    {
+        if (!string.IsNullOrWhiteSpace(res.Text)) return NormalizeErrorText(res.Text!);
+        var msg = ExtractMessage(res.Data);
+        if (!string.IsNullOrWhiteSpace(msg)) return msg!;
+        return res.Status > 0 ? $"{fallback} (HTTP {res.Status})" : fallback;
+    }
+
+    private static string NormalizeErrorText(string text)
+    {
+        var t = text.Trim();
+        if (t.Length >= 2 && t.StartsWith(""") && t.EndsWith("""))
+        {
+            try { return System.Text.Json.JsonSerializer.Deserialize<string>(t) ?? t.Trim(new char[] {'"'}); } catch { return t.Trim(new char[] {'"'}); }
+        }
+        return t;
+    }
+
+    private static string? ExtractMessage(object? data)
+    {
+        if (data is null) return null;
+        try
+        {
+            var json = System.Text.Json.JsonSerializer.Serialize(data);
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object) return null;
+            foreach (var key in new[] { "message", "Message", "title", "error", "detail" })
+            {
+                if (doc.RootElement.TryGetProperty(key, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String)
+                    return v.GetString();
+            }
+        }
+        catch { }
+        return null;
+    }
+
+    private sealed class ApiResult<T> { public bool Ok { get; set; } public int Status { get; set; } public T? Data { get; set; } public string? Text { get; set; } }
 
     private sealed class CreatureForm
     {

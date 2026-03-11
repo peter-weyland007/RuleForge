@@ -14,10 +14,7 @@
         <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreate">Add Item</MudButton>
     </MudStack>
 
-    @if (!string.IsNullOrWhiteSpace(error))
-    {
-        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@error</MudAlert>
-    }
+    <ApiErrorAlert Message="@error" />
 
     <MudTable Items="rows" Dense="true" Hover="true" Outlined="true" Elevation="0">
         <HeaderContent>
@@ -125,7 +122,7 @@
                 }
 
                 <MudStack Row="true" Spacing="1">
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Save">Save</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Save" Disabled="@isSaving">@(isSaving ? "Saving..." : "Save")</MudButton>
                     <MudButton Variant="Variant.Outlined" OnClick="() => isEdit = false">Cancel</MudButton>
                 </MudStack>
             </MudStack>
@@ -137,6 +134,7 @@
     private List<ItemRow> rows = new();
     private bool isEdit;
     private string? error;
+    private bool isSaving;
     private ItemForm form = new() { ItemType = 9, Rarity = 1, SourceType = 1, CostCurrency = "gp" };
     private bool isShare;
     private int? shareItemId;
@@ -168,7 +166,7 @@
         {
             var r1 = await JS.InvokeAsync<ApiResult<List<ItemRow>>>("ruleforgeApi.get", "/api/items");
             var r2 = await JS.InvokeAsync<ApiResult<FriendsOverview>>("ruleforgeApi.get", "/api/friends");
-            if (!r1.Ok) { error = string.IsNullOrWhiteSpace(r1.Text) ? "Failed to load items." : r1.Text; rows = new(); return; }
+            if (!r1.Ok) { error = ApiErrorMessage(r1, "Failed to load items."); rows = new(); return; }
             rows = r1.Data ?? new();
             friends = r2.Data?.Friends ?? new();
         }
@@ -181,31 +179,60 @@
     {
         if (!shareItemId.HasValue || !shareUserId.HasValue) { error = "Pick a friend to share with."; return; }
         var res = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.post", $"/api/items/{shareItemId.Value}/share", new { userId = shareUserId.Value, permission = sharePermission });
-        if (!res.Ok) { error = string.IsNullOrWhiteSpace(res.Text) ? "Share failed." : res.Text; return; }
+        if (!res.Ok) { error = ApiErrorMessage(res, "Share failed."); return; }
         isShare = false;
     }
     private async Task OpenEdit(int id){ var r=await JS.InvokeAsync<ApiResult<ItemRow>>("ruleforgeApi.get", $"/api/items/{id}"); if(!r.Ok || r.Data is null){ error = string.IsNullOrWhiteSpace(r.Text) ? "Item not found." : r.Text; return; } form = new ItemForm(r.Data); isEdit=true; }
 
     private async Task Save()
     {
-        ApiResult<object> res = form.ItemId.HasValue
-            ? await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.put", $"/api/items/{form.ItemId.Value}", form)
-            : await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.post", "/api/items", form);
-        if(!res.Ok){ error = string.IsNullOrWhiteSpace(res.Text) ? "Save failed." : res.Text; return; }
-        isEdit=false; await Load();
+        if (isSaving) return;
+        isSaving = true;
+        try
+        {
+            ApiResult<object> res = form.ItemId.HasValue
+                ? await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.put", $"/api/items/{form.ItemId.Value}", form)
+                : await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.post", "/api/items", form);
+            if(!res.Ok){ error = ApiErrorMessage(res, "Save failed."); return; }
+            isEdit=false; await Load();
+        }
+        finally { isSaving = false; }
     }
 
     private async Task Delete(int id)
     {
         var ok = await JS.InvokeAsync<bool>("confirm", "Delete this item?");
         if(!ok) return;
-        var res = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.delete", $"/api/items/{id}"); if(!res.Ok){ error = string.IsNullOrWhiteSpace(res.Text)?"Delete failed.":res.Text; return; } await Load();
+        var res = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.delete", $"/api/items/{id}"); if(!res.Ok){ error = ApiErrorMessage(res, "Delete failed."); return; } await Load();
     }
 
     private static string TypeLabel(int t)=> t switch {1=>"Weapon",2=>"Armor",3=>"Consumable",4=>"Gear",5=>"Treasure",6=>"Spell Focus",7=>"Tool",8=>"Ammunition",_=>"Other"};
     private static string RarityLabel(int r)=> r switch {1=>"Common",2=>"Uncommon",3=>"Rare",4=>"Very Rare",5=>"Legendary",_=>"Artifact"};
     private static string SourceTypeLabel(int? s)=> s switch {1=>"Official",2=>"Homebrew",3=>"Third Party",4=>"Other",_=>"Other"};
     private static string FormatSource(ItemRow row) => string.IsNullOrWhiteSpace(row.Source) ? SourceTypeLabel(row.SourceType) : $"{SourceTypeLabel(row.SourceType)} · {row.Source}";
+
+    private static string ApiErrorMessage<T>(ApiResult<T> res, string fallback)
+    {
+        if (!string.IsNullOrWhiteSpace(res.Text)) return NormalizeErrorText(res.Text!);
+        if (res.Data is System.Text.Json.JsonElement el && el.ValueKind == System.Text.Json.JsonValueKind.Object)
+        {
+            if (el.TryGetProperty("message", out var msg) && msg.ValueKind == System.Text.Json.JsonValueKind.String)
+                return msg.GetString() ?? fallback;
+            if (el.TryGetProperty("Message", out var msg2) && msg2.ValueKind == System.Text.Json.JsonValueKind.String)
+                return msg2.GetString() ?? fallback;
+        }
+        return res.Status > 0 ? $"{fallback} (HTTP {res.Status})" : fallback;
+    }
+
+    private static string NormalizeErrorText(string text)
+    {
+        var t = text.Trim();
+        if (t.Length >= 2 && t.StartsWith(""") && t.EndsWith("""))
+        {
+            try { return System.Text.Json.JsonSerializer.Deserialize<string>(t) ?? t.Trim(new char[] {'"'}); } catch { return t.Trim(new char[] {'"'}); }
+        }
+        return t;
+    }
 
     private class ApiResult<T>
     {

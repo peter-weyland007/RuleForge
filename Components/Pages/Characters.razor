@@ -14,10 +14,7 @@
         <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreate">Add Character</MudButton>
     </MudStack>
 
-    @if (!string.IsNullOrWhiteSpace(error))
-    {
-        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@error</MudAlert>
-    }
+    <ApiErrorAlert Message="@error" />
 
     <MudTable Items="rows" Dense="true" Hover="true" Outlined="true" Elevation="0">
         <HeaderContent>
@@ -153,7 +150,7 @@
                 <MudTextField @bind-Value="form.Notes" Label="Notes" Placeholder="Roleplay notes, hooks, quirks..." Variant="Variant.Outlined" Lines="3" />
 
                 <MudStack Row="true" Spacing="1" Class="mt-3">
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="Save">Save</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="Save" Disabled="@isSaving">@(isSaving ? "Saving..." : "Save")</MudButton>
                     <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Close" OnClick="CloseCreate">Cancel</MudButton>
                 </MudStack>
             </MudStack>
@@ -166,6 +163,7 @@
     private List<CampaignOption> campaigns = new();
     private List<PartyOption> parties = new();
     private string? error;
+    private bool isSaving;
     private bool isCreate;
     private CharacterForm form = new();
     private bool isShare;
@@ -185,7 +183,7 @@
             var r2 = await JS.InvokeAsync<ApiResult<List<CampaignOption>>>("ruleforgeApi.get", "/api/campaigns");
             var r3 = await JS.InvokeAsync<ApiResult<List<PartyOption>>>("ruleforgeApi.get", "/api/parties");
             var r4 = await JS.InvokeAsync<ApiResult<FriendsOverview>>("ruleforgeApi.get", "/api/friends");
-            if (!r1.Ok) { error = string.IsNullOrWhiteSpace(r1.Text) ? "Failed to load characters." : r1.Text; rows = new(); return; }
+            if (!r1.Ok) { error = ApiErrorMessage(r1, "Failed to load characters."); rows = new(); return; }
             rows = r1.Data ?? new();
             campaigns = r2.Data ?? new();
             parties = r3.Data ?? new();
@@ -294,7 +292,7 @@
         var res = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.post", $"/api/characters/{shareCharacterId.Value}/share", new { userId = shareUserId.Value, permission = sharePermission });
         if (!res.Ok)
         {
-            error = string.IsNullOrWhiteSpace(res.Text) ? "Share failed." : res.Text;
+            error = ApiErrorMessage(res, "Share failed.");
             return;
         }
 
@@ -304,6 +302,8 @@
 
     private async Task Save()
     {
+        if (isSaving) return;
+        isSaving = true;
         try
         {
             error = null;
@@ -335,14 +335,38 @@
             else
                 res = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.post", "/api/characters", req);
 
-            if (!res.Ok) { error = string.IsNullOrWhiteSpace(res.Text) ? "Save failed." : res.Text; return; }
+            if (!res.Ok) { error = ApiErrorMessage(res, "Save failed."); return; }
             isCreate = false;
             await Load();
         }
         catch (Exception ex) { error = ex.Message; }
+        finally { isSaving = false; }
     }
 
     private static string DisplayName(CharacterRow row) => row.CharacterType == 1 && !string.IsNullOrWhiteSpace(row.PlayerName) ? $"{row.Name} ({row.PlayerName})" : row.Name;
+
+    private static string ApiErrorMessage<T>(ApiResult<T> res, string fallback)
+    {
+        if (!string.IsNullOrWhiteSpace(res.Text)) return NormalizeErrorText(res.Text!);
+        if (res.Data is System.Text.Json.JsonElement el && el.ValueKind == System.Text.Json.JsonValueKind.Object)
+        {
+            if (el.TryGetProperty("message", out var msg) && msg.ValueKind == System.Text.Json.JsonValueKind.String)
+                return msg.GetString() ?? fallback;
+            if (el.TryGetProperty("Message", out var msg2) && msg2.ValueKind == System.Text.Json.JsonValueKind.String)
+                return msg2.GetString() ?? fallback;
+        }
+        return res.Status > 0 ? $"{fallback} (HTTP {res.Status})" : fallback;
+    }
+
+    private static string NormalizeErrorText(string text)
+    {
+        var t = text.Trim();
+        if (t.Length >= 2 && t.StartsWith(""") && t.EndsWith("""))
+        {
+            try { return System.Text.Json.JsonSerializer.Deserialize<string>(t) ?? t.Trim(new char[] {'"'}); } catch { return t.Trim(new char[] {'"'}); }
+        }
+        return t;
+    }
 
     private sealed class ApiResult<T>
     {

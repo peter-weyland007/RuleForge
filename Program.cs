@@ -598,7 +598,11 @@ app.MapPost("/api/items", async (UpsertItemRequest req, HttpContext http, AppDbC
 {
     var userId = GetUserId(http);
     if (userId is null) return Results.Unauthorized();
-    if (string.IsNullOrWhiteSpace(req.Name)) return Results.BadRequest("Item name is required.");
+    if (string.IsNullOrWhiteSpace(req.Name)) return Results.BadRequest(new ApiError("ITEM_NAME_REQUIRED", "Item name is required.", http.TraceIdentifier));
+    var normalizedName = TitleNormalization.ToPascalTitle(req.Name);
+    var normalizedSource = string.IsNullOrWhiteSpace(req.Source) ? null : req.Source.Trim();
+    var duplicate = await db.Items.AnyAsync(x => x.DateDeletedUtc == null && x.OwnerAppUserId == userId.Value && x.Name == normalizedName && x.SourceType == req.SourceType && x.Source == normalizedSource);
+    if (duplicate) return Results.BadRequest(new ApiError("ITEM_DUPLICATE", "Item already exists for this source.", http.TraceIdentifier));
     var row = new Item();
     ApplyItem(req, row);
     row.OwnerAppUserId = userId.Value;
@@ -613,7 +617,11 @@ app.MapPut("/api/items/{id:int}", async (int id, UpsertItemRequest req, HttpCont
 {
     var userId = GetUserId(http);
     if (userId is null) return Results.Unauthorized();
-    if (string.IsNullOrWhiteSpace(req.Name)) return Results.BadRequest("Item name is required.");
+    if (string.IsNullOrWhiteSpace(req.Name)) return Results.BadRequest(new ApiError("ITEM_NAME_REQUIRED", "Item name is required.", http.TraceIdentifier));
+    var normalizedName = TitleNormalization.ToPascalTitle(req.Name);
+    var normalizedSource = string.IsNullOrWhiteSpace(req.Source) ? null : req.Source.Trim();
+    var duplicate = await db.Items.AnyAsync(x => x.DateDeletedUtc == null && x.ItemId != id && x.OwnerAppUserId == userId.Value && x.Name == normalizedName && x.SourceType == req.SourceType && x.Source == normalizedSource);
+    if (duplicate) return Results.BadRequest(new ApiError("ITEM_DUPLICATE", "Item already exists for this source.", http.TraceIdentifier));
     var row = await db.Items.FirstOrDefaultAsync(x => x.ItemId == id && x.DateDeletedUtc == null);
     if (row is null) return Results.NotFound();
     var isOwner = row.OwnerAppUserId == userId.Value;
@@ -767,14 +775,18 @@ app.MapPost("/api/characters", async (UpsertCharacterRequest req, HttpContext ht
 {
     var userId = GetUserId(http);
     if (userId is null) return Results.Unauthorized();
-    if (string.IsNullOrWhiteSpace(req.Name)) return Results.BadRequest("Name is required.");
+    if (string.IsNullOrWhiteSpace(req.Name)) return Results.BadRequest(new ApiError("CHARACTER_NAME_REQUIRED", "Name is required.", http.TraceIdentifier));
+
+    var normalizedName = TitleNormalization.ToPascalTitle(req.Name);
+    var duplicate = await db.Characters.AnyAsync(x => x.DateDeletedUtc == null && x.OwnerAppUserId == userId.Value && x.CampaignId == (req.CampaignId ?? 0) && x.Name == normalizedName);
+    if (duplicate) return Results.BadRequest(new ApiError("CHARACTER_DUPLICATE", "Character name already exists in this campaign.", http.TraceIdentifier));
 
     var row = new Character
     {
         CampaignId = req.CampaignId ?? 0,
         PartyId = req.PartyId ?? 0,
         CharacterType = req.CharacterType,
-        Name = TitleNormalization.ToPascalTitle(req.Name),
+        Name = normalizedName,
         OwnerAppUserId = userId.Value,
         PlayerName = string.IsNullOrWhiteSpace(req.PlayerName) ? null : req.PlayerName.Trim(),
         ArmorClass = req.ArmorClass,
@@ -808,7 +820,11 @@ app.MapPut("/api/characters/{id:int}", async (int id, UpsertCharacterRequest req
 {
     var userId = GetUserId(http);
     if (userId is null) return Results.Unauthorized();
-    if (string.IsNullOrWhiteSpace(req.Name)) return Results.BadRequest("Name is required.");
+    if (string.IsNullOrWhiteSpace(req.Name)) return Results.BadRequest(new ApiError("CHARACTER_NAME_REQUIRED", "Name is required.", http.TraceIdentifier));
+
+    var normalizedName = TitleNormalization.ToPascalTitle(req.Name);
+    var duplicate = await db.Characters.AnyAsync(x => x.DateDeletedUtc == null && x.CharacterId != id && x.OwnerAppUserId == userId.Value && x.CampaignId == (req.CampaignId ?? 0) && x.Name == normalizedName);
+    if (duplicate) return Results.BadRequest(new ApiError("CHARACTER_DUPLICATE", "Character name already exists in this campaign.", http.TraceIdentifier));
 
     var row = await db.Characters.FirstOrDefaultAsync(x => x.CharacterId == id && x.DateDeletedUtc == null);
     if (row is null) return Results.NotFound();
@@ -818,7 +834,7 @@ app.MapPut("/api/characters/{id:int}", async (int id, UpsertCharacterRequest req
     row.CampaignId = req.CampaignId ?? 0;
     row.PartyId = req.PartyId ?? 0;
     row.CharacterType = req.CharacterType;
-    row.Name = TitleNormalization.ToPascalTitle(req.Name);
+    row.Name = normalizedName;
     row.PlayerName = string.IsNullOrWhiteSpace(req.PlayerName) ? null : req.PlayerName.Trim();
     row.ArmorClass = req.ArmorClass;
     row.HitPointsCurrent = req.HitPointsCurrent;
@@ -920,8 +936,12 @@ app.MapGet("/api/campaigns/{id:int}", async (int id, HttpContext http, AppDbCont
 app.MapPost("/api/campaigns", async (UpsertCampaignRequest req, HttpContext http, AppDbContext db) =>
 {
     var userId = GetUserId(http); if (userId is null) return Results.Unauthorized();
-    if (string.IsNullOrWhiteSpace(req.Name)) return Results.BadRequest("Title is required.");
-    var row = new Campaign { OwnerAppUserId = userId.Value, Name = TitleNormalization.ToPascalTitle(req.Name), Description = string.IsNullOrWhiteSpace(req.Description) ? null : req.Description.Trim(), DateCreatedUtc = DateTime.UtcNow, DateModifiedUtc = DateTime.UtcNow };
+    if (string.IsNullOrWhiteSpace(req.Name)) return Results.BadRequest(new ApiError("CAMPAIGN_NAME_REQUIRED", "Title is required.", http.TraceIdentifier));
+    var normalizedName = TitleNormalization.ToPascalTitle(req.Name);
+    var exists = await db.Campaigns.AnyAsync(x => x.DateDeletedUtc == null && x.Name == normalizedName);
+    if (exists) return Results.BadRequest(new ApiError("CAMPAIGN_DUPLICATE_NAME", "Campaign name already exists.", http.TraceIdentifier));
+
+    var row = new Campaign { OwnerAppUserId = userId.Value, Name = normalizedName, Description = string.IsNullOrWhiteSpace(req.Description) ? null : req.Description.Trim(), DateCreatedUtc = DateTime.UtcNow, DateModifiedUtc = DateTime.UtcNow };
     db.Campaigns.Add(row);
     try { await db.SaveChangesAsync(); }
     catch (DbUpdateException ex) when ((ex.InnerException?.Message ?? ex.Message).Contains("IX_Campaigns_Name", StringComparison.OrdinalIgnoreCase) || (ex.InnerException?.Message ?? ex.Message).Contains("UNIQUE", StringComparison.OrdinalIgnoreCase))
@@ -934,11 +954,15 @@ app.MapPost("/api/campaigns", async (UpsertCampaignRequest req, HttpContext http
 app.MapPut("/api/campaigns/{id:int}", async (int id, UpsertCampaignRequest req, HttpContext http, AppDbContext db) =>
 {
     var userId = GetUserId(http); if (userId is null) return Results.Unauthorized();
-    if (string.IsNullOrWhiteSpace(req.Name)) return Results.BadRequest("Title is required.");
+    if (string.IsNullOrWhiteSpace(req.Name)) return Results.BadRequest(new ApiError("CAMPAIGN_NAME_REQUIRED", "Title is required.", http.TraceIdentifier));
     var row = await db.Campaigns.FirstOrDefaultAsync(x => x.CampaignId == id && x.DateDeletedUtc == null); if (row is null) return Results.NotFound();
     var canEdit = row.OwnerAppUserId == userId.Value || await db.CampaignShares.AnyAsync(x => x.CampaignId == id && x.SharedWithUserId == userId.Value && x.Permission == SharePermission.Edit);
     if (!canEdit && !IsAdmin(http)) return Results.Forbid();
-    row.Name = TitleNormalization.ToPascalTitle(req.Name); row.Description = string.IsNullOrWhiteSpace(req.Description) ? null : req.Description.Trim(); row.DateModifiedUtc = DateTime.UtcNow;
+    var normalizedName = TitleNormalization.ToPascalTitle(req.Name);
+    var exists = await db.Campaigns.AnyAsync(x => x.DateDeletedUtc == null && x.CampaignId != id && x.Name == normalizedName);
+    if (exists) return Results.BadRequest(new ApiError("CAMPAIGN_DUPLICATE_NAME", "Campaign name already exists.", http.TraceIdentifier));
+
+    row.Name = normalizedName; row.Description = string.IsNullOrWhiteSpace(req.Description) ? null : req.Description.Trim(); row.DateModifiedUtc = DateTime.UtcNow;
     try { await db.SaveChangesAsync(); }
     catch (DbUpdateException ex) when ((ex.InnerException?.Message ?? ex.Message).Contains("IX_Campaigns_Name", StringComparison.OrdinalIgnoreCase) || (ex.InnerException?.Message ?? ex.Message).Contains("UNIQUE", StringComparison.OrdinalIgnoreCase))
     {
@@ -1032,9 +1056,9 @@ app.MapGet("/api/creatures/{id:int}", async (int id, AppDbContext db) =>
     return row is null ? Results.NotFound() : Results.Ok(row);
 });
 
-app.MapPost("/api/creatures", async (UpsertCreatureRequest req, AppDbContext db) =>
+app.MapPost("/api/creatures", async (UpsertCreatureRequest req, HttpContext http, AppDbContext db) =>
 {
-    if (string.IsNullOrWhiteSpace(req.Name)) return Results.BadRequest("Creature name is required.");
+    if (string.IsNullOrWhiteSpace(req.Name)) return Results.BadRequest(new ApiError("CREATURE_NAME_REQUIRED", "Creature name is required.", http.TraceIdentifier));
 
     var row = new Creature
     {
@@ -1062,9 +1086,9 @@ app.MapPost("/api/creatures", async (UpsertCreatureRequest req, AppDbContext db)
     return Results.Ok(new { row.CreatureId });
 });
 
-app.MapPut("/api/creatures/{id:int}", async (int id, UpsertCreatureRequest req, AppDbContext db) =>
+app.MapPut("/api/creatures/{id:int}", async (int id, UpsertCreatureRequest req, HttpContext http, AppDbContext db) =>
 {
-    if (string.IsNullOrWhiteSpace(req.Name)) return Results.BadRequest("Creature name is required.");
+    if (string.IsNullOrWhiteSpace(req.Name)) return Results.BadRequest(new ApiError("CREATURE_NAME_REQUIRED", "Creature name is required.", http.TraceIdentifier));
 
     var row = await db.Creatures.FirstOrDefaultAsync(x => x.CreatureId == id && x.DateDeletedUtc == null);
     if (row is null) return Results.NotFound();
@@ -1127,7 +1151,7 @@ app.MapGet("/api/parties/{id:int}", async (int id, HttpContext http, AppDbContex
 app.MapPost("/api/parties", async (UpsertPartyRequest req, HttpContext http, AppDbContext db) =>
 {
     var userId = GetUserId(http); if (userId is null) return Results.Unauthorized();
-    if (string.IsNullOrWhiteSpace(req.Name)) return Results.BadRequest("Party name is required.");
+    if (string.IsNullOrWhiteSpace(req.Name)) return Results.BadRequest(new ApiError("PARTY_NAME_REQUIRED", "Party name is required.", http.TraceIdentifier));
     var row = new Party { OwnerAppUserId = userId.Value, Name = TitleNormalization.ToPascalTitle(req.Name), Description = string.IsNullOrWhiteSpace(req.Description) ? null : req.Description.Trim(), CampaignId = req.CampaignId ?? 0, DateCreatedUtc = DateTime.UtcNow, DateModifiedUtc = DateTime.UtcNow };
     db.Parties.Add(row); await db.SaveChangesAsync(); return Results.Ok(new { row.PartyId });
 }).RequireAuthorization();
@@ -1135,7 +1159,7 @@ app.MapPost("/api/parties", async (UpsertPartyRequest req, HttpContext http, App
 app.MapPut("/api/parties/{id:int}", async (int id, UpsertPartyRequest req, HttpContext http, AppDbContext db) =>
 {
     var userId = GetUserId(http); if (userId is null) return Results.Unauthorized();
-    if (string.IsNullOrWhiteSpace(req.Name)) return Results.BadRequest("Party name is required.");
+    if (string.IsNullOrWhiteSpace(req.Name)) return Results.BadRequest(new ApiError("PARTY_NAME_REQUIRED", "Party name is required.", http.TraceIdentifier));
     var row = await db.Parties.FirstOrDefaultAsync(x => x.PartyId == id && x.DateDeletedUtc == null); if (row is null) return Results.NotFound();
     var canEdit = row.OwnerAppUserId == userId.Value || await db.PartyShares.AnyAsync(x => x.PartyId == id && x.SharedWithUserId == userId.Value && x.Permission == SharePermission.Edit);
     if (!canEdit && !IsAdmin(http)) return Results.Forbid();
@@ -1208,19 +1232,25 @@ app.MapGet("/api/quests/{id:int}", async (int id, HttpContext http, AppDbContext
 app.MapPost("/api/quests", async (UpsertQuestRequest req, HttpContext http, AppDbContext db) =>
 {
     var userId = GetUserId(http); if (userId is null) return Results.Unauthorized();
-    if (string.IsNullOrWhiteSpace(req.Title)) return Results.BadRequest("Quest title is required.");
-    var row = new Quest { OwnerAppUserId = userId.Value, CampaignId = req.CampaignId ?? 0, Title = TitleNormalization.ToPascalTitle(req.Title), Summary = string.IsNullOrWhiteSpace(req.Summary) ? null : req.Summary.Trim(), Mode = Enum.IsDefined(typeof(QuestMode), req.Mode) ? (QuestMode)req.Mode : QuestMode.Hybrid, UseChoiceMode = req.UseChoiceMode, StartNodeId = req.StartNodeId, DateCreatedUtc = DateTime.UtcNow, DateModifiedUtc = DateTime.UtcNow };
+    if (string.IsNullOrWhiteSpace(req.Title)) return Results.BadRequest(new ApiError("QUEST_TITLE_REQUIRED", "Quest title is required.", http.TraceIdentifier));
+    var normalizedTitle = TitleNormalization.ToPascalTitle(req.Title);
+    var duplicate = await db.Quests.AnyAsync(x => x.DateDeletedUtc == null && x.OwnerAppUserId == userId.Value && x.CampaignId == (req.CampaignId ?? 0) && x.Title == normalizedTitle);
+    if (duplicate) return Results.BadRequest(new ApiError("QUEST_DUPLICATE", "Quest title already exists in this campaign.", http.TraceIdentifier));
+    var row = new Quest { OwnerAppUserId = userId.Value, CampaignId = req.CampaignId ?? 0, Title = normalizedTitle, Summary = string.IsNullOrWhiteSpace(req.Summary) ? null : req.Summary.Trim(), Mode = Enum.IsDefined(typeof(QuestMode), req.Mode) ? (QuestMode)req.Mode : QuestMode.Hybrid, UseChoiceMode = req.UseChoiceMode, StartNodeId = req.StartNodeId, DateCreatedUtc = DateTime.UtcNow, DateModifiedUtc = DateTime.UtcNow };
     db.Quests.Add(row); await db.SaveChangesAsync(); return Results.Ok(new { row.QuestId });
 }).RequireAuthorization();
 
 app.MapPut("/api/quests/{id:int}", async (int id, UpsertQuestRequest req, HttpContext http, AppDbContext db) =>
 {
     var userId = GetUserId(http); if (userId is null) return Results.Unauthorized();
-    if (string.IsNullOrWhiteSpace(req.Title)) return Results.BadRequest("Quest title is required.");
+    if (string.IsNullOrWhiteSpace(req.Title)) return Results.BadRequest(new ApiError("QUEST_TITLE_REQUIRED", "Quest title is required.", http.TraceIdentifier));
+    var normalizedTitle = TitleNormalization.ToPascalTitle(req.Title);
+    var duplicate = await db.Quests.AnyAsync(x => x.DateDeletedUtc == null && x.QuestId != id && x.OwnerAppUserId == userId.Value && x.CampaignId == (req.CampaignId ?? 0) && x.Title == normalizedTitle);
+    if (duplicate) return Results.BadRequest(new ApiError("QUEST_DUPLICATE", "Quest title already exists in this campaign.", http.TraceIdentifier));
     var row = await db.Quests.FirstOrDefaultAsync(x => x.QuestId == id && x.DateDeletedUtc == null); if (row is null) return Results.NotFound();
     var canEdit = row.OwnerAppUserId == userId.Value || await db.QuestShares.AnyAsync(x => x.QuestId == id && x.SharedWithUserId == userId.Value && x.Permission == SharePermission.Edit);
     if (!canEdit && !IsAdmin(http)) return Results.Forbid();
-    row.CampaignId = req.CampaignId ?? 0; row.Title = TitleNormalization.ToPascalTitle(req.Title); row.Summary = string.IsNullOrWhiteSpace(req.Summary) ? null : req.Summary.Trim(); row.Mode = Enum.IsDefined(typeof(QuestMode), req.Mode) ? (QuestMode)req.Mode : QuestMode.Hybrid; row.UseChoiceMode = req.UseChoiceMode; row.StartNodeId = req.StartNodeId; row.DateModifiedUtc = DateTime.UtcNow;
+    row.CampaignId = req.CampaignId ?? 0; row.Title = normalizedTitle; row.Summary = string.IsNullOrWhiteSpace(req.Summary) ? null : req.Summary.Trim(); row.Mode = Enum.IsDefined(typeof(QuestMode), req.Mode) ? (QuestMode)req.Mode : QuestMode.Hybrid; row.UseChoiceMode = req.UseChoiceMode; row.StartNodeId = req.StartNodeId; row.DateModifiedUtc = DateTime.UtcNow;
     await db.SaveChangesAsync(); return Results.Ok(new { row.QuestId });
 }).RequireAuthorization();
 
@@ -1254,7 +1284,7 @@ app.MapDelete("/api/quests/{id:int}/share/{userId:int}", async (int id, int user
 
 app.MapPost("/api/quests/{questId:int}/nodes", async (int questId, UpsertQuestNodeRequest req, HttpContext http, AppDbContext db) =>
 {
-    if (string.IsNullOrWhiteSpace(req.Title)) return Results.BadRequest("Node title is required.");
+    if (string.IsNullOrWhiteSpace(req.Title)) return Results.BadRequest(new ApiError("QUEST_NODE_TITLE_REQUIRED", "Node title is required.", http.TraceIdentifier));
     var quest = await db.Quests.FirstOrDefaultAsync(x => x.QuestId == questId && x.DateDeletedUtc == null);
     if (quest is null) return Results.NotFound();
     var me = GetUserId(http); if (me is null) return Results.Unauthorized();
@@ -1282,7 +1312,7 @@ app.MapPost("/api/quests/{questId:int}/nodes", async (int questId, UpsertQuestNo
 
 app.MapPost("/api/quests/{questId:int}/choices", async (int questId, UpsertQuestChoiceRequest req, HttpContext http, AppDbContext db) =>
 {
-    if (string.IsNullOrWhiteSpace(req.Label)) return Results.BadRequest("Choice label is required.");
+    if (string.IsNullOrWhiteSpace(req.Label)) return Results.BadRequest(new ApiError("QUEST_CHOICE_LABEL_REQUIRED", "Choice label is required.", http.TraceIdentifier));
     var quest = await db.Quests.FirstOrDefaultAsync(x => x.QuestId == questId && x.DateDeletedUtc == null);
     if (quest is null) return Results.NotFound();
     var me = GetUserId(http); if (me is null) return Results.Unauthorized();
@@ -1309,7 +1339,7 @@ app.MapPost("/api/quests/{questId:int}/choices", async (int questId, UpsertQuest
 
 app.MapPut("/api/quests/{questId:int}/nodes/{nodeId:int}", async (int questId, int nodeId, UpsertQuestNodeRequest req, HttpContext http, AppDbContext db) =>
 {
-    if (string.IsNullOrWhiteSpace(req.Title)) return Results.BadRequest("Node title is required.");
+    if (string.IsNullOrWhiteSpace(req.Title)) return Results.BadRequest(new ApiError("QUEST_NODE_TITLE_REQUIRED", "Node title is required.", http.TraceIdentifier));
     var quest = await db.Quests.FirstOrDefaultAsync(x => x.QuestId == questId && x.DateDeletedUtc == null); if (quest is null) return Results.NotFound();
     var me = GetUserId(http); if (me is null) return Results.Unauthorized();
     var canEditQuest = quest.OwnerAppUserId == me.Value || await db.QuestShares.AnyAsync(x => x.QuestId == questId && x.SharedWithUserId == me.Value && x.Permission == SharePermission.Edit);
@@ -1343,7 +1373,7 @@ app.MapDelete("/api/quests/{questId:int}/nodes/{nodeId:int}", async (int questId
 
 app.MapPut("/api/quests/{questId:int}/choices/{choiceId:int}", async (int questId, int choiceId, UpsertQuestChoiceRequest req, HttpContext http, AppDbContext db) =>
 {
-    if (string.IsNullOrWhiteSpace(req.Label)) return Results.BadRequest("Choice label is required.");
+    if (string.IsNullOrWhiteSpace(req.Label)) return Results.BadRequest(new ApiError("QUEST_CHOICE_LABEL_REQUIRED", "Choice label is required.", http.TraceIdentifier));
     var quest = await db.Quests.FirstOrDefaultAsync(x => x.QuestId == questId && x.DateDeletedUtc == null); if (quest is null) return Results.NotFound();
     var me = GetUserId(http); if (me is null) return Results.Unauthorized();
     var canEditQuest = quest.OwnerAppUserId == me.Value || await db.QuestShares.AnyAsync(x => x.QuestId == questId && x.SharedWithUserId == me.Value && x.Permission == SharePermission.Edit);
@@ -1485,9 +1515,9 @@ app.MapGet("/api/encounters/{id:int}", async (int id, AppDbContext db) =>
     return row is null ? Results.NotFound() : Results.Ok(row);
 });
 
-app.MapPost("/api/encounters", async (UpsertEncounterRequest req, AppDbContext db) =>
+app.MapPost("/api/encounters", async (UpsertEncounterRequest req, HttpContext http, AppDbContext db) =>
 {
-    if (string.IsNullOrWhiteSpace(req.Name)) return Results.BadRequest("Encounter name is required.");
+    if (string.IsNullOrWhiteSpace(req.Name)) return Results.BadRequest(new ApiError("ENCOUNTER_NAME_REQUIRED", "Encounter name is required.", http.TraceIdentifier));
 
     var row = new Encounter
     {
@@ -1514,9 +1544,9 @@ app.MapPost("/api/encounters", async (UpsertEncounterRequest req, AppDbContext d
     return Results.Ok(new { row.EncounterId });
 });
 
-app.MapPut("/api/encounters/{id:int}", async (int id, UpsertEncounterRequest req, AppDbContext db) =>
+app.MapPut("/api/encounters/{id:int}", async (int id, UpsertEncounterRequest req, HttpContext http, AppDbContext db) =>
 {
-    if (string.IsNullOrWhiteSpace(req.Name)) return Results.BadRequest("Encounter name is required.");
+    if (string.IsNullOrWhiteSpace(req.Name)) return Results.BadRequest(new ApiError("ENCOUNTER_NAME_REQUIRED", "Encounter name is required.", http.TraceIdentifier));
 
     var row = await db.Encounters.Include(x => x.Participants).FirstOrDefaultAsync(x => x.EncounterId == id && x.DateDeletedUtc == null);
     if (row is null) return Results.NotFound();

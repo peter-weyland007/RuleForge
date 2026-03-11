@@ -9,15 +9,13 @@
     <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
         <MudStack Spacing="0">
             <MudText Typo="Typo.h4">Encounters</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">ENC BUILD: errfix-2026-03-11-1622</MudText>
             <MudText Typo="Typo.body2" Color="Color.Secondary">Build encounters with PCs, NPCs, and creatures.</MudText>
         </MudStack>
         <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreate">Add Encounter</MudButton>
     </MudStack>
 
-    @if (!string.IsNullOrWhiteSpace(error))
-    {
-        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@error</MudAlert>
-    }
+    <ApiErrorAlert Message="@error" />
 
     <MudTable Items="rows" Dense="true" Hover="true" Outlined="true" Elevation="0">
         <HeaderContent>
@@ -141,7 +139,7 @@
                 </MudTable>
 
                 <MudStack Row="true" Spacing="1" Class="mt-2">
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Save">Save</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Save" Disabled="@isSaving">@(isSaving ? "Saving..." : "Save")</MudButton>
                     <MudButton Variant="Variant.Outlined" OnClick="Close">Cancel</MudButton>
                 </MudStack>
             </MudStack>
@@ -172,6 +170,7 @@
     private List<OptionItem> characters = new();
     private List<OptionItem> creatures = new();
     private string? error;
+    private bool isSaving;
     private bool isEdit;
     private int addType = 1;
     private int addSourceId;
@@ -357,6 +356,8 @@
 
     private async Task Save()
     {
+        if (isSaving) return;
+        isSaving = true;
         try
         {
             error = null;
@@ -384,7 +385,8 @@
 
             if (!res.IsSuccessStatusCode)
             {
-                error = await res.Content.ReadAsStringAsync();
+                var txt = await res.Content.ReadAsStringAsync();
+                error = ApiErrorText(txt, "Save failed.");
                 return;
             }
 
@@ -392,12 +394,33 @@
             await Load();
         }
         catch (Exception ex) { error = ex.Message; }
+        finally { isSaving = false; }
     }
 
     private void Close() => isEdit = false;
     private string TypeLabel(int t) => t switch { 1 => "Combat", 2 => "Social", 3 => "Exploration", 4 => "Puzzle", 5 => "Chase", 6 => "Hazard", _ => "Combat" };
     private string ParticipantLabel(int t) => t switch { 1 => "PC", 2 => "NPC", 3 => "Creature", _ => "?" };
     private string CampaignLabel(int? id) => id is null ? "—" : campaigns.FirstOrDefault(x => x.Id == id)?.Name ?? $"#{id}";
+
+    private static string ApiErrorText(string? txt, string fallback)
+    {
+        if (string.IsNullOrWhiteSpace(txt)) return fallback;
+        var t = txt.Trim();
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(t);
+            if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.String)
+                return doc.RootElement.GetString() ?? fallback;
+            if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object)
+            {
+                if (doc.RootElement.TryGetProperty("message", out var m) && m.ValueKind == System.Text.Json.JsonValueKind.String) return m.GetString() ?? fallback;
+                if (doc.RootElement.TryGetProperty("Message", out var m2) && m2.ValueKind == System.Text.Json.JsonValueKind.String) return m2.GetString() ?? fallback;
+                if (doc.RootElement.TryGetProperty("title", out var m3) && m3.ValueKind == System.Text.Json.JsonValueKind.String) return m3.GetString() ?? fallback;
+            }
+        }
+        catch { }
+        return t;
+    }
 
     private sealed class EncounterForm
     {

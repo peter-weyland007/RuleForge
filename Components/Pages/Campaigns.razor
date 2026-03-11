@@ -14,10 +14,7 @@
         <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreate">Add Campaign</MudButton>
     </MudStack>
 
-    @if (!string.IsNullOrWhiteSpace(error))
-    {
-        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@error</MudAlert>
-    }
+    <ApiErrorAlert Message="@error" />
 
     <MudTable Items="rows" Dense="true" Hover="true" Outlined="true" Elevation="0">
         <HeaderContent>
@@ -78,7 +75,7 @@
                 <MudTextField @bind-Value="form.Description" Label="Description" Placeholder="Campaign summary, tone, themes, house rules..." Variant="Variant.Outlined" Lines="4" />
 
                 <MudStack Row="true" Spacing="1" Class="mt-3">
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="Save">Save</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="Save" Disabled="@isSaving">@(isSaving ? "Saving..." : "Save")</MudButton>
                     <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Close" OnClick="CloseCreate">Cancel</MudButton>
                 </MudStack>
             </MudStack>
@@ -89,6 +86,7 @@
 @code {
     private List<CampaignRow> rows = new();
     private string? error;
+    private bool isSaving;
     private bool isShare;
     private int? shareId;
     private int? shareUserId;
@@ -161,7 +159,7 @@
             var res = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.delete", $"/api/campaigns/{campaignId}");
             if (!res.Ok)
             {
-                error = string.IsNullOrWhiteSpace(res.Text) ? "Delete failed." : res.Text;
+                error = ApiErrorMessage(res, "Delete failed.");
                 return;
             }
 
@@ -186,6 +184,8 @@
 
     private async Task Save()
     {
+        if (isSaving) return;
+        isSaving = true;
         try
         {
             error = null;
@@ -203,7 +203,7 @@
 
             if (!res.Ok)
             {
-                error = string.IsNullOrWhiteSpace(res.Text) ? "Save failed." : res.Text;
+                error = ApiErrorMessage(res, "Save failed.");
                 return;
             }
 
@@ -225,6 +225,29 @@
 
     private sealed record CampaignRow(int CampaignId, string Name, string? Description);
     private sealed class ApiResult<T> { public bool Ok { get; set; } public int Status { get; set; } public T? Data { get; set; } public string? Text { get; set; } }
+
+    private static string ApiErrorMessage(ApiResult<object> res, string fallback)
+    {
+        if (!string.IsNullOrWhiteSpace(res.Text)) return res.Text!;
+        if (res.Data is System.Text.Json.JsonElement el && el.ValueKind == System.Text.Json.JsonValueKind.Object)
+        {
+            if (el.TryGetProperty("message", out var msg) && msg.ValueKind == System.Text.Json.JsonValueKind.String)
+                return msg.GetString() ?? fallback;
+            if (el.TryGetProperty("Message", out var msg2) && msg2.ValueKind == System.Text.Json.JsonValueKind.String)
+                return msg2.GetString() ?? fallback;
+        }
+        return res.Status > 0 ? $"{fallback} (HTTP {res.Status})" : fallback;
+    }
+
+    private static string NormalizeErrorText(string text)
+    {
+        var t = text.Trim();
+        if (t.Length >= 2 && t.StartsWith(""") && t.EndsWith("""))
+        {
+            try { return System.Text.Json.JsonSerializer.Deserialize<string>(t) ?? t.Trim(new char[] {'"'}); } catch { return t.Trim(new char[] {'"'}); }
+        }
+        return t;
+    }
     private sealed record FriendUser(int AppUserId, string Username, string Email);
     private sealed record FriendsOverview(List<FriendUser> Friends);
 }

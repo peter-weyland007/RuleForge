@@ -13,7 +13,20 @@ window.ruleforgeApi = {
     } else {
       try { text = await res.text(); } catch {}
     }
-    return { ok: res.ok, status: res.status, data, text };
+
+    if (!res.ok && !text && data !== null && data !== undefined) {
+      if (typeof data === 'string') {
+        text = data;
+      } else if (typeof data === 'object') {
+        text = data.message || data.Message || data.title || data.error || '';
+      }
+    }
+
+    let traceId = null;
+    if (data && typeof data === 'object') {
+      traceId = data.traceId || data.TraceId || null;
+    }
+    return { ok: res.ok, status: res.status, data, text, traceId };
   },
   get(url) { return this.send('GET', url); },
   post(url, body) { return this.send('POST', url, body); },

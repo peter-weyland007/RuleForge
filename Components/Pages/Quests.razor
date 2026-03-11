@@ -17,10 +17,7 @@
         </MudStack>
     </MudStack>
 
-    @if (!string.IsNullOrWhiteSpace(error))
-    {
-        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@error</MudAlert>
-    }
+    <ApiErrorAlert Message="@error" />
 
     <MudTable Items="rows" Dense="true" Hover="true" Outlined="true" Elevation="0">
         <HeaderContent>
@@ -100,7 +97,7 @@
                 </MudGrid>
                 <MudTextField @bind-Value="form.Summary" Label="Summary" Variant="Variant.Outlined" Lines="3" />
                 <MudStack Row="true" Spacing="1">
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Save">Save</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Save" Disabled="@isSaving">@(isSaving ? "Saving..." : "Save")</MudButton>
                     <MudButton Variant="Variant.Outlined" OnClick="() => isEdit = false">Cancel</MudButton>
                 </MudStack>
             </MudStack>
@@ -113,6 +110,7 @@
     private List<CampaignOption> campaigns = new();
     private bool isEdit;
     private string? error;
+    private bool isSaving;
     private bool isShare;
     private int? shareId;
     private int? shareUserId;
@@ -130,7 +128,7 @@
             var r1 = await JS.InvokeAsync<ApiResult<List<QuestRow>>>("ruleforgeApi.get", "/api/quests");
             var r2 = await JS.InvokeAsync<ApiResult<List<CampaignOption>>>("ruleforgeApi.get", "/api/campaigns");
             var fr = await JS.InvokeAsync<ApiResult<FriendsOverview>>("ruleforgeApi.get", "/api/friends");
-            if (!r1.Ok) { error = string.IsNullOrWhiteSpace(r1.Text) ? "Failed to load quests." : r1.Text; rows = new(); return; }
+            if (!r1.Ok) { error = ApiErrorMessage(r1, "Failed to load quests."); rows = new(); return; }
             rows = r1.Data ?? new();
             campaigns = r2.Data ?? new();
             friends = fr.Data?.Friends ?? new();
@@ -155,19 +153,25 @@
 
     private async Task Save()
     {
-        var req = new { campaignId = form.CampaignId, title = form.Title, summary = form.Summary, mode = form.Mode, useChoiceMode = form.UseChoiceMode, startNodeId = form.StartNodeId };
-        var res = form.QuestId.HasValue
-            ? await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.put", $"/api/quests/{form.QuestId.Value}", req)
-            : await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.post", "/api/quests", req);
-
-        if (!res.Ok)
+        if (isSaving) return;
+        isSaving = true;
+        try
         {
-            error = string.IsNullOrWhiteSpace(res.Text) ? "Save failed." : res.Text;
-            return;
-        }
+            var req = new { campaignId = form.CampaignId, title = form.Title, summary = form.Summary, mode = form.Mode, useChoiceMode = form.UseChoiceMode, startNodeId = form.StartNodeId };
+            var res = form.QuestId.HasValue
+                ? await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.put", $"/api/quests/{form.QuestId.Value}", req)
+                : await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.post", "/api/quests", req);
 
-        isEdit = false;
-        await Load();
+            if (!res.Ok)
+            {
+                error = ApiErrorMessage(res, "Save failed.");
+                return;
+            }
+
+            isEdit = false;
+            await Load();
+        }
+        finally { isSaving = false; }
     }
 
     private async Task Delete(int id)
@@ -175,7 +179,7 @@
         var ok = await JS.InvokeAsync<bool>("confirm", "Delete this quest?");
         if (!ok) return;
         var res = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.delete", $"/api/quests/{id}");
-        if (!res.Ok) { error = string.IsNullOrWhiteSpace(res.Text) ? "Delete failed." : res.Text; return; }
+        if (!res.Ok) { error = ApiErrorMessage(res, "Delete failed."); return; }
         await Load();
     }
 
@@ -184,7 +188,7 @@
     {
         if (!shareId.HasValue || !shareUserId.HasValue) { error = "Pick a friend to share with."; return; }
         var r = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.post", $"/api/quests/{shareId.Value}/share", new { userId = shareUserId.Value, permission = sharePermission });
-        if (!r.Ok) { error = string.IsNullOrWhiteSpace(r.Text) ? "Share failed." : r.Text; return; }
+        if (!r.Ok) { error = ApiErrorMessage(r, "Share failed."); return; }
         isShare = false;
     }
 
@@ -204,6 +208,42 @@
 
     private sealed record QuestRow(int QuestId, int? CampaignId, string Title, string? Summary, int Mode, bool UseChoiceMode, int? StartNodeId);
     private sealed record CampaignOption(int CampaignId, string Name);
+    private static string ApiErrorMessage<T>(ApiResult<T> res, string fallback)
+    {
+        if (!string.IsNullOrWhiteSpace(res.Text)) return NormalizeErrorText(res.Text!);
+        var msg = ExtractMessage(res.Data);
+        if (!string.IsNullOrWhiteSpace(msg)) return msg!;
+        return res.Status > 0 ? $"{fallback} (HTTP {res.Status})" : fallback;
+    }
+
+    private static string NormalizeErrorText(string text)
+    {
+        var t = text.Trim();
+        if (t.Length >= 2 && t.StartsWith(""") && t.EndsWith("""))
+        {
+            try { return System.Text.Json.JsonSerializer.Deserialize<string>(t) ?? t.Trim(new char[] {'"'}); } catch { return t.Trim(new char[] {'"'}); }
+        }
+        return t;
+    }
+
+    private static string? ExtractMessage(object? data)
+    {
+        if (data is null) return null;
+        try
+        {
+            var json = System.Text.Json.JsonSerializer.Serialize(data);
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object) return null;
+            foreach (var key in new[] { "message", "Message", "title", "error", "detail" })
+            {
+                if (doc.RootElement.TryGetProperty(key, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String)
+                    return v.GetString();
+            }
+        }
+        catch { }
+        return null;
+    }
+
     private sealed class ApiResult<T> { public bool Ok { get; set; } public int Status { get; set; } public T? Data { get; set; } public string? Text { get; set; } }
     private sealed record FriendUser(int AppUserId, string Username, string Email);
     private sealed record FriendsOverview(List<FriendUser> Friends);
