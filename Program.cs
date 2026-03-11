@@ -1830,45 +1830,52 @@ app.MapGet("/api/friends", async (HttpContext http, AppDbContext db) =>
     var idStr = http.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
     if (!int.TryParse(idStr, out var userId)) return Results.Unauthorized();
 
-    var links = await db.FriendLinks.Where(x => x.RequesterUserId == userId || x.AddresseeUserId == userId).ToListAsync();
-    var userIds = links.SelectMany(x => new[] { x.RequesterUserId, x.AddresseeUserId }).Distinct().ToList();
-    var users = await db.Users.Where(x => userIds.Contains(x.AppUserId) && x.DateDeletedUtc == null)
-        .ToDictionaryAsync(x => x.AppUserId, x => x);
-
-    var accepted = links.Where(x => x.Status == FriendRequestStatus.Accepted).ToList();
-    var friends = new List<FriendSummary>();
-    foreach (var l in accepted)
+    try
     {
-        var friendId = l.RequesterUserId == userId ? l.AddresseeUserId : l.RequesterUserId;
-        if (users.TryGetValue(friendId, out var u))
-            friends.Add(new FriendSummary { AppUserId = u.AppUserId, Username = u.Username, Email = u.Email });
+        var links = await db.FriendLinks.Where(x => x.RequesterUserId == userId || x.AddresseeUserId == userId).ToListAsync();
+        var userIds = links.SelectMany(x => new[] { x.RequesterUserId, x.AddresseeUserId }).Distinct().ToList();
+        var users = await db.Users.Where(x => userIds.Contains(x.AppUserId) && x.DateDeletedUtc == null)
+            .ToDictionaryAsync(x => x.AppUserId, x => x);
+
+        var accepted = links.Where(x => x.Status == FriendRequestStatus.Accepted).ToList();
+        var friends = new List<FriendSummary>();
+        foreach (var l in accepted)
+        {
+            var friendId = l.RequesterUserId == userId ? l.AddresseeUserId : l.RequesterUserId;
+            if (users.TryGetValue(friendId, out var u))
+                friends.Add(new FriendSummary { AppUserId = u.AppUserId, Username = u.Username, Email = u.Email });
+        }
+
+        var incoming = links.Where(x => x.Status == FriendRequestStatus.Pending && x.AddresseeUserId == userId)
+            .Select(x => new FriendRequestView
+            {
+                FriendLinkId = x.FriendLinkId,
+                RequesterUserId = x.RequesterUserId,
+                RequesterUsername = users.TryGetValue(x.RequesterUserId, out var rq) ? rq.Username : $"User#{x.RequesterUserId}",
+                AddresseeUserId = x.AddresseeUserId,
+                AddresseeUsername = users.TryGetValue(x.AddresseeUserId, out var ad) ? ad.Username : $"User#{x.AddresseeUserId}",
+                Status = (int)x.Status,
+                DateCreatedUtc = x.DateCreatedUtc
+            }).ToList();
+
+        var outgoing = links.Where(x => x.Status == FriendRequestStatus.Pending && x.RequesterUserId == userId)
+            .Select(x => new FriendRequestView
+            {
+                FriendLinkId = x.FriendLinkId,
+                RequesterUserId = x.RequesterUserId,
+                RequesterUsername = users.TryGetValue(x.RequesterUserId, out var rq) ? rq.Username : $"User#{x.RequesterUserId}",
+                AddresseeUserId = x.AddresseeUserId,
+                AddresseeUsername = users.TryGetValue(x.AddresseeUserId, out var ad) ? ad.Username : $"User#{x.AddresseeUserId}",
+                Status = (int)x.Status,
+                DateCreatedUtc = x.DateCreatedUtc
+            }).ToList();
+
+        return Results.Ok(new FriendsOverviewResponse { Friends = friends, Incoming = incoming, Outgoing = outgoing });
     }
-
-    var incoming = links.Where(x => x.Status == FriendRequestStatus.Pending && x.AddresseeUserId == userId)
-        .Select(x => new FriendRequestView
-        {
-            FriendLinkId = x.FriendLinkId,
-            RequesterUserId = x.RequesterUserId,
-            RequesterUsername = users.TryGetValue(x.RequesterUserId, out var rq) ? rq.Username : $"User#{x.RequesterUserId}",
-            AddresseeUserId = x.AddresseeUserId,
-            AddresseeUsername = users.TryGetValue(x.AddresseeUserId, out var ad) ? ad.Username : $"User#{x.AddresseeUserId}",
-            Status = (int)x.Status,
-            DateCreatedUtc = x.DateCreatedUtc
-        }).ToList();
-
-    var outgoing = links.Where(x => x.Status == FriendRequestStatus.Pending && x.RequesterUserId == userId)
-        .Select(x => new FriendRequestView
-        {
-            FriendLinkId = x.FriendLinkId,
-            RequesterUserId = x.RequesterUserId,
-            RequesterUsername = users.TryGetValue(x.RequesterUserId, out var rq) ? rq.Username : $"User#{x.RequesterUserId}",
-            AddresseeUserId = x.AddresseeUserId,
-            AddresseeUsername = users.TryGetValue(x.AddresseeUserId, out var ad) ? ad.Username : $"User#{x.AddresseeUserId}",
-            Status = (int)x.Status,
-            DateCreatedUtc = x.DateCreatedUtc
-        }).ToList();
-
-    return Results.Ok(new FriendsOverviewResponse { Friends = friends, Incoming = incoming, Outgoing = outgoing });
+    catch
+    {
+        return Results.Ok(new FriendsOverviewResponse());
+    }
 }).RequireAuthorization();
 
 app.MapPost("/api/friends/request", async (HttpContext http, SendFriendRequestRequest req, AppDbContext db) =>
