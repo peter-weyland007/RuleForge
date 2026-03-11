@@ -1,0 +1,149 @@
+@page "/users"
+@attribute [Authorize(Roles = "Admin")]
+@using Microsoft.AspNetCore.Authorization
+@inject IHttpClientFactory HttpFactory
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>Users</PageTitle>
+
+<MudStack Spacing="3">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+        <MudStack Spacing="0">
+            <MudText Typo="Typo.h4">Users</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Manage users and roles (Admin, GM, User).</MudText>
+        </MudStack>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PersonAdd" OnClick="OpenCreate">Add User</MudButton>
+    </MudStack>
+
+    @if (!string.IsNullOrWhiteSpace(error))
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@error</MudAlert>
+    }
+
+    <MudTable Items="rows" Dense="true" Hover="true" Outlined="true" Elevation="0">
+        <HeaderContent>
+            <MudTh>Username</MudTh>
+            <MudTh>Email</MudTh>
+            <MudTh>Role</MudTh>
+            <MudTh>Flags</MudTh>
+            <MudTh></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>@context.Username</MudTd>
+            <MudTd>@context.Email</MudTd>
+            <MudTd>@RoleLabel(context.Role)</MudTd>
+            <MudTd>
+                @if (context.IsSystem)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">System</MudChip>
+                }
+                @if (context.MustChangePassword)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">Must Change Password</MudChip>
+                }
+            </MudTd>
+            <MudTd Style="text-align:right; white-space:nowrap;">
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" OnClick="() => OpenEdit(context.AppUserId)" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="() => Delete(context.AppUserId)" Disabled="@context.IsSystem" />
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Typo="Typo.body2" Class="pa-4">No users yet. Add your first one.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+
+    @if (isEdit)
+    {
+        <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+            <MudStack Spacing="2">
+                <MudText Typo="Typo.h6">@(form.AppUserId.HasValue ? "Edit User" : "Create User")</MudText>
+                <MudGrid>
+                    <MudItem xs="12" md="4"><MudTextField @bind-Value="form.Username" Label="Username" Variant="Variant.Outlined" Required="true" /></MudItem>
+                    <MudItem xs="12" md="4"><MudTextField @bind-Value="form.Email" Label="Email" Variant="Variant.Outlined" Required="true" /></MudItem>
+                    <MudItem xs="12" md="4">
+                        <MudSelect T="int" @bind-Value="form.Role" Label="Role" Variant="Variant.Outlined">
+                            <MudSelectItem Value="1">User</MudSelectItem>
+                            <MudSelectItem Value="2">GM</MudSelectItem>
+                            <MudSelectItem Value="3">Admin</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+                </MudGrid>
+                <MudTextField @bind-Value="form.Password" Label="Password" Variant="Variant.Outlined" InputType="InputType.Password" HelperText="Required for new users. Optional when editing." />
+                <MudStack Row="true" Spacing="1">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Save">Save</MudButton>
+                    <MudButton Variant="Variant.Outlined" OnClick="() => isEdit=false">Cancel</MudButton>
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+    }
+</MudStack>
+
+@code {
+    private List<UserRow> rows = new();
+    private bool isEdit;
+    private string? error;
+    private UserForm form = new();
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        try
+        {
+            error = null;
+            var h = HttpFactory.CreateClient();
+            rows = await h.GetFromJsonAsync<List<UserRow>>(Nav.ToAbsoluteUri("/api/users")) ?? new();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            rows = new();
+        }
+    }
+
+    private void OpenCreate() { form = new UserForm { Role = 1 }; isEdit = true; }
+
+    private async Task OpenEdit(int id)
+    {
+        var h = HttpFactory.CreateClient();
+        var row = await h.GetFromJsonAsync<UserRow>(Nav.ToAbsoluteUri($"/api/users/{id}"));
+        if (row is null) return;
+        form = new UserForm { AppUserId = row.AppUserId, Username = row.Username, Email = row.Email, Role = row.Role };
+        isEdit = true;
+    }
+
+    private async Task Save()
+    {
+        var h = HttpFactory.CreateClient();
+        var req = new { username = form.Username, email = form.Email, password = form.Password, role = form.Role };
+        HttpResponseMessage res = form.AppUserId.HasValue
+            ? await h.PutAsJsonAsync(Nav.ToAbsoluteUri($"/api/users/{form.AppUserId.Value}"), req)
+            : await h.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/users"), req);
+        if (!res.IsSuccessStatusCode) { error = await res.Content.ReadAsStringAsync(); return; }
+        isEdit = false;
+        await Load();
+    }
+
+    private async Task Delete(int id)
+    {
+        var ok = await JS.InvokeAsync<bool>("confirm", "Delete this user?");
+        if (!ok) return;
+        var h = HttpFactory.CreateClient();
+        await h.DeleteAsync(Nav.ToAbsoluteUri($"/api/users/{id}"));
+        await Load();
+    }
+
+    private static string RoleLabel(int r) => r switch { 3 => "Admin", 2 => "GM", _ => "User" };
+
+    private sealed class UserForm
+    {
+        public int? AppUserId { get; set; }
+        public string Username { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string? Password { get; set; }
+        public int Role { get; set; }
+    }
+
+    private sealed record UserRow(int AppUserId, string Username, string Email, int Role, bool MustChangePassword, bool IsSystem);
+}

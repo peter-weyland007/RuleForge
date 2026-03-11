@@ -1,0 +1,223 @@
+@page "/profile"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+@inject AuthenticationStateProvider AuthStateProvider
+@using RuleForge.Contracts.Users
+
+<PageTitle>Profile</PageTitle>
+
+<MudStack Spacing="3" Style="max-width: 560px;">
+    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+        <MudText Typo="Typo.h4">Profile</MudText>
+        @if (!string.IsNullOrWhiteSpace(roleLabel))
+        {
+            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">@roleLabel</MudChip>
+        }
+    </MudStack>
+
+    @if (mustChangePassword)
+    {
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">You must change your password before continuing.</MudAlert>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(error))
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@error</MudAlert>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(success))
+    {
+        <MudAlert Severity="Severity.Success" Variant="Variant.Outlined">@success</MudAlert>
+    }
+
+    <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+        <MudStack Spacing="2">
+            <MudText Typo="Typo.h6">@username</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Change password</MudText>
+            <MudTextField @bind-Value="currentPassword" Label="Current Password" Variant="Variant.Outlined" InputType="InputType.Password" />
+            <MudTextField @bind-Value="newPassword" Label="New Password" Variant="Variant.Outlined" InputType="InputType.Password" />
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ChangePassword">Update Password</MudButton>
+        </MudStack>
+    </MudPaper>
+
+
+
+    <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+        <MudStack Spacing="2">
+            <MudText Typo="Typo.h6">Collaborators / Friends</MudText>
+            <MudStack Row="true" Spacing="1">
+                <MudTextField @bind-Value="friendTarget" Label="Username or Email" Variant="Variant.Outlined" />
+                <MudButton Variant="Variant.Filled" Color="Color.Secondary" OnClick="SendFriendRequest">Add Friend</MudButton>
+            </MudStack>
+
+            <MudDivider />
+            <MudText Typo="Typo.subtitle2">Incoming Requests</MudText>
+            @if (incomingRequests.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary">No incoming requests.</MudText>
+            }
+            else
+            {
+                @foreach (var req in incomingRequests)
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudText>@req.RequesterUsername</MudText>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Success" OnClick="() => RespondRequest(req.FriendLinkId, true)">Accept</MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Error" OnClick="() => RespondRequest(req.FriendLinkId, false)">Decline</MudButton>
+                    </MudStack>
+                }
+            }
+
+            <MudDivider />
+            <MudText Typo="Typo.subtitle2">Friends</MudText>
+            @if (friends.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary">No friends yet.</MudText>
+            }
+            else
+            {
+                @foreach (var f in friends)
+                {
+                    <MudChip T="string" Variant="Variant.Outlined" Color="Color.Info">@f.Username</MudChip>
+                }
+            }
+        </MudStack>
+    </MudPaper>
+
+
+    <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+        <MudStack Spacing="1">
+            <MudText Typo="Typo.h6">Session</MudText>
+            @if (roleLabel == "Admin")
+            {
+                <MudButton Variant="Variant.Outlined" Href="/settings" StartIcon="@Icons.Material.Filled.Settings">Admin Settings</MudButton>
+            }
+            <MudButton Variant="Variant.Outlined" Color="Color.Warning" OnClick="Logout">Logout</MudButton>
+        </MudStack>
+    </MudPaper>
+</MudStack>
+
+@code {
+    private string username = string.Empty;
+    private string currentPassword = string.Empty;
+    private string newPassword = string.Empty;
+    private string? error;
+    private string? success;
+    private bool mustChangePassword;
+    private string roleLabel = string.Empty;
+    private string friendTarget = string.Empty;
+    private List<FriendSummary> friends = new();
+    private List<FriendRequestView> incomingRequests = new();
+
+    private sealed class TextResult
+    {
+        public bool Ok { get; set; }
+        public int Status { get; set; }
+        public string? Text { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthStateProvider.GetAuthenticationStateAsync();
+        username = state.User.Identity?.Name ?? string.Empty;
+
+        var user = state.User;
+        if (user.IsInRole("Admin")) roleLabel = "Admin";
+        else if (user.IsInRole("GM")) roleLabel = "GM";
+        else roleLabel = "User";
+
+        mustChangePassword = string.Equals(user.FindFirst("must_change_password")?.Value, "true", StringComparison.OrdinalIgnoreCase);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        await LoadFriends();
+        StateHasChanged();
+    }
+
+    private async Task ChangePassword()
+    {
+        try
+        {
+            error = null;
+            success = null;
+            var res = await JS.InvokeAsync<TextResult>("ruleforgeAuth.changePassword", username, currentPassword, newPassword);
+
+            if (!res.Ok)
+            {
+                error = res.Text;
+                if (string.IsNullOrWhiteSpace(error)) error = "Password change failed.";
+                return;
+            }
+
+            currentPassword = string.Empty;
+            newPassword = string.Empty;
+            success = "Password updated.";
+            mustChangePassword = false;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+    }
+
+    private sealed class ApiResult<T>
+    {
+        public bool Ok { get; set; }
+        public int Status { get; set; }
+        public T? Data { get; set; }
+        public string? Text { get; set; }
+    }
+
+    private sealed class FriendsOverview
+    {
+        public List<FriendSummary> Friends { get; set; } = new();
+        public List<FriendRequestView> Incoming { get; set; } = new();
+        public List<FriendRequestView> Outgoing { get; set; } = new();
+    }
+
+    private async Task LoadFriends()
+    {
+        var res = await JS.InvokeAsync<ApiResult<FriendsOverview>>("ruleforgeFriends.overview");
+        if (!res.Ok || res.Data is null) return;
+        friends = res.Data.Friends ?? new();
+        incomingRequests = res.Data.Incoming ?? new();
+    }
+
+    private async Task SendFriendRequest()
+    {
+        error = null;
+        var res = await JS.InvokeAsync<TextResult>("ruleforgeFriends.request", friendTarget);
+        if (!res.Ok)
+        {
+            error = string.IsNullOrWhiteSpace(res.Text) ? "Failed to send request." : res.Text;
+            return;
+        }
+        success = "Friend request sent.";
+        friendTarget = string.Empty;
+        await LoadFriends();
+    }
+
+    private async Task RespondRequest(int friendLinkId, bool accept)
+    {
+        error = null;
+        var res = await JS.InvokeAsync<TextResult>("ruleforgeFriends.respond", friendLinkId, accept);
+        if (!res.Ok)
+        {
+            error = string.IsNullOrWhiteSpace(res.Text) ? "Failed to respond to request." : res.Text;
+            return;
+        }
+        success = accept ? "Friend request accepted." : "Friend request declined.";
+        await LoadFriends();
+    }
+
+    private async Task Logout()
+    {
+        await JS.InvokeAsync<TextResult>("ruleforgeAuth.logout");
+        Nav.NavigateTo("/login", forceLoad: true);
+    }
+}

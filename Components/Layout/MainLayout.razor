@@ -1,4 +1,9 @@
+@using System.Text.RegularExpressions
 @inherits LayoutComponentBase
+@inject IJSRuntime JS
+@inject IWebHostEnvironment Env
+@inject IConfiguration Config
+@inject NavigationManager Nav
 
 <MudThemeProvider Theme="_theme" @bind-IsDarkMode="_isDark" />
 <MudPopoverProvider />
@@ -10,6 +15,11 @@
         <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="ToggleDrawer" />
         <MudText Typo="Typo.h6">RuleForge v2</MudText>
         <MudSpacer />
+        @if (Env.IsDevelopment())
+        {
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning" Class="mr-1">NAV BUILD: @NavBuildTag</MudChip>
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Info" Class="mr-2">@PageBuildLabel</MudChip>
+        }
         <MudIconButton Icon="@(_isDark ? Icons.Material.Filled.DarkMode : Icons.Material.Filled.LightMode)" Color="Color.Inherit" OnClick="ToggleTheme" />
     </MudAppBar>
 
@@ -30,6 +40,50 @@
 
 @code {
     private bool _drawerOpen = true;
+    private string NavBuildTag => Config["Build:Tag"]
+        ?? Environment.GetEnvironmentVariable("RULEFORGE_BUILD_TAG")
+        ?? BuildStampFor("Components/Layout/NavMenu.razor")
+        ?? "dev-local";
+
+    private string CurrentPage => string.IsNullOrWhiteSpace(Nav.ToBaseRelativePath(Nav.Uri)) ? "/" : "/" + Nav.ToBaseRelativePath(Nav.Uri);
+
+    private string PageBuildLabel
+    {
+        get
+        {
+            var file = ResolvePageFile(CurrentPage);
+            var stamp = BuildStampFor(file) ?? "unknown";
+            var name = file is null ? "PAGE" : Path.GetFileNameWithoutExtension(file).ToUpperInvariant();
+            return $"{name} BUILD: {stamp}";
+        }
+    }
+
+    private string? BuildStampFor(string? relativePath)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath)) return null;
+        var full = Path.Combine(Env.ContentRootPath, relativePath.Replace('/', Path.DirectorySeparatorChar));
+        if (!File.Exists(full)) return null;
+        var dt = File.GetLastWriteTime(full);
+        return dt.ToString("yyyy-MM-dd-HHmm");
+    }
+
+    private string? ResolvePageFile(string currentPage)
+    {
+        var p = currentPage.Trim('/').ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(p)) return "Components/Pages/Home.razor";
+        if (p.StartsWith("quests/") && p.EndsWith("/canvas")) return "Components/Pages/QuestCanvas.razor";
+        if (p.StartsWith("quests/") && p.EndsWith("/run")) return "Components/Pages/QuestRun.razor";
+        if (Regex.IsMatch(p, @"^quests/\d+$")) return "Components/Pages/QuestBuilder.razor";
+        if (p.StartsWith("settings/operations/hard-delete")) return "Components/Pages/HardDelete.razor";
+        if (p.StartsWith("settings")) return "Components/Pages/Settings.razor";
+        if (p.StartsWith("docs")) return "Components/Pages/Docs.razor";
+        if (p.StartsWith("login")) return "Components/Pages/Login.razor";
+        if (p.StartsWith("profile")) return "Components/Pages/Profile.razor";
+
+        var first = p.Split('/')[0];
+        var file = char.ToUpper(first[0]) + first.Substring(1);
+        return $"Components/Pages/{file}.razor";
+    }
     private bool _isDark;
 
     private readonly MudTheme _theme = new()
@@ -39,6 +93,28 @@
         LayoutProperties = new LayoutProperties { DrawerWidthLeft = "280px" }
     };
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            var prefs = await JS.InvokeAsync<Prefs?>("ruleforgePrefs.get");
+            if (prefs?.theme is not null)
+            {
+                _isDark = string.Equals(prefs.theme, "dark", StringComparison.OrdinalIgnoreCase);
+                StateHasChanged();
+            }
+        }
+        catch { }
+    }
+
     private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
-    private void ToggleTheme() => _isDark = !_isDark;
+
+    private async Task ToggleTheme()
+    {
+        _isDark = !_isDark;
+        try { await JS.InvokeVoidAsync("ruleforgePrefs.set", new { theme = _isDark ? "dark" : "light" }); } catch { }
+    }
+
+    private sealed class Prefs { public string? theme { get; set; } }
 }

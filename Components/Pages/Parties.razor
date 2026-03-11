@@ -35,6 +35,7 @@
             <MudTd Style="text-align:right; white-space:nowrap;">
                 <MudIconButton Icon="@Icons.Material.Filled.People" Color="Color.Info" Size="Size.Small" OnClick="() => ViewMembers(context.PartyId, context.Name)" />
                 <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" OnClick="() => OpenEdit(context.PartyId)" />
+                <MudIconButton Icon="@Icons.Material.Filled.GroupAdd" Color="Color.Info" Size="Size.Small" OnClick="() => OpenShare(context.PartyId)" />
                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="() => Delete(context.PartyId)" />
             </MudTd>
         </RowTemplate>
@@ -42,6 +43,30 @@
             <MudText Typo="Typo.body2" Class="pa-4">No parties yet. Add your first one.</MudText>
         </NoRecordsContent>
     </MudTable>
+
+
+    @if (isShare)
+    {
+        <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+            <MudStack Spacing="2">
+                <MudText Typo="Typo.h6">Share Party</MudText>
+                <MudSelect T="int?" @bind-Value="shareUserId" Label="Friend" Variant="Variant.Outlined">
+                    @foreach (var f in friends)
+                    {
+                        <MudSelectItem T="int?" Value="f.AppUserId">@f.Username</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudSelect T="int" @bind-Value="sharePermission" Label="Permission" Variant="Variant.Outlined">
+                    <MudSelectItem Value="0">View</MudSelectItem>
+                    <MudSelectItem Value="1">Edit</MudSelectItem>
+                </MudSelect>
+                <MudStack Row="true" Spacing="1">
+                    <MudButton Variant="Variant.Filled" Color="Color.Info" OnClick="SaveShare">Share</MudButton>
+                    <MudButton Variant="Variant.Outlined" OnClick="() => isShare = false">Cancel</MudButton>
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+    }
 
     @if (isEdit)
     {
@@ -109,6 +134,11 @@
     private List<CampaignRow> campaigns = new();
     private List<PartyMemberRow> partyMembers = new();
     private string? error;
+    private bool isShare;
+    private int? shareId;
+    private int? shareUserId;
+    private int sharePermission;
+    private List<FriendUser> friends = new();
     private bool isEdit;
     private bool showMembers;
     private string memberDrawerTitle = "Party Members";
@@ -121,9 +151,13 @@
         try
         {
             error = null;
-            var h = HttpFactory.CreateClient();
-            rows = await h.GetFromJsonAsync<List<PartyRow>>(Nav.ToAbsoluteUri("/api/parties")) ?? new();
-            campaigns = await h.GetFromJsonAsync<List<CampaignRow>>(Nav.ToAbsoluteUri("/api/campaigns")) ?? new();
+            var r1 = await JS.InvokeAsync<ApiResult<List<PartyRow>>>("ruleforgeApi.get", "/api/parties");
+            var r2 = await JS.InvokeAsync<ApiResult<List<CampaignRow>>>("ruleforgeApi.get", "/api/campaigns");
+            var fr = await JS.InvokeAsync<ApiResult<FriendsOverview>>("ruleforgeApi.get", "/api/friends");
+            if (!r1.Ok) { error = string.IsNullOrWhiteSpace(r1.Text) ? "Failed to load parties." : r1.Text; rows = new(); return; }
+            rows = r1.Data ?? new();
+            campaigns = r2.Data ?? new();
+            friends = fr.Data?.Friends ?? new();
         }
         catch (Exception ex)
         {
@@ -134,16 +168,26 @@
     }
 
     private void OpenCreate(){ form=new PartyForm(); isEdit=true; }
-    private async Task OpenEdit(int id){ var h=HttpFactory.CreateClient(); var r=await h.GetFromJsonAsync<PartyRow>(Nav.ToAbsoluteUri($"/api/parties/{id}")); if(r is null)return; form=new PartyForm{PartyId=r.PartyId,Name=r.Name,Description=r.Description,CampaignId=r.CampaignId}; isEdit=true; }
-    private async Task Delete(int id){ var ok = await JS.InvokeAsync<bool>("confirm", "Delete this party?"); if (!ok) return; var h=HttpFactory.CreateClient(); await h.DeleteAsync(Nav.ToAbsoluteUri($"/api/parties/{id}")); await Load(); }
-    private async Task Save(){ var h=HttpFactory.CreateClient(); var req=new{name=form.Name,description=form.Description,campaignId=form.CampaignId}; if(form.PartyId.HasValue) await h.PutAsJsonAsync(Nav.ToAbsoluteUri($"/api/parties/{form.PartyId.Value}"),req); else await h.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/parties"),req); isEdit=false; await Load(); }
+    private async Task OpenEdit(int id){ var r=await JS.InvokeAsync<ApiResult<PartyRow>>("ruleforgeApi.get", $"/api/parties/{id}"); if(!r.Ok||r.Data is null){ error = string.IsNullOrWhiteSpace(r.Text)?"Party not found.":r.Text; return;} var d=r.Data; form=new PartyForm{PartyId=d.PartyId,Name=d.Name,Description=d.Description,CampaignId=d.CampaignId}; isEdit=true; }
+    private async Task Delete(int id){ var ok = await JS.InvokeAsync<bool>("confirm", "Delete this party?"); if (!ok) return; var r=await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.delete", $"/api/parties/{id}"); if(!r.Ok){ error=string.IsNullOrWhiteSpace(r.Text)?"Delete failed.":r.Text; return;} await Load(); }
+    private async Task Save(){ var req=new{name=form.Name,description=form.Description,campaignId=form.CampaignId}; ApiResult<object> r = form.PartyId.HasValue ? await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.put", $"/api/parties/{form.PartyId.Value}", req) : await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.post", "/api/parties", req); if(!r.Ok){ error=string.IsNullOrWhiteSpace(r.Text)?"Save failed.":r.Text; return;} isEdit=false; await Load(); }
 
     private void CloseMembers() => showMembers = false;
 
+    private void OpenShare(int id) { shareId = id; shareUserId = null; sharePermission = 0; isShare = true; }
+    private async Task SaveShare()
+    {
+        if (!shareId.HasValue || !shareUserId.HasValue) { error = "Pick a friend to share with."; return; }
+        var r = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.post", $"/api/parties/{shareId.Value}/share", new { userId = shareUserId.Value, permission = sharePermission });
+        if (!r.Ok) { error = string.IsNullOrWhiteSpace(r.Text) ? "Share failed." : r.Text; return; }
+        isShare = false;
+    }
+
     private async Task ViewMembers(int partyId, string partyName)
     {
-        var h = HttpFactory.CreateClient();
-        partyMembers = await h.GetFromJsonAsync<List<PartyMemberRow>>(Nav.ToAbsoluteUri($"/api/parties/{partyId}/members")) ?? new();
+        var r = await JS.InvokeAsync<ApiResult<List<PartyMemberRow>>>("ruleforgeApi.get", $"/api/parties/{partyId}/members");
+        if(!r.Ok){ error = string.IsNullOrWhiteSpace(r.Text)?"Failed to load members.":r.Text; return; }
+        partyMembers = r.Data ?? new();
         memberDrawerTitle = $"{partyName} Members";
         showMembers = true;
     }
@@ -154,4 +198,7 @@
     private sealed record PartyRow(int PartyId, string Name, string? Description, int? CampaignId, int MemberCount);
     private sealed record CampaignRow(int CampaignId, string Name);
     private sealed record PartyMemberRow(int CharacterId, string Name, string? ClassName, int? Level, int? ArmorClass, int? HitPointsCurrent, int? HitPointsMax);
+    private sealed class ApiResult<T> { public bool Ok { get; set; } public int Status { get; set; } public T? Data { get; set; } public string? Text { get; set; } }
+    private sealed record FriendUser(int AppUserId, string Username, string Email);
+    private sealed record FriendsOverview(List<FriendUser> Friends);
 }

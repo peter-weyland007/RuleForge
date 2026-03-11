@@ -3,6 +3,7 @@ public sealed class Quest {
  public int QuestId { get; set; }
  public int CampaignId { get; set; }
  public string Title { get; set; } = string.Empty;
+ public int? OwnerAppUserId { get; set; }
  public string? Summary { get; set; }
  public QuestMode Mode { get; set; } = QuestMode.Hybrid;
  public bool UseChoiceMode { get; set; } = true;

@@ -1,0 +1,176 @@
+@page "/login"
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+
+<PageTitle>Login</PageTitle>
+
+<MudStack Spacing="3" Style="max-width: 520px; margin: 0 auto;">
+    <MudText Typo="Typo.h4">Login</MudText>
+    
+    @if (!string.IsNullOrWhiteSpace(error))
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@error</MudAlert>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(success))
+    {
+        <MudAlert Severity="Severity.Success" Variant="Variant.Outlined">@success</MudAlert>
+    }
+
+    @if (!loggedIn)
+    {
+        <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+            <MudStack Spacing="2">
+                <MudTextField @bind-Value="username" Label="Username or Email" Variant="Variant.Outlined" />
+                <MudTextField @bind-Value="password" Label="Password" Variant="Variant.Outlined" InputType="InputType.Password" />
+                <MudStack Row="true" Spacing="1">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="DoLogin">Login</MudButton>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="() => showRegister = !showRegister">Register User</MudButton>
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+    }
+
+    @if (showRegister)
+    {
+        <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+            <MudStack Spacing="2">
+                <MudText Typo="Typo.h6">Register User</MudText>
+                <MudTextField @bind-Value="registerUsername" Label="Username" Variant="Variant.Outlined" />
+                <MudTextField @bind-Value="registerEmail" Label="Email" Variant="Variant.Outlined" />
+                <MudTextField @bind-Value="registerPassword" Label="Password" Variant="Variant.Outlined" InputType="InputType.Password" />
+                <MudButton Variant="Variant.Filled" Color="Color.Secondary" OnClick="Register">Create Account</MudButton>
+            </MudStack>
+        </MudPaper>
+    }
+
+    @if (mustChangePassword)
+    {
+        <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+            <MudStack Spacing="2">
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">You must change your password before continuing.</MudAlert>
+                <MudTextField @bind-Value="newPassword" Label="New Password" Variant="Variant.Outlined" InputType="InputType.Password" />
+                <MudButton Variant="Variant.Filled" Color="Color.Warning" OnClick="ChangePassword">Change Password</MudButton>
+            </MudStack>
+        </MudPaper>
+    }
+</MudStack>
+
+@code {
+    private string username = string.Empty;
+    private string password = string.Empty;
+    private string newPassword = string.Empty;
+    private string? error;
+    private string? success;
+    private bool loggedIn;
+    private bool mustChangePassword;
+    private bool showRegister;
+    private string registerUsername = string.Empty;
+    private string registerEmail = string.Empty;
+    private string registerPassword = string.Empty;
+
+    private async Task DoLogin()
+    {
+        error = null;
+        success = null;
+        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
+        {
+            error = "Username and password are required.";
+            return;
+        }
+
+        var res = await JS.InvokeAsync<AuthResult>("ruleforgeAuth.login", username, password);
+        if (!res.Ok)
+        {
+            error = "Invalid credentials.";
+            return;
+        }
+
+        loggedIn = true;
+        mustChangePassword = res.Data?.MustChangePassword == true;
+        success = mustChangePassword
+            ? $"Welcome {res.Data?.Username}. Password change required."
+            : $"Welcome {res.Data?.Username}. Login successful.";
+
+        if (!mustChangePassword)
+            Nav.NavigateTo("/profile", forceLoad: true);
+    }
+
+    private async Task Register()
+    {
+        error = null;
+        success = null;
+        if (string.IsNullOrWhiteSpace(registerUsername) || string.IsNullOrWhiteSpace(registerEmail) || string.IsNullOrWhiteSpace(registerPassword))
+        {
+            error = "Username, email, and password are required.";
+            return;
+        }
+
+        RegisterResult res;
+        try
+        {
+            res = await JS.InvokeAsync<RegisterResult>("ruleforgeAuth.register", registerUsername, registerEmail, registerPassword);
+        }
+        catch (Exception ex)
+        {
+            error = "Register action unavailable in current browser session. Hard refresh and try again. " + ex.Message;
+            return;
+        }
+        if (!res.Ok)
+        {
+            error = !string.IsNullOrWhiteSpace(res.Text) ? res.Text : "Registration failed.";
+            return;
+        }
+
+        showRegister = false;
+        loggedIn = true;
+        mustChangePassword = false;
+        success = $"Welcome {res.Data?.Username}. Account created.";
+        Nav.NavigateTo("/profile", forceLoad: true);
+    }
+
+    private async Task ChangePassword()
+    {
+        error = null;
+        var res = await JS.InvokeAsync<TextResult>("ruleforgeAuth.changePassword", username, password, newPassword);
+        if (!res.Ok)
+        {
+            error = string.IsNullOrWhiteSpace(res.Text) ? "Password change failed." : res.Text;
+            return;
+        }
+
+        mustChangePassword = false;
+        success = "Password changed successfully.";
+        Nav.NavigateTo("/profile", forceLoad: true);
+    }
+
+    private sealed class AuthResult
+    {
+        public bool Ok { get; set; }
+        public int Status { get; set; }
+        public LoginPayload? Data { get; set; }
+    }
+
+    private sealed class LoginPayload
+    {
+        public int AppUserId { get; set; }
+        public string Username { get; set; } = string.Empty;
+        public int Role { get; set; }
+        public bool MustChangePassword { get; set; }
+    }
+
+    private sealed class RegisterResult
+    {
+        public bool Ok { get; set; }
+        public int Status { get; set; }
+        public LoginPayload? Data { get; set; }
+        public string? Text { get; set; }
+    }
+
+    private sealed class TextResult
+    {
+        public bool Ok { get; set; }
+        public int Status { get; set; }
+        public string? Text { get; set; }
+    }
+}

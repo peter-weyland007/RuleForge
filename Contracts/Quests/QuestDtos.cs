@@ -3,6 +3,7 @@ namespace RuleForge.Contracts.Quests;
 public sealed class QuestResponse
 {
     public int QuestId { get; set; }
+    public int? OwnerAppUserId { get; set; }
     public int? CampaignId { get; set; }
     public string Title { get; set; } = string.Empty;
     public string? Summary { get; set; }

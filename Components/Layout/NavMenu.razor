@@ -1,20 +1,86 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@inject IJSRuntime JS
+
 <MudNavMenu Dense="true" Class="pa-2">
-    <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">Dashboard</MudNavLink>
+        <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">Dashboard</MudNavLink>
     <MudNavLink Href="/docs" Icon="@Icons.Material.Filled.Description">Docs</MudNavLink>
 
-    <MudNavGroup Title="Campaigns" Icon="@Icons.Material.Filled.Flag" Expanded="true">
+    @if (_isAuthenticated)
+    {
+        <MudNavLink Href="/profile" Icon="@Icons.Material.Filled.AccountCircle">Profile</MudNavLink>
+    }
+    else
+    {
+        <MudNavLink Href="/login" Icon="@Icons.Material.Filled.Login">Login</MudNavLink>
+    }
+
+    <MudNavGroup Title="Campaigns" Icon="@Icons.Material.Filled.Flag" Expanded="@_campaignExpanded" ExpandedChanged="OnCampaignExpandedChanged">
         <MudNavLink Href="/campaigns" Icon="@Icons.Material.Filled.FlagCircle">Campaigns</MudNavLink>
         <MudNavLink Href="/encounters" Icon="@Icons.Material.Filled.EventNote">Encounters</MudNavLink>
         <MudNavLink Href="/quests" Icon="@Icons.Material.Filled.MenuBook">Quests</MudNavLink>
     </MudNavGroup>
 
-    <MudNavGroup Title="Compendium" Icon="@Icons.Material.Filled.AutoStories" Expanded="true">
+    <MudNavGroup Title="Compendium" Icon="@Icons.Material.Filled.AutoStories" Expanded="@_compendiumExpanded" ExpandedChanged="OnCompendiumExpandedChanged">
         <MudNavLink Href="/bestiary" Icon="@Icons.Material.Filled.Pets">Bestiary</MudNavLink>
         <MudNavLink Href="/characters" Icon="@Icons.Material.Filled.Groups">Characters</MudNavLink>
         <MudNavLink Href="/parties" Icon="@Icons.Material.Filled.GroupWork">Parties</MudNavLink>
         <MudNavLink Href="/items" Icon="@Icons.Material.Filled.Inventory2">Items</MudNavLink>
     </MudNavGroup>
 
-    <MudDivider Class="my-2" />
-    <MudNavLink Href="/settings" Icon="@Icons.Material.Filled.Settings">Settings</MudNavLink>
+    @if (_isAdmin)
+    {
+        <MudDivider Class="my-2" />
+        <MudNavLink Href="/settings" Icon="@Icons.Material.Filled.Settings">Settings</MudNavLink>
+    }
 </MudNavMenu>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    private bool _campaignExpanded = true;
+    private bool _compendiumExpanded = true;
+    private bool _isAuthenticated;
+    private bool _isAdmin;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (AuthenticationStateTask is null) return;
+        var auth = await AuthenticationStateTask;
+        _isAuthenticated = auth.User.Identity?.IsAuthenticated == true;
+        _isAdmin = auth.User.IsInRole("Admin");
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            var prefs = await JS.InvokeAsync<Prefs?>("ruleforgePrefs.get");
+            if (prefs is not null)
+            {
+                if (prefs.campaignNavExpanded.HasValue) _campaignExpanded = prefs.campaignNavExpanded.Value;
+                if (prefs.compendiumNavExpanded.HasValue) _compendiumExpanded = prefs.compendiumNavExpanded.Value;
+                StateHasChanged();
+            }
+        }
+        catch { }
+    }
+
+    private async Task OnCampaignExpandedChanged(bool v)
+    {
+        _campaignExpanded = v;
+        try { await JS.InvokeVoidAsync("ruleforgePrefs.set", new { campaignNavExpanded = v }); } catch { }
+    }
+
+    private async Task OnCompendiumExpandedChanged(bool v)
+    {
+        _compendiumExpanded = v;
+        try { await JS.InvokeVoidAsync("ruleforgePrefs.set", new { compendiumNavExpanded = v }); } catch { }
+    }
+
+    private sealed class Prefs
+    {
+        public bool? campaignNavExpanded { get; set; }
+        public bool? compendiumNavExpanded { get; set; }
+    }
+}

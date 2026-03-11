@@ -39,6 +39,7 @@
                 <MudIconButton Icon="@Icons.Material.Filled.PlayArrow" Color="Color.Success" Size="Size.Small" Href="@($"/quests/{context.QuestId}/run")" />
                 <MudIconButton Icon="@Icons.Material.Filled.AccountTree" Color="Color.Success" Size="Size.Small" Href="@($"/quests/{context.QuestId}")" />
                 <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" OnClick="() => OpenEdit(context.QuestId)" />
+                <MudIconButton Icon="@Icons.Material.Filled.GroupAdd" Color="Color.Info" Size="Size.Small" OnClick="() => OpenShare(context.QuestId)" />
                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="() => Delete(context.QuestId)" />
             </MudTd>
         </RowTemplate>
@@ -46,6 +47,30 @@
             <MudText Typo="Typo.body2" Class="pa-4">No quests yet. Add your first one.</MudText>
         </NoRecordsContent>
     </MudTable>
+
+
+    @if (isShare)
+    {
+        <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+            <MudStack Spacing="2">
+                <MudText Typo="Typo.h6">Share Quest</MudText>
+                <MudSelect T="int?" @bind-Value="shareUserId" Label="Friend" Variant="Variant.Outlined">
+                    @foreach (var f in friends)
+                    {
+                        <MudSelectItem T="int?" Value="f.AppUserId">@f.Username</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudSelect T="int" @bind-Value="sharePermission" Label="Permission" Variant="Variant.Outlined">
+                    <MudSelectItem Value="0">View</MudSelectItem>
+                    <MudSelectItem Value="1">Edit</MudSelectItem>
+                </MudSelect>
+                <MudStack Row="true" Spacing="1">
+                    <MudButton Variant="Variant.Filled" Color="Color.Info" OnClick="SaveShare">Share</MudButton>
+                    <MudButton Variant="Variant.Outlined" OnClick="() => isShare = false">Cancel</MudButton>
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+    }
 
     @if (isEdit)
     {
@@ -88,6 +113,11 @@
     private List<CampaignOption> campaigns = new();
     private bool isEdit;
     private string? error;
+    private bool isShare;
+    private int? shareId;
+    private int? shareUserId;
+    private int sharePermission;
+    private List<FriendUser> friends = new();
     private QuestForm form = new();
 
     protected override async Task OnInitializedAsync() => await Load();
@@ -97,9 +127,13 @@
         try
         {
             error = null;
-            var h = HttpFactory.CreateClient();
-            rows = await h.GetFromJsonAsync<List<QuestRow>>(Nav.ToAbsoluteUri("/api/quests")) ?? new();
-            campaigns = await h.GetFromJsonAsync<List<CampaignOption>>(Nav.ToAbsoluteUri("/api/campaigns")) ?? new();
+            var r1 = await JS.InvokeAsync<ApiResult<List<QuestRow>>>("ruleforgeApi.get", "/api/quests");
+            var r2 = await JS.InvokeAsync<ApiResult<List<CampaignOption>>>("ruleforgeApi.get", "/api/campaigns");
+            var fr = await JS.InvokeAsync<ApiResult<FriendsOverview>>("ruleforgeApi.get", "/api/friends");
+            if (!r1.Ok) { error = string.IsNullOrWhiteSpace(r1.Text) ? "Failed to load quests." : r1.Text; rows = new(); return; }
+            rows = r1.Data ?? new();
+            campaigns = r2.Data ?? new();
+            friends = fr.Data?.Friends ?? new();
         }
         catch (Exception ex)
         {
@@ -112,24 +146,23 @@
 
     private async Task OpenEdit(int id)
     {
-        var h = HttpFactory.CreateClient();
-        var row = await h.GetFromJsonAsync<QuestRow>(Nav.ToAbsoluteUri($"/api/quests/{id}"));
-        if (row is null) return;
+        var r = await JS.InvokeAsync<ApiResult<QuestRow>>("ruleforgeApi.get", $"/api/quests/{id}");
+        if (!r.Ok || r.Data is null) { error = string.IsNullOrWhiteSpace(r.Text) ? "Quest not found." : r.Text; return; }
+        var row = r.Data;
         form = new QuestForm { QuestId = row.QuestId, CampaignId = row.CampaignId, Title = row.Title, Summary = row.Summary, Mode = row.Mode, UseChoiceMode = row.UseChoiceMode, StartNodeId = row.StartNodeId };
         isEdit = true;
     }
 
     private async Task Save()
     {
-        var h = HttpFactory.CreateClient();
         var req = new { campaignId = form.CampaignId, title = form.Title, summary = form.Summary, mode = form.Mode, useChoiceMode = form.UseChoiceMode, startNodeId = form.StartNodeId };
-        HttpResponseMessage res = form.QuestId.HasValue
-            ? await h.PutAsJsonAsync(Nav.ToAbsoluteUri($"/api/quests/{form.QuestId.Value}"), req)
-            : await h.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/quests"), req);
+        var res = form.QuestId.HasValue
+            ? await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.put", $"/api/quests/{form.QuestId.Value}", req)
+            : await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.post", "/api/quests", req);
 
-        if (!res.IsSuccessStatusCode)
+        if (!res.Ok)
         {
-            error = await res.Content.ReadAsStringAsync();
+            error = string.IsNullOrWhiteSpace(res.Text) ? "Save failed." : res.Text;
             return;
         }
 
@@ -141,9 +174,18 @@
     {
         var ok = await JS.InvokeAsync<bool>("confirm", "Delete this quest?");
         if (!ok) return;
-        var h = HttpFactory.CreateClient();
-        await h.DeleteAsync(Nav.ToAbsoluteUri($"/api/quests/{id}"));
+        var res = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.delete", $"/api/quests/{id}");
+        if (!res.Ok) { error = string.IsNullOrWhiteSpace(res.Text) ? "Delete failed." : res.Text; return; }
         await Load();
+    }
+
+    private void OpenShare(int id) { shareId = id; shareUserId = null; sharePermission = 0; isShare = true; }
+    private async Task SaveShare()
+    {
+        if (!shareId.HasValue || !shareUserId.HasValue) { error = "Pick a friend to share with."; return; }
+        var r = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.post", $"/api/quests/{shareId.Value}/share", new { userId = shareUserId.Value, permission = sharePermission });
+        if (!r.Ok) { error = string.IsNullOrWhiteSpace(r.Text) ? "Share failed." : r.Text; return; }
+        isShare = false;
     }
 
     private string CampaignName(int? id) => id is null ? "—" : campaigns.FirstOrDefault(x => x.CampaignId == id)?.Name ?? $"#{id}";
@@ -162,4 +204,7 @@
 
     private sealed record QuestRow(int QuestId, int? CampaignId, string Title, string? Summary, int Mode, bool UseChoiceMode, int? StartNodeId);
     private sealed record CampaignOption(int CampaignId, string Name);
+    private sealed class ApiResult<T> { public bool Ok { get; set; } public int Status { get; set; } public T? Data { get; set; } public string? Text { get; set; } }
+    private sealed record FriendUser(int AppUserId, string Username, string Email);
+    private sealed record FriendsOverview(List<FriendUser> Friends);
 }

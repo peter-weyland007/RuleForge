@@ -1,5 +1,276 @@
-@page "/LItems"
+@page "/items"
+@inject IHttpClientFactory HttpFactory
+@inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>Items</PageTitle>
-<MudText Typo="Typo.h4" GutterBottom="true">Items</MudText>
-<MudAlert Severity="Severity.Info">Items page scaffolded. Feature implementation comes next.</MudAlert>
+
+<MudStack Spacing="3">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+        <MudStack Spacing="0">
+            <MudText Typo="Typo.h4">Items</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Manage weapons, armor, consumables, and other inventory objects.</MudText>
+        </MudStack>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreate">Add Item</MudButton>
+    </MudStack>
+
+    @if (!string.IsNullOrWhiteSpace(error))
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@error</MudAlert>
+    }
+
+    <MudTable Items="rows" Dense="true" Hover="true" Outlined="true" Elevation="0">
+        <HeaderContent>
+            <MudTh>Name</MudTh><MudTh>Type</MudTh><MudTh>Rarity</MudTh><MudTh>Source</MudTh><MudTh>Cost</MudTh><MudTh></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>@context.Name</MudTd>
+            <MudTd>@TypeLabel(context.ItemType)</MudTd>
+            <MudTd>@RarityLabel(context.Rarity)</MudTd>
+            <MudTd>@FormatSource(context)</MudTd>
+            <MudTd>@(context.CostAmount is null ? "—" : $"{context.CostAmount} {context.CostCurrency}")</MudTd>
+            <MudTd Style="text-align:right; white-space:nowrap;">
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" OnClick="() => OpenEdit(context.ItemId)" />
+                <MudIconButton Icon="@Icons.Material.Filled.GroupAdd" Color="Color.Info" Size="Size.Small" OnClick="() => OpenShare(context.ItemId)" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="() => Delete(context.ItemId)" />
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Typo="Typo.body2" Class="pa-4">No items yet. Add your first one.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+
+    @if (isShare)
+    {
+        <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+            <MudStack Spacing="2">
+                <MudText Typo="Typo.h6">Share Item</MudText>
+                <MudSelect T="int?" @bind-Value="shareUserId" Label="Friend" Variant="Variant.Outlined">
+                    @foreach (var f in friends)
+                    {
+                        <MudSelectItem T="int?" Value="f.AppUserId">@f.Username</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudSelect T="int" @bind-Value="sharePermission" Label="Permission" Variant="Variant.Outlined">
+                    <MudSelectItem Value="0">View</MudSelectItem>
+                    <MudSelectItem Value="1">Edit</MudSelectItem>
+                </MudSelect>
+                <MudStack Row="true" Spacing="1">
+                    <MudButton Variant="Variant.Filled" Color="Color.Info" OnClick="SaveShare">Share</MudButton>
+                    <MudButton Variant="Variant.Outlined" OnClick="() => isShare = false">Cancel</MudButton>
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+    }
+
+    @if (isEdit)
+    {
+        <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+            <MudStack Spacing="2">
+                <MudText Typo="Typo.h6">@(form.ItemId.HasValue ? "Edit Item" : "Create Item")</MudText>
+                <MudGrid>
+                    <MudItem xs="12" md="4"><MudTextField @bind-Value="form.Name" Label="Name" Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="12" md="2">
+                        <MudSelect T="int" @bind-Value="form.ItemType" Label="Type" Variant="Variant.Outlined">
+                            @foreach (var t in ItemTypeOptions){<MudSelectItem Value="@t.Value">@t.Label</MudSelectItem>}
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" md="2">
+                        <MudSelect T="int" @bind-Value="form.Rarity" Label="Rarity" Variant="Variant.Outlined">
+                            @foreach (var r in RarityOptions){<MudSelectItem Value="@r.Value">@r.Label</MudSelectItem>}
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" md="2">
+                        <MudSelect T="int" @bind-Value="form.SourceType" Label="Source Type" Variant="Variant.Outlined">
+                            @foreach (var sopt in SourceTypeOptions){<MudSelectItem T="int" Value="@sopt.Value">@sopt.Label</MudSelectItem>}
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" md="2"><MudTextField @bind-Value="form.Source" Label="Source Detail" Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="12" md="2"><MudNumericField T="decimal?" @bind-Value="form.CostAmount" Label="Cost" Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="12" md="2"><MudTextField @bind-Value="form.CostCurrency" Label="Currency" Variant="Variant.Outlined" /></MudItem>
+                </MudGrid>
+                <MudTextField @bind-Value="form.Description" Label="Description" Variant="Variant.Outlined" Lines="2" />
+
+                @if (form.ItemType == 1)
+                {
+                    <MudText Typo="Typo.subtitle2">Weapon</MudText>
+                    <MudGrid>
+                        <MudItem xs="12" md="3"><MudTextField @bind-Value="form.WeaponCategory" Label="Category" Variant="Variant.Outlined" /></MudItem>
+                        <MudItem xs="12" md="2"><MudTextField @bind-Value="form.DamageDice" Label="Damage Dice" Variant="Variant.Outlined" /></MudItem>
+                        <MudItem xs="12" md="2"><MudTextField @bind-Value="form.DamageType" Label="Damage Type" Variant="Variant.Outlined" /></MudItem>
+                        <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="form.AttackBonus" Label="Atk Bonus" Variant="Variant.Outlined" /></MudItem>
+                        <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="form.DamageBonus" Label="Dmg Bonus" Variant="Variant.Outlined" /></MudItem>
+                    </MudGrid>
+                }
+                @if (form.ItemType == 2)
+                {
+                    <MudText Typo="Typo.subtitle2">Armor</MudText>
+                    <MudGrid>
+                        <MudItem xs="12" md="3"><MudTextField @bind-Value="form.ArmorCategory" Label="Category" Variant="Variant.Outlined" /></MudItem>
+                        <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="form.ArmorClassBase" Label="AC Base" Variant="Variant.Outlined" /></MudItem>
+                        <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="form.DexCap" Label="DEX Cap" Variant="Variant.Outlined" /></MudItem>
+                        <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="form.StrengthRequirement" Label="STR Req" Variant="Variant.Outlined" /></MudItem>
+                        <MudItem xs="12" md="2"><MudNumericField T="int?" @bind-Value="form.ArmorBonus" Label="Armor Bonus" Variant="Variant.Outlined" /></MudItem>
+                    </MudGrid>
+                }
+                @if (form.ItemType == 3)
+                {
+                    <MudText Typo="Typo.subtitle2">Consumable</MudText>
+                    <MudGrid>
+                        <MudItem xs="12" md="3"><MudNumericField T="int?" @bind-Value="form.Charges" Label="Charges" Variant="Variant.Outlined" /></MudItem>
+                        <MudItem xs="12" md="3"><MudNumericField T="int?" @bind-Value="form.MaxCharges" Label="Max Charges" Variant="Variant.Outlined" /></MudItem>
+                        <MudItem xs="12" md="6"><MudTextField @bind-Value="form.RechargeRule" Label="Recharge Rule" Variant="Variant.Outlined" /></MudItem>
+                    </MudGrid>
+                    <MudTextField @bind-Value="form.ConsumableEffect" Label="Effect" Variant="Variant.Outlined" Lines="2" />
+                }
+
+                <MudStack Row="true" Spacing="1">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Save">Save</MudButton>
+                    <MudButton Variant="Variant.Outlined" OnClick="() => isEdit = false">Cancel</MudButton>
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+    }
+</MudStack>
+
+@code {
+    private List<ItemRow> rows = new();
+    private bool isEdit;
+    private string? error;
+    private ItemForm form = new() { ItemType = 9, Rarity = 1, SourceType = 1, CostCurrency = "gp" };
+    private bool isShare;
+    private int? shareItemId;
+    private int? shareUserId;
+    private int sharePermission;
+    private List<FriendUser> friends = new();
+
+
+    private static readonly (int Value, string Label)[] ItemTypeOptions =
+    {
+        (1, "Weapon"), (2, "Armor"), (3, "Consumable"), (4, "Gear"), (5, "Treasure"), (6, "Spell Focus"), (7, "Tool"), (8, "Ammunition"), (9, "Other")
+    };
+
+    private static readonly (int Value, string Label)[] SourceTypeOptions =
+    {
+        (1, "Official"), (2, "Homebrew"), (3, "Third Party"), (4, "Other")
+    };
+
+    private static readonly (int Value, string Label)[] RarityOptions =
+    {
+        (1, "Common"), (2, "Uncommon"), (3, "Rare"), (4, "Very Rare"), (5, "Legendary"), (6, "Artifact")
+    };
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        try
+        {
+            var r1 = await JS.InvokeAsync<ApiResult<List<ItemRow>>>("ruleforgeApi.get", "/api/items");
+            var r2 = await JS.InvokeAsync<ApiResult<FriendsOverview>>("ruleforgeApi.get", "/api/friends");
+            if (!r1.Ok) { error = string.IsNullOrWhiteSpace(r1.Text) ? "Failed to load items." : r1.Text; rows = new(); return; }
+            rows = r1.Data ?? new();
+            friends = r2.Data?.Friends ?? new();
+        }
+        catch (Exception ex) { error = ex.Message; rows = new(); friends = new(); }
+    }
+
+    private void OpenCreate() { form = new ItemForm { ItemType = 9, Rarity = 1, SourceType = 1, CostCurrency = "gp" }; isEdit = true; }
+    private void OpenShare(int id) { shareItemId = id; shareUserId = null; sharePermission = 0; isShare = true; }
+    private async Task SaveShare()
+    {
+        if (!shareItemId.HasValue || !shareUserId.HasValue) { error = "Pick a friend to share with."; return; }
+        var res = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.post", $"/api/items/{shareItemId.Value}/share", new { userId = shareUserId.Value, permission = sharePermission });
+        if (!res.Ok) { error = string.IsNullOrWhiteSpace(res.Text) ? "Share failed." : res.Text; return; }
+        isShare = false;
+    }
+    private async Task OpenEdit(int id){ var r=await JS.InvokeAsync<ApiResult<ItemRow>>("ruleforgeApi.get", $"/api/items/{id}"); if(!r.Ok || r.Data is null){ error = string.IsNullOrWhiteSpace(r.Text) ? "Item not found." : r.Text; return; } form = new ItemForm(r.Data); isEdit=true; }
+
+    private async Task Save()
+    {
+        ApiResult<object> res = form.ItemId.HasValue
+            ? await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.put", $"/api/items/{form.ItemId.Value}", form)
+            : await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.post", "/api/items", form);
+        if(!res.Ok){ error = string.IsNullOrWhiteSpace(res.Text) ? "Save failed." : res.Text; return; }
+        isEdit=false; await Load();
+    }
+
+    private async Task Delete(int id)
+    {
+        var ok = await JS.InvokeAsync<bool>("confirm", "Delete this item?");
+        if(!ok) return;
+        var res = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.delete", $"/api/items/{id}"); if(!res.Ok){ error = string.IsNullOrWhiteSpace(res.Text)?"Delete failed.":res.Text; return; } await Load();
+    }
+
+    private static string TypeLabel(int t)=> t switch {1=>"Weapon",2=>"Armor",3=>"Consumable",4=>"Gear",5=>"Treasure",6=>"Spell Focus",7=>"Tool",8=>"Ammunition",_=>"Other"};
+    private static string RarityLabel(int r)=> r switch {1=>"Common",2=>"Uncommon",3=>"Rare",4=>"Very Rare",5=>"Legendary",_=>"Artifact"};
+    private static string SourceTypeLabel(int? s)=> s switch {1=>"Official",2=>"Homebrew",3=>"Third Party",4=>"Other",_=>"Other"};
+    private static string FormatSource(ItemRow row) => string.IsNullOrWhiteSpace(row.Source) ? SourceTypeLabel(row.SourceType) : $"{SourceTypeLabel(row.SourceType)} · {row.Source}";
+
+    private class ApiResult<T>
+    {
+        public bool Ok { get; set; }
+        public int Status { get; set; }
+        public T? Data { get; set; }
+        public string? Text { get; set; }
+    }
+
+    private class ItemForm
+    {
+        public int? ItemId { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public int ItemType { get; set; }
+        public int Rarity { get; set; }
+        public decimal? Weight { get; set; }
+        public decimal? CostAmount { get; set; }
+        public string? CostCurrency { get; set; }
+        public bool RequiresAttunement { get; set; }
+        public int SourceType { get; set; } = 1;
+        public string? Source { get; set; }
+        public string? Tags { get; set; }
+        public string? WeaponCategory { get; set; }
+        public string? DamageDice { get; set; }
+        public string? DamageType { get; set; }
+        public string? Properties { get; set; }
+        public int? RangeNormal { get; set; }
+        public int? RangeMax { get; set; }
+        public bool IsMagicWeapon { get; set; }
+        public int? AttackBonus { get; set; }
+        public int? DamageBonus { get; set; }
+        public string? ArmorCategory { get; set; }
+        public int? ArmorClassBase { get; set; }
+        public int? DexCap { get; set; }
+        public int? StrengthRequirement { get; set; }
+        public bool StealthDisadvantage { get; set; }
+        public bool IsMagicArmor { get; set; }
+        public int? ArmorBonus { get; set; }
+        public int? Charges { get; set; }
+        public int? MaxCharges { get; set; }
+        public string? RechargeRule { get; set; }
+        public string? ConsumableEffect { get; set; }
+        public int? Quantity { get; set; }
+        public bool Stackable { get; set; }
+        public string? Notes { get; set; }
+
+        public ItemForm(){}
+        public ItemForm(ItemRow r)
+        {
+            ItemId=r.ItemId; Name=r.Name; Description=r.Description; ItemType=r.ItemType; Rarity=r.Rarity; Weight=r.Weight; CostAmount=r.CostAmount; CostCurrency=r.CostCurrency;
+            RequiresAttunement=r.RequiresAttunement; SourceType=r.SourceType ?? 1; Source=r.Source; Tags=r.Tags; WeaponCategory=r.WeaponCategory; DamageDice=r.DamageDice; DamageType=r.DamageType;
+            Properties=r.Properties; RangeNormal=r.RangeNormal; RangeMax=r.RangeMax; IsMagicWeapon=r.IsMagicWeapon; AttackBonus=r.AttackBonus; DamageBonus=r.DamageBonus;
+            ArmorCategory=r.ArmorCategory; ArmorClassBase=r.ArmorClassBase; DexCap=r.DexCap; StrengthRequirement=r.StrengthRequirement; StealthDisadvantage=r.StealthDisadvantage;
+            IsMagicArmor=r.IsMagicArmor; ArmorBonus=r.ArmorBonus; Charges=r.Charges; MaxCharges=r.MaxCharges; RechargeRule=r.RechargeRule; ConsumableEffect=r.ConsumableEffect;
+            Quantity=r.Quantity; Stackable=r.Stackable; Notes=r.Notes;
+        }
+    }
+
+    private record FriendUser(int AppUserId, string Username, string Email);
+    private record FriendsOverview(List<FriendUser> Friends);
+
+    private record ItemRow(
+        int ItemId,string Name,string? Description,int ItemType,int Rarity,decimal? Weight,decimal? CostAmount,string? CostCurrency,bool RequiresAttunement,
+        int? SourceType,string? Source,string? Tags,string? WeaponCategory,string? DamageDice,string? DamageType,string? Properties,int? RangeNormal,int? RangeMax,bool IsMagicWeapon,
+        int? AttackBonus,int? DamageBonus,string? ArmorCategory,int? ArmorClassBase,int? DexCap,int? StrengthRequirement,bool StealthDisadvantage,bool IsMagicArmor,
+        int? ArmorBonus,int? Charges,int? MaxCharges,string? RechargeRule,string? ConsumableEffect,int? Quantity,bool Stackable,string? Notes);
+}

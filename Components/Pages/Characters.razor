@@ -42,6 +42,7 @@
             <MudTd>@($"{context.HitPointsCurrent}/{context.HitPointsMax}")</MudTd>
             <MudTd Style="text-align: right; white-space: nowrap;">
                 <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" OnClick="() => OpenEdit(context.CharacterId)" />
+                <MudIconButton Icon="@Icons.Material.Filled.GroupAdd" Color="Color.Info" Size="Size.Small" OnClick="() => OpenShare(context.CharacterId)" />
                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="() => Archive(context.CharacterId)" />
             </MudTd>
         </RowTemplate>
@@ -49,6 +50,32 @@
             <MudText Typo="Typo.body2" Class="pa-4">No characters yet. Add your first one.</MudText>
         </NoRecordsContent>
     </MudTable>
+
+    
+
+    @if (isShare)
+    {
+        <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+            <MudStack Spacing="2">
+                <MudText Typo="Typo.h6">Share Character</MudText>
+                <MudSelect T="int?" @bind-Value="shareUserId" Label="Friend" Variant="Variant.Outlined">
+                    @foreach (var f in friends)
+                    {
+                        <MudSelectItem T="int?" Value="f.AppUserId">@f.Username</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudSelect T="int" @bind-Value="sharePermission" Label="Permission" Variant="Variant.Outlined">
+                    <MudSelectItem Value="0">View</MudSelectItem>
+                    <MudSelectItem Value="1">Edit</MudSelectItem>
+                </MudSelect>
+                <MudStack Row="true" Spacing="1">
+                    <MudButton Variant="Variant.Filled" Color="Color.Info" OnClick="SaveShare">Share</MudButton>
+                    <MudButton Variant="Variant.Outlined" OnClick="() => isShare = false">Cancel</MudButton>
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+    }
+
 
     @if (isCreate)
     {
@@ -141,6 +168,11 @@
     private string? error;
     private bool isCreate;
     private CharacterForm form = new();
+    private bool isShare;
+    private int? shareCharacterId;
+    private int? shareUserId;
+    private int sharePermission;
+    private List<FriendUser> friends = new();
 
     protected override async Task OnInitializedAsync() => await Load();
 
@@ -149,10 +181,15 @@
         try
         {
             error = null;
-            var http = HttpFactory.CreateClient();
-            rows = await http.GetFromJsonAsync<List<CharacterRow>>(Nav.ToAbsoluteUri("/api/characters")) ?? new();
-            campaigns = await http.GetFromJsonAsync<List<CampaignOption>>(Nav.ToAbsoluteUri("/api/campaigns")) ?? new();
-            parties = await http.GetFromJsonAsync<List<PartyOption>>(Nav.ToAbsoluteUri("/api/parties")) ?? new();
+            var r1 = await JS.InvokeAsync<ApiResult<List<CharacterRow>>>("ruleforgeApi.get", "/api/characters");
+            var r2 = await JS.InvokeAsync<ApiResult<List<CampaignOption>>>("ruleforgeApi.get", "/api/campaigns");
+            var r3 = await JS.InvokeAsync<ApiResult<List<PartyOption>>>("ruleforgeApi.get", "/api/parties");
+            var r4 = await JS.InvokeAsync<ApiResult<FriendsOverview>>("ruleforgeApi.get", "/api/friends");
+            if (!r1.Ok) { error = string.IsNullOrWhiteSpace(r1.Text) ? "Failed to load characters." : r1.Text; rows = new(); return; }
+            rows = r1.Data ?? new();
+            campaigns = r2.Data ?? new();
+            parties = r3.Data ?? new();
+            friends = r4.Data?.Friends ?? new();
         }
         catch (Exception ex)
         {
@@ -160,6 +197,7 @@
             rows = new();
             campaigns = new();
             parties = new();
+            friends = new();
         }
     }
 
@@ -174,11 +212,11 @@
         try
         {
             error = null;
-            var http = HttpFactory.CreateClient();
-            var row = await http.GetFromJsonAsync<CharacterDetail>(Nav.ToAbsoluteUri($"/api/characters/{characterId}"));
-            if (row is null)
+            var res = await JS.InvokeAsync<ApiResult<CharacterDetail>>("ruleforgeApi.get", $"/api/characters/{characterId}");
+            var row = res.Data;
+            if (!res.Ok || row is null)
             {
-                error = "Character not found.";
+                error = string.IsNullOrWhiteSpace(res.Text) ? "Character not found." : res.Text;
                 return;
             }
 
@@ -220,12 +258,10 @@
             if (!ok) return;
 
             error = null;
-            var http = HttpFactory.CreateClient();
-            var res = await http.DeleteAsync(Nav.ToAbsoluteUri($"/api/characters/{characterId}"));
-            if (!res.IsSuccessStatusCode)
+            var res = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.delete", $"/api/characters/{characterId}");
+            if (!res.Ok)
             {
-                var txt = await res.Content.ReadAsStringAsync();
-                error = string.IsNullOrWhiteSpace(txt) ? "Archive failed." : txt;
+                error = string.IsNullOrWhiteSpace(res.Text) ? "Archive failed." : res.Text;
                 return;
             }
 
@@ -238,6 +274,32 @@
     }
 
     private void CloseCreate() => isCreate = false;
+
+    private void OpenShare(int characterId)
+    {
+        shareCharacterId = characterId;
+        shareUserId = null;
+        sharePermission = 0;
+        isShare = true;
+    }
+
+    private async Task SaveShare()
+    {
+        if (!shareCharacterId.HasValue || !shareUserId.HasValue)
+        {
+            error = "Pick a friend to share with.";
+            return;
+        }
+
+        var res = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.post", $"/api/characters/{shareCharacterId.Value}/share", new { userId = shareUserId.Value, permission = sharePermission });
+        if (!res.Ok)
+        {
+            error = string.IsNullOrWhiteSpace(res.Text) ? "Share failed." : res.Text;
+            return;
+        }
+
+        isShare = false;
+    }
     private void OnTypeChanged(string v) { form.CharacterType = v; if (v != "PC") { form.PartyId = null; form.PlayerName = null; } }
 
     private async Task Save()
@@ -245,7 +307,6 @@
         try
         {
             error = null;
-            var http = HttpFactory.CreateClient();
             var req = new
             {
                 campaignId = form.CampaignId,
@@ -268,18 +329,13 @@
                 notes = form.Notes
             };
 
-            HttpResponseMessage res;
+            ApiResult<object> res;
             if (form.CharacterId.HasValue)
-            {
-                res = await http.PutAsJsonAsync(Nav.ToAbsoluteUri($"/api/characters/{form.CharacterId.Value}"), req);
-            }
+                res = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.put", $"/api/characters/{form.CharacterId.Value}", req);
             else
-            {
-                res = await http.PostAsJsonAsync(Nav.ToAbsoluteUri("/api/characters"), req);
-            }
+                res = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.post", "/api/characters", req);
 
-            var txt = await res.Content.ReadAsStringAsync();
-            if (!res.IsSuccessStatusCode) { error = string.IsNullOrWhiteSpace(txt) ? "Save failed." : txt; return; }
+            if (!res.Ok) { error = string.IsNullOrWhiteSpace(res.Text) ? "Save failed." : res.Text; return; }
             isCreate = false;
             await Load();
         }
@@ -287,6 +343,14 @@
     }
 
     private static string DisplayName(CharacterRow row) => row.CharacterType == 1 && !string.IsNullOrWhiteSpace(row.PlayerName) ? $"{row.Name} ({row.PlayerName})" : row.Name;
+
+    private sealed class ApiResult<T>
+    {
+        public bool Ok { get; set; }
+        public int Status { get; set; }
+        public T? Data { get; set; }
+        public string? Text { get; set; }
+    }
 
     private sealed class CharacterForm
     {
@@ -314,4 +378,6 @@
     private sealed record CharacterDetail(int CharacterId, int? CampaignId, int? PartyId, int CharacterType, string Name, string? PlayerName, int? ArmorClass, int? HitPointsCurrent, int? HitPointsMax, int? Level, string? ClassName, int? Strength, int? Dexterity, int? Constitution, int? Intelligence, int? Wisdom, int? Charisma, string? Notes);
     private sealed record CampaignOption(int CampaignId, string Name);
     private sealed record PartyOption(int PartyId, string Name);
+    private sealed record FriendUser(int AppUserId, string Username, string Email);
+    private sealed record FriendsOverview(List<FriendUser> Friends);
 }

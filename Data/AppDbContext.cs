@@ -5,6 +5,9 @@ using RuleForge.Domain.Bestiary;
 using RuleForge.Domain.Encounters;
 using RuleForge.Domain.Parties;
 using RuleForge.Domain.Quests;
+using RuleForge.Domain.Users;
+using RuleForge.Domain.Items;
+using RuleForge.Domain.Common;
 
 namespace RuleForge.Data;
 
@@ -12,13 +15,21 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
 {
     public DbSet<Character> Characters => Set<Character>();
     public DbSet<Campaign> Campaigns => Set<Campaign>();
+    public DbSet<CampaignShare> CampaignShares => Set<CampaignShare>();
     public DbSet<Creature> Creatures => Set<Creature>();
     public DbSet<Encounter> Encounters => Set<Encounter>();
     public DbSet<EncounterParticipant> EncounterParticipants => Set<EncounterParticipant>();
     public DbSet<Party> Parties => Set<Party>();
+    public DbSet<PartyShare> PartyShares => Set<PartyShare>();
     public DbSet<Quest> Quests => Set<Quest>();
+    public DbSet<QuestShare> QuestShares => Set<QuestShare>();
     public DbSet<QuestNode> QuestNodes => Set<QuestNode>();
     public DbSet<QuestChoice> QuestChoices => Set<QuestChoice>();
+    public DbSet<AppUser> Users => Set<AppUser>();
+    public DbSet<Item> Items => Set<Item>();
+    public DbSet<CharacterShare> CharacterShares => Set<CharacterShare>();
+    public DbSet<ItemShare> ItemShares => Set<ItemShare>();
+    public DbSet<FriendLink> FriendLinks => Set<FriendLink>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -33,6 +44,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         cp.Property(x => x.Name).HasMaxLength(120).IsRequired();
         cp.Property(x => x.Description).HasMaxLength(2000);
         cp.HasIndex(x => x.Name).IsUnique();
+        cp.Property(x => x.OwnerAppUserId);
+        cp.HasIndex(x => x.OwnerAppUserId);
 
         var cr = modelBuilder.Entity<Creature>();
         cr.HasKey(x => x.CreatureId);
@@ -63,12 +76,16 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         pty.Property(x => x.Name).HasMaxLength(120).IsRequired();
         pty.Property(x => x.Description).HasMaxLength(2000);
         pty.HasIndex(x => new { x.CampaignId, x.Name }).IsUnique();
+        pty.Property(x => x.OwnerAppUserId);
+        pty.HasIndex(x => x.OwnerAppUserId);
 
         var q = modelBuilder.Entity<Quest>();
         q.HasKey(x => x.QuestId);
         q.Property(x => x.Title).HasMaxLength(180).IsRequired();
         q.Property(x => x.Summary).HasMaxLength(4000);
         q.HasIndex(x => new { x.CampaignId, x.Title });
+        q.Property(x => x.OwnerAppUserId);
+        q.HasIndex(x => x.OwnerAppUserId);
 
         var qn = modelBuilder.Entity<QuestNode>();
         qn.HasKey(x => x.QuestNodeId);
@@ -85,5 +102,66 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         qc.Property(x => x.ConditionExpression).HasMaxLength(1000);
         qc.Property(x => x.EffectsJson).HasMaxLength(4000);
         qc.HasIndex(x => new { x.QuestId, x.FromNodeId, x.OrderIndex });
+
+        var u = modelBuilder.Entity<AppUser>();
+        u.HasKey(x => x.AppUserId);
+        u.Property(x => x.Username).HasMaxLength(80).IsRequired();
+        u.Property(x => x.Email).HasMaxLength(180).IsRequired();
+        u.Property(x => x.PasswordHash).HasMaxLength(400).IsRequired();
+        u.Property(x => x.MustChangePassword);
+        u.Property(x => x.IsSystem);
+        u.Property(x => x.ThemePreference).HasMaxLength(16);
+        u.Property(x => x.CampaignNavExpanded);
+        u.Property(x => x.CompendiumNavExpanded);
+        u.HasIndex(x => x.Username).IsUnique();
+        u.HasIndex(x => x.Email).IsUnique();
+
+        var it = modelBuilder.Entity<Item>();
+        it.HasKey(x => x.ItemId);
+        it.Property(x => x.Name).HasMaxLength(160).IsRequired();
+        it.Property(x => x.Description).HasMaxLength(8000);
+        it.Property(x => x.CostCurrency).HasMaxLength(8);
+        it.Property(x => x.SourceType);
+        it.Property(x => x.Source).HasMaxLength(120);
+        it.Property(x => x.Tags).HasMaxLength(500);
+        it.Property(x => x.WeaponCategory).HasMaxLength(40);
+        it.Property(x => x.DamageDice).HasMaxLength(40);
+        it.Property(x => x.DamageType).HasMaxLength(40);
+        it.Property(x => x.Properties).HasMaxLength(500);
+        it.Property(x => x.ArmorCategory).HasMaxLength(40);
+        it.Property(x => x.RechargeRule).HasMaxLength(200);
+        it.Property(x => x.ConsumableEffect).HasMaxLength(2000);
+        it.Property(x => x.Notes).HasMaxLength(2000);
+        it.HasIndex(x => x.Name);
+        it.Property(x => x.OwnerAppUserId);
+        it.HasIndex(x => x.OwnerAppUserId);
+
+        var fl = modelBuilder.Entity<FriendLink>();
+        fl.HasKey(x => x.FriendLinkId);
+        fl.Property(x => x.Status).IsRequired();
+        fl.HasIndex(x => new { x.RequesterUserId, x.AddresseeUserId }).IsUnique();
+        fl.HasIndex(x => new { x.AddresseeUserId, x.Status });
+
+        var cs = modelBuilder.Entity<CharacterShare>();
+        cs.HasKey(x => x.CharacterShareId);
+        cs.HasIndex(x => new { x.CharacterId, x.SharedWithUserId }).IsUnique();
+
+        var ishr = modelBuilder.Entity<ItemShare>();
+        ishr.HasKey(x => x.ItemShareId);
+        ishr.HasIndex(x => new { x.ItemId, x.SharedWithUserId }).IsUnique();
+
+        var csh = modelBuilder.Entity<CampaignShare>();
+        csh.HasKey(x => x.CampaignShareId);
+        csh.HasIndex(x => new { x.CampaignId, x.SharedWithUserId }).IsUnique();
+
+        var psh = modelBuilder.Entity<PartyShare>();
+        psh.HasKey(x => x.PartyShareId);
+        psh.HasIndex(x => new { x.PartyId, x.SharedWithUserId }).IsUnique();
+
+        var qsh = modelBuilder.Entity<QuestShare>();
+        qsh.HasKey(x => x.QuestShareId);
+        qsh.HasIndex(x => new { x.QuestId, x.SharedWithUserId }).IsUnique();
+
     }
 }
+
