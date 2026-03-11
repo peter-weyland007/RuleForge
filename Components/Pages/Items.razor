@@ -158,7 +158,15 @@
         (1, "Common"), (2, "Uncommon"), (3, "Rare"), (4, "Very Rare"), (5, "Legendary"), (6, "Artifact")
     };
 
-    protected override async Task OnInitializedAsync() => await Load();
+    private bool _loaded;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _loaded) return;
+        _loaded = true;
+        await Load();
+        StateHasChanged();
+    }
 
     private async Task Load()
     {

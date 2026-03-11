@@ -118,7 +118,15 @@
     private List<FriendUser> friends = new();
     private QuestForm form = new();
 
-    protected override async Task OnInitializedAsync() => await Load();
+    private bool _loaded;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _loaded) return;
+        _loaded = true;
+        await Load();
+        StateHasChanged();
+    }
 
     private async Task Load()
     {
