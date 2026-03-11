@@ -36,6 +36,7 @@
             <MudTd>@ModeLabel(context.Mode)</MudTd>
             <MudTd>@(context.UseChoiceMode ? "On" : "Off")</MudTd>
             <MudTd Style="text-align:right; white-space:nowrap;">
+                <MudIconButton Icon="@Icons.Material.Filled.PlayArrow" Color="Color.Success" Size="Size.Small" Href="@($"/quests/{context.QuestId}/run")" />
                 <MudIconButton Icon="@Icons.Material.Filled.AccountTree" Color="Color.Success" Size="Size.Small" Href="@($"/quests/{context.QuestId}")" />
                 <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" OnClick="() => OpenEdit(context.QuestId)" />
                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="() => Delete(context.QuestId)" />

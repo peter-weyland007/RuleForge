@@ -9,6 +9,7 @@
     <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
         <MudText Typo="Typo.h4">@title</MudText>
         <MudStack Row="true" Spacing="1">
+            <MudButton Variant="Variant.Outlined" Href="@($"/quests/{QuestId}/run")" StartIcon="@Icons.Material.Filled.PlayArrow">Run Quest</MudButton>
             <MudButton Variant="Variant.Outlined" Href="@($"/quests/{QuestId}/canvas")" StartIcon="@Icons.Material.Filled.AccountTree">Canvas View</MudButton>
             <MudButton Variant="Variant.Outlined" Href="/quests" StartIcon="@Icons.Material.Filled.ArrowBack">Back to Quests</MudButton>
         </MudStack>

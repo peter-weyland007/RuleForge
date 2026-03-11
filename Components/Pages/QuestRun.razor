@@ -1,0 +1,172 @@
+@page "/quests/{QuestId:int}/run"
+@inject IHttpClientFactory HttpFactory
+@inject NavigationManager Nav
+
+<PageTitle>Quest Run</PageTitle>
+
+<MudStack Spacing="3">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+        <MudStack Spacing="0">
+            <MudText Typo="Typo.h4">@title</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">@ModeLabel(mode) · Choice Mode: @(useChoiceMode ? "On" : "Off")</MudText>
+        </MudStack>
+        <MudStack Row="true" Spacing="1">
+            <MudButton Variant="Variant.Outlined" Href="@($"/quests/{QuestId}")" StartIcon="@Icons.Material.Filled.Edit">Builder</MudButton>
+            <MudButton Variant="Variant.Outlined" Href="/quests" StartIcon="@Icons.Material.Filled.ArrowBack">Quests</MudButton>
+        </MudStack>
+    </MudStack>
+
+    @if (!string.IsNullOrWhiteSpace(error))
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@error</MudAlert>
+    }
+
+    @if (currentNode is not null)
+    {
+        <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+            <MudStack Spacing="2">
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                    <MudText Typo="Typo.h6">@currentNode.Title</MudText>
+                    <MudChip T="string" Variant="Variant.Outlined">@NodeTypeLabel(currentNode.NodeType)</MudChip>
+                </MudStack>
+
+                @if (!string.IsNullOrWhiteSpace(currentNode.BodyMarkdown))
+                {
+                    <MudText Typo="Typo.body1">@currentNode.BodyMarkdown</MudText>
+                }
+
+                @if (!string.IsNullOrWhiteSpace(currentNode.DmHints))
+                {
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">DM Hint: @currentNode.DmHints</MudAlert>
+                }
+
+                @if (currentNode.EncounterId is not null)
+                {
+                    <MudButton Variant="Variant.Outlined" Color="Color.Warning" Href="@($"/encounters/run/{currentNode.EncounterId}")" StartIcon="@Icons.Material.Filled.PlayArrow">Run Linked Encounter</MudButton>
+                }
+            </MudStack>
+        </MudPaper>
+
+        <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+            <MudText Typo="Typo.h6">Next</MudText>
+
+            @if (nextChoices.Any())
+            {
+                <MudStack Spacing="1">
+                    @foreach (var ch in nextChoices)
+                    {
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="() => GoTo(ch.ToNodeId)">@ch.Label</MudButton>
+                    }
+                </MudStack>
+            }
+            else if (linearNext is not null)
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="() => GoTo(linearNext.QuestNodeId)">Continue</MudButton>
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Success" Variant="Variant.Outlined">Quest path complete.</MudAlert>
+            }
+
+            <MudStack Row="true" Spacing="1" Class="mt-2">
+                <MudButton Variant="Variant.Outlined" OnClick="GoBack" Disabled="@(history.Count == 0)">Back</MudButton>
+                <MudButton Variant="Variant.Outlined" Color="Color.Warning" OnClick="Restart">Restart</MudButton>
+            </MudStack>
+        </MudPaper>
+    }
+</MudStack>
+
+@code {
+    [Parameter] public int QuestId { get; set; }
+
+    private string title = "Quest Run";
+    private string? error;
+    private int mode;
+    private bool useChoiceMode;
+    private List<NodeRow> nodes = new();
+    private List<ChoiceRow> choices = new();
+
+    private NodeRow? currentNode;
+    private List<ChoiceRow> nextChoices = new();
+    private NodeRow? linearNext;
+    private Stack<int> history = new();
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        try
+        {
+            var h = HttpFactory.CreateClient();
+            var q = await h.GetFromJsonAsync<QuestDetail>(Nav.ToAbsoluteUri($"/api/quests/{QuestId}"));
+            if (q is null) { error = "Quest not found."; return; }
+
+            title = q.Title;
+            mode = q.Mode;
+            useChoiceMode = q.UseChoiceMode;
+            nodes = q.Nodes.OrderBy(x => x.OrderIndex).ToList();
+            choices = q.Choices.OrderBy(x => x.OrderIndex).ToList();
+
+            var start = q.StartNodeId is not null
+                ? nodes.FirstOrDefault(x => x.QuestNodeId == q.StartNodeId.Value)
+                : nodes.FirstOrDefault();
+
+            if (start is null) { error = "Quest has no nodes yet."; return; }
+
+            SetCurrent(start.QuestNodeId, clearHistory: true);
+        }
+        catch (Exception ex) { error = ex.Message; }
+    }
+
+    private void SetCurrent(int nodeId, bool clearHistory = false)
+    {
+        if (clearHistory) history.Clear();
+        currentNode = nodes.FirstOrDefault(x => x.QuestNodeId == nodeId);
+        if (currentNode is null) return;
+
+        nextChoices = useChoiceMode
+            ? choices.Where(x => x.FromNodeId == currentNode.QuestNodeId).OrderBy(x => x.OrderIndex).ToList()
+            : new();
+
+        linearNext = nodes
+            .Where(x => x.OrderIndex > currentNode.OrderIndex)
+            .OrderBy(x => x.OrderIndex)
+            .FirstOrDefault();
+    }
+
+    private void GoTo(int nodeId)
+    {
+        if (currentNode is not null) history.Push(currentNode.QuestNodeId);
+        SetCurrent(nodeId);
+    }
+
+    private void GoBack()
+    {
+        if (!history.Any()) return;
+        SetCurrent(history.Pop());
+    }
+
+    private void Restart()
+    {
+        var start = nodes.FirstOrDefault(x => x.QuestNodeId == currentNode?.QuestNodeId);
+        var first = nodes.FirstOrDefault();
+        if (first is null) return;
+        SetCurrent(first.QuestNodeId, clearHistory: true);
+    }
+
+    private static string NodeTypeLabel(int t) => t switch { 1 => "Scene", 2 => "Choice", 3 => "Encounter", 4 => "SkillCheck", 5 => "Reward", 6 => "Note", _ => "Scene" };
+    private static string ModeLabel(int m) => m switch { 1 => "Linear", 2 => "Branching", 3 => "Hybrid", _ => "Hybrid" };
+
+    private sealed class QuestDetail
+    {
+        public string Title { get; set; } = string.Empty;
+        public int Mode { get; set; }
+        public bool UseChoiceMode { get; set; }
+        public int? StartNodeId { get; set; }
+        public List<NodeRow> Nodes { get; set; } = new();
+        public List<ChoiceRow> Choices { get; set; } = new();
+    }
+
+    private sealed record NodeRow(int QuestNodeId, string Title, int NodeType, int OrderIndex, string? BodyMarkdown, string? DmHints, int? EncounterId, double? CanvasX, double? CanvasY);
+    private sealed record ChoiceRow(int QuestChoiceId, int FromNodeId, int ToNodeId, string Label, string? ConditionExpression, string? EffectsJson, int OrderIndex);
+}

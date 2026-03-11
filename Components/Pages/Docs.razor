@@ -5,52 +5,150 @@
 <MudStack Spacing="3">
     <MudStack Spacing="0">
         <MudText Typo="Typo.h4">Documentation</MudText>
-        <MudText Typo="Typo.body2" Color="Color.Secondary">Internal product documentation for RuleForge. Add new docs here as features evolve.</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">Product documentation and feature guides for RuleForge.</MudText>
     </MudStack>
 
-    <MudPaper Class="pa-4" Outlined="true" Elevation="0">
-        <MudText Typo="Typo.h6">Quest Modes & Use Choice Mode</MudText>
+    <MudGrid>
+        <MudItem xs="12" md="4" lg="3">
+            <MudPaper Class="pa-4 docs-toc" Outlined="true" Elevation="0">
+                <MudText Typo="Typo.h6">Table of Contents</MudText>
+                <MudList T="string" Dense="true" Class="mt-2">
+                    <MudListItem T="string"><MudLink Href="#quests-structure" Class="@TocClass("quests-structure")" @onclick='() => SetActive("quests-structure")'>1. Quests & Quest Structures</MudLink></MudListItem>
+                    <MudListItem T="string" Class="pl-4"><MudLink Href="#overview" Class="@TocClass("overview")" @onclick='() => SetActive("overview")'>1.1 Overview</MudLink></MudListItem>
+                    <MudListItem T="string" Class="pl-4"><MudLink Href="#core-model" Class="@TocClass("core-model")" @onclick='() => SetActive("core-model")'>1.2 Core Model</MudLink></MudListItem>
+                    <MudListItem T="string" Class="pl-4"><MudLink Href="#quest-modes" Class="@TocClass("quest-modes")" @onclick='() => SetActive("quest-modes")'>1.3 Quest Modes</MudLink></MudListItem>
+                    <MudListItem T="string" Class="pl-4"><MudLink Href="#choice-mode" Class="@TocClass("choice-mode")" @onclick='() => SetActive("choice-mode")'>1.4 Use Choice Mode</MudLink></MudListItem>
+                    <MudListItem T="string" Class="pl-4"><MudLink Href="#recommended" Class="@TocClass("recommended")" @onclick='() => SetActive("recommended")'>1.5 Recommended Usage</MudLink></MudListItem>
+                    <MudListItem T="string" Class="pl-4"><MudLink Href="#workflow" Class="@TocClass("workflow")" @onclick='() => SetActive("workflow")'>1.6 Practical Workflow</MudLink></MudListItem>
+                    <MudListItem T="string" Class="pl-4"><MudLink Href="#glossary" Class="@TocClass("glossary")" @onclick='() => SetActive("glossary")'>1.7 Glossary</MudLink></MudListItem>
+                    <MudListItem T="string"><MudLink Href="#encounters" Class="@TocClass("encounters")" @onclick='() => SetActive("encounters")'>2. Encounters</MudLink></MudListItem>
+                    <MudListItem T="string"><MudLink Href="#characters-parties" Class="@TocClass("characters-parties")" @onclick='() => SetActive("characters-parties")'>3. Characters & Parties</MudLink></MudListItem>
+                    <MudListItem T="string"><MudLink Href="#bestiary" Class="@TocClass("bestiary")" @onclick='() => SetActive("bestiary")'>4. Bestiary</MudLink></MudListItem>
+                    <MudListItem T="string"><MudLink Href="#operations-admin" Class="@TocClass("operations-admin")" @onclick='() => SetActive("operations-admin")'>5. Operations / Admin</MudLink></MudListItem>
+                </MudList>
+            </MudPaper>
+        </MudItem>
 
-        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-2">
-            Quest mode defines how a quest is authored. Use Choice Mode defines how the DM runs it at the table.
-        </MudAlert>
-
-        <MudGrid Class="mt-2">
-            <MudItem xs="12" md="4">
-                <MudPaper Class="pa-3" Outlined="true" Elevation="0">
-                    <MudText Typo="Typo.subtitle1">Linear</MudText>
-                    <MudText Typo="Typo.body2">Use ordered nodes like a traditional module/chapter flow. Branches are optional and minimal.</MudText>
+        <MudItem xs="12" md="8" lg="9">
+            <MudStack Spacing="3">
+                                <MudPaper Class="pa-4" Outlined="true" Elevation="0" id="quests-structure">
+                    <MudText Typo="Typo.h6">1) Quests & Quest Structures</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">This section documents how quests are modeled, authored, and run in RuleForge.</MudText>
                 </MudPaper>
-            </MudItem>
-            <MudItem xs="12" md="4">
-                <MudPaper Class="pa-3" Outlined="true" Elevation="0">
-                    <MudText Typo="Typo.subtitle1">Branching</MudText>
-                    <MudText Typo="Typo.body2">Use node choices as primary navigation. DM selects branches as players make decisions.</MudText>
-                </MudPaper>
-            </MudItem>
-            <MudItem xs="12" md="4">
-                <MudPaper Class="pa-3" Outlined="true" Elevation="0">
-                    <MudText Typo="Typo.subtitle1">Hybrid</MudText>
-                    <MudText Typo="Typo.body2">Best of both. Author linearly while still supporting branch points and optional paths.</MudText>
-                </MudPaper>
-            </MudItem>
-        </MudGrid>
 
-        <MudPaper Class="pa-3 mt-3" Outlined="true" Elevation="0">
-            <MudText Typo="Typo.subtitle1">Use Choice Mode (On/Off)</MudText>
-            <MudList T="string" Dense="true">
-                <MudListItem T="string"><b>On:</b> DM follows branch choices at decision points (choose-your-own-adventure style).</MudListItem>
-                <MudListItem T="string"><b>Off:</b> DM can read linearly and manually jump as needed (traditional style).</MudListItem>
-            </MudList>
-        </MudPaper>
+                <MudPaper Class="pa-4" Outlined="true" Elevation="0" id="overview">
+                    <MudText Typo="Typo.h6">1.1) Overview</MudText>
+                    <MudText Typo="Typo.body2">
+                        RuleForge supports both traditional (linear) adventure prep and branching, choice-driven quest structure.
+                        The same quest can be authored once and run in different styles depending on session needs.
+                    </MudText>
+                </MudPaper>
 
-        <MudPaper Class="pa-3 mt-3" Outlined="true" Elevation="0">
-            <MudText Typo="Typo.subtitle1">Recommended Use</MudText>
-            <MudList T="string" Dense="true">
-                <MudListItem T="string">Story-heavy / fixed pacing: <b>Linear + Choice Mode Off</b></MudListItem>
-                <MudListItem T="string">Player-agency sessions: <b>Branching + Choice Mode On</b></MudListItem>
-                <MudListItem T="string">Most campaigns: <b>Hybrid + toggle per session</b></MudListItem>
-            </MudList>
-        </MudPaper>
-    </MudPaper>
+                <MudPaper Class="pa-4" Outlined="true" Elevation="0" id="core-model">
+                    <MudText Typo="Typo.h6">1.2) Core Model</MudText>
+                    <MudList T="string" Dense="true">
+                        <MudListItem T="string"><b>Campaign</b> → contains quests.</MudListItem>
+                        <MudListItem T="string"><b>Quest</b> → structured story arc and runtime behavior settings.</MudListItem>
+                        <MudListItem T="string"><b>Quest Node</b> → a story step (scene, encounter point, skill check, note, etc.).</MudListItem>
+                        <MudListItem T="string"><b>Quest Choice</b> → branch from one node to another.</MudListItem>
+                        <MudListItem T="string"><b>Encounter</b> → tactical runtime object (participants, initiative, HP, conditions).</MudListItem>
+                    </MudList>
+                </MudPaper>
+
+                <MudPaper Class="pa-4" Outlined="true" Elevation="0" id="quest-modes">
+                    <MudText Typo="Typo.h6">1.3) Quest Modes</MudText>
+                    <MudGrid Class="mt-1">
+                        <MudItem xs="12" md="4">
+                            <MudPaper Class="pa-3" Outlined="true" Elevation="0">
+                                <MudText Typo="Typo.subtitle1">Linear</MudText>
+                                <MudText Typo="Typo.body2">Ordered progression through nodes. Best for module-style prep.</MudText>
+                            </MudPaper>
+                        </MudItem>
+                        <MudItem xs="12" md="4">
+                            <MudPaper Class="pa-3" Outlined="true" Elevation="0">
+                                <MudText Typo="Typo.subtitle1">Branching</MudText>
+                                <MudText Typo="Typo.body2">Node choices are primary navigation. Best for high player agency.</MudText>
+                            </MudPaper>
+                        </MudItem>
+                        <MudItem xs="12" md="4">
+                            <MudPaper Class="pa-3" Outlined="true" Elevation="0">
+                                <MudText Typo="Typo.subtitle1">Hybrid</MudText>
+                                <MudText Typo="Typo.body2">Linear backbone with branch points. Usually best default.</MudText>
+                            </MudPaper>
+                        </MudItem>
+                    </MudGrid>
+                </MudPaper>
+
+                <MudPaper Class="pa-4" Outlined="true" Elevation="0" id="choice-mode">
+                    <MudText Typo="Typo.h6">1.4) Use Choice Mode (On / Off)</MudText>
+                    <MudList T="string" Dense="true">
+                        <MudListItem T="string"><b>On:</b> DM advances by selecting presented quest choices.</MudListItem>
+                        <MudListItem T="string"><b>Off:</b> DM reads/advances in a traditional guided manner, with manual jumps if needed.</MudListItem>
+                    </MudList>
+                </MudPaper>
+
+                <MudPaper Class="pa-4" Outlined="true" Elevation="0" id="recommended">
+                    <MudText Typo="Typo.h6">1.5) Recommended Usage</MudText>
+                    <MudList T="string" Dense="true">
+                        <MudListItem T="string">Story-heavy fixed pacing: <b>Linear + Choice Mode Off</b></MudListItem>
+                        <MudListItem T="string">Decision-driven campaign: <b>Branching + Choice Mode On</b></MudListItem>
+                        <MudListItem T="string">General campaign use: <b>Hybrid + toggle Choice Mode per session</b></MudListItem>
+                    </MudList>
+                </MudPaper>
+
+                <MudPaper Class="pa-4" Outlined="true" Elevation="0" id="workflow">
+                    <MudText Typo="Typo.h6">1.6) Practical Workflow</MudText>
+                    <MudList T="string" Dense="true">
+                        <MudListItem T="string">Create quest metadata in <b>/quests</b>.</MudListItem>
+                        <MudListItem T="string">Add nodes and branch choices in <b>Quest Builder</b>.</MudListItem>
+                        <MudListItem T="string">Optionally attach encounters to specific nodes.</MudListItem>
+                        <MudListItem T="string">Review branch structure in Canvas view.</MudListItem>
+                        <MudListItem T="string">Run live session using <b>/quests/{id}/run</b>.</MudListItem>
+                    </MudList>
+                </MudPaper>
+
+                <MudPaper Class="pa-4" Outlined="true" Elevation="0" id="glossary">
+                    <MudText Typo="Typo.h6">1.7) Glossary</MudText>
+                    <MudList T="string" Dense="true">
+                        <MudListItem T="string"><b>Node:</b> One playable narrative unit in a quest.</MudListItem>
+                        <MudListItem T="string"><b>Choice:</b> Directed link between two nodes.</MudListItem>
+                        <MudListItem T="string"><b>Run Mode:</b> How the DM consumes authored quest data at session time.</MudListItem>
+                        <MudListItem T="string"><b>Encounter Link:</b> Optional pointer from node to encounter runtime tracker.</MudListItem>
+                    </MudList>
+                </MudPaper>
+
+                <MudPaper Class="pa-4" Outlined="true" Elevation="0" id="encounters">
+                    <MudText Typo="Typo.h6">2) Encounters</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Documentation placeholder. We will add encounter setup/run/tracking guidance here.</MudText>
+                </MudPaper>
+
+                <MudPaper Class="pa-4" Outlined="true" Elevation="0" id="characters-parties">
+                    <MudText Typo="Typo.h6">3) Characters & Parties</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Documentation placeholder. We will add character management, party assignment, and campaign linkage docs here.</MudText>
+                </MudPaper>
+
+                <MudPaper Class="pa-4" Outlined="true" Elevation="0" id="bestiary">
+                    <MudText Typo="Typo.h6">4) Bestiary</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Documentation placeholder. We will add creature stat block and encounter integration docs here.</MudText>
+                </MudPaper>
+
+                <MudPaper Class="pa-4" Outlined="true" Elevation="0" id="operations-admin">
+                    <MudText Typo="Typo.h6">5) Operations / Admin</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Documentation placeholder. We will add cleanup, deployment, and environment operation docs here.</MudText>
+                </MudPaper>
+
+            </MudStack>
+        </MudItem>
+    </MudGrid>
 </MudStack>
+
+<style>
+.docs-toc { position: sticky; top: 80px; }
+.docs-toc-link-active { font-weight: 700; color: var(--mud-palette-primary); }
+</style>
+
+@code {
+    private string activeSection = "overview";
+    private void SetActive(string section) => activeSection = section;
+    private string TocClass(string section) => activeSection == section ? "docs-toc-link-active" : string.Empty;
+}
