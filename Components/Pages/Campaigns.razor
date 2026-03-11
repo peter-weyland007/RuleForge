@@ -1,7 +1,9 @@
+@using Microsoft.AspNetCore.Components.Authorization
 @page "/campaigns"
 @inject IHttpClientFactory HttpFactory
 @inject NavigationManager Nav
 @inject IJSRuntime JS
+@inject AuthenticationStateProvider AuthStateProvider
 
 <PageTitle>Campaigns</PageTitle>
 
@@ -15,6 +17,11 @@
     </MudStack>
 
     <ApiErrorAlert Message="@error" />
+
+    @if (isAdmin)
+    {
+        <MudSwitch T="bool" Value="showAllAdmin" ValueChanged="OnShowAllChanged" Color="Color.Info" Label="Show All (Admin)" />
+    }
 
     <MudTable Items="rows" Dense="true" Hover="true" Outlined="true" Elevation="0">
         <HeaderContent>
@@ -87,6 +94,8 @@
     private List<CampaignRow> rows = new();
     private string? error;
     private bool isSaving;
+    private bool isAdmin;
+    private bool showAllAdmin;
     private bool isShare;
     private int? shareId;
     private int? shareUserId;
@@ -101,6 +110,8 @@
     {
         if (!firstRender || _loaded) return;
         _loaded = true;
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        isAdmin = auth.User.IsInRole("Admin");
         await Load();
         StateHasChanged();
     }
@@ -110,7 +121,8 @@
         try
         {
             error = null;
-            var r1 = await JS.InvokeAsync<ApiResult<List<CampaignRow>>>("ruleforgeApi.get", "/api/campaigns");
+            var endpoint = showAllAdmin && isAdmin ? "/api/campaigns?showAll=true" : "/api/campaigns";
+            var r1 = await JS.InvokeAsync<ApiResult<List<CampaignRow>>>("ruleforgeApi.get", endpoint);
             var fr = await JS.InvokeAsync<ApiResult<FriendsOverview>>("ruleforgeApi.get", "/api/friends");
             if (!r1.Ok) { error = string.IsNullOrWhiteSpace(r1.Text) ? "Failed to load campaigns." : r1.Text; rows = new(); return; }
             rows = r1.Data ?? new();
@@ -121,6 +133,13 @@
             error = ex.Message;
             rows = new();
         }
+    }
+
+    private async Task OnShowAllChanged(bool value)
+    {
+        showAllAdmin = value;
+        await Load();
+        StateHasChanged();
     }
 
     private void OpenCreate()
