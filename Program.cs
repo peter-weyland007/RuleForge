@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
@@ -39,6 +40,31 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.LoginPath = "/login";
         options.AccessDeniedPath = "/login";
         options.SlidingExpiration = true;
+        options.Events = new CookieAuthenticationEvents
+        {
+            OnRedirectToLogin = ctx =>
+            {
+                if (ctx.Request.Path.StartsWithSegments("/api"))
+                {
+                    ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                    ctx.Response.ContentType = "application/json";
+                    return ctx.Response.WriteAsync(JsonSerializer.Serialize(new ApiError("AUTH_REQUIRED", "Authentication required.", ctx.HttpContext.TraceIdentifier)));
+                }
+                ctx.Response.Redirect(ctx.RedirectUri);
+                return Task.CompletedTask;
+            },
+            OnRedirectToAccessDenied = ctx =>
+            {
+                if (ctx.Request.Path.StartsWithSegments("/api"))
+                {
+                    ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
+                    ctx.Response.ContentType = "application/json";
+                    return ctx.Response.WriteAsync(JsonSerializer.Serialize(new ApiError("FORBIDDEN", "You do not have access.", ctx.HttpContext.TraceIdentifier)));
+                }
+                ctx.Response.Redirect(ctx.RedirectUri);
+                return Task.CompletedTask;
+            }
+        };
     });
 
 builder.Services.AddAuthorization();
@@ -78,6 +104,24 @@ builder.Services.AddDbContext<AppDbContext>(o =>
 });
 
 var app = builder.Build();
+
+// API exception envelope middleware
+app.Use(async (ctx, next) =>
+{
+    try
+    {
+        await next();
+    }
+    catch (Exception ex)
+    {
+        if (!ctx.Request.Path.StartsWithSegments("/api")) throw;
+        ctx.Response.StatusCode = StatusCodes.Status500InternalServerError;
+        ctx.Response.ContentType = "application/json";
+        var code = ex is DbUpdateException ? "DB_UPDATE_ERROR" : "UNHANDLED_ERROR";
+        var msg = ex is DbUpdateException ? "A database error occurred while saving." : "An unexpected error occurred.";
+        await ctx.Response.WriteAsync(JsonSerializer.Serialize(new ApiError(code, msg, ctx.TraceIdentifier)));
+    }
+});
 
 if (!app.Environment.IsDevelopment())
 {
@@ -878,7 +922,13 @@ app.MapPost("/api/campaigns", async (UpsertCampaignRequest req, HttpContext http
     var userId = GetUserId(http); if (userId is null) return Results.Unauthorized();
     if (string.IsNullOrWhiteSpace(req.Name)) return Results.BadRequest("Title is required.");
     var row = new Campaign { OwnerAppUserId = userId.Value, Name = TitleNormalization.ToPascalTitle(req.Name), Description = string.IsNullOrWhiteSpace(req.Description) ? null : req.Description.Trim(), DateCreatedUtc = DateTime.UtcNow, DateModifiedUtc = DateTime.UtcNow };
-    db.Campaigns.Add(row); await db.SaveChangesAsync(); return Results.Ok(new { row.CampaignId });
+    db.Campaigns.Add(row);
+    try { await db.SaveChangesAsync(); }
+    catch (DbUpdateException ex) when ((ex.InnerException?.Message ?? ex.Message).Contains("IX_Campaigns_Name", StringComparison.OrdinalIgnoreCase) || (ex.InnerException?.Message ?? ex.Message).Contains("UNIQUE", StringComparison.OrdinalIgnoreCase))
+    {
+        return Results.BadRequest(new ApiError("CAMPAIGN_DUPLICATE_NAME", "Campaign name already exists.", http.TraceIdentifier));
+    }
+    return Results.Ok(new { row.CampaignId });
 }).RequireAuthorization();
 
 app.MapPut("/api/campaigns/{id:int}", async (int id, UpsertCampaignRequest req, HttpContext http, AppDbContext db) =>
@@ -889,7 +939,12 @@ app.MapPut("/api/campaigns/{id:int}", async (int id, UpsertCampaignRequest req, 
     var canEdit = row.OwnerAppUserId == userId.Value || await db.CampaignShares.AnyAsync(x => x.CampaignId == id && x.SharedWithUserId == userId.Value && x.Permission == SharePermission.Edit);
     if (!canEdit && !IsAdmin(http)) return Results.Forbid();
     row.Name = TitleNormalization.ToPascalTitle(req.Name); row.Description = string.IsNullOrWhiteSpace(req.Description) ? null : req.Description.Trim(); row.DateModifiedUtc = DateTime.UtcNow;
-    await db.SaveChangesAsync(); return Results.Ok(new { row.CampaignId });
+    try { await db.SaveChangesAsync(); }
+    catch (DbUpdateException ex) when ((ex.InnerException?.Message ?? ex.Message).Contains("IX_Campaigns_Name", StringComparison.OrdinalIgnoreCase) || (ex.InnerException?.Message ?? ex.Message).Contains("UNIQUE", StringComparison.OrdinalIgnoreCase))
+    {
+        return Results.BadRequest(new ApiError("CAMPAIGN_DUPLICATE_NAME", "Campaign name already exists.", http.TraceIdentifier));
+    }
+    return Results.Ok(new { row.CampaignId });
 }).RequireAuthorization();
 
 app.MapDelete("/api/campaigns/{id:int}", async (int id, HttpContext http, AppDbContext db) =>
@@ -2028,3 +2083,6 @@ static void ApplyItem(UpsertItemRequest req, Item row)
 }
 
 app.Run();
+
+
+sealed record ApiError(string Code, string Message, string TraceId);
