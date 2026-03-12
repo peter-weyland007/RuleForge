@@ -4,6 +4,9 @@ public class ItemResponse
 {
     public int ItemId { get; set; }
     public int? OwnerAppUserId { get; set; }
+    public bool IsSystem { get; set; }
+    public bool IsUserVariant { get; set; }
+    public string? OwnerUsername { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public int ItemType { get; set; }

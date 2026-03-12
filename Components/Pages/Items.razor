@@ -18,6 +18,13 @@
 
     <ApiErrorAlert Message="@error" />
 
+    <MudStack Row="true" Spacing="1">
+        <MudChip T="string" Color="@(scopeFilter==ItemScopeFilter.All ? Color.Primary : Color.Default)" Variant="Variant.Outlined" OnClick="() => SetScope(ItemScopeFilter.All)">All</MudChip>
+        <MudChip T="string" Color="@(scopeFilter==ItemScopeFilter.Official ? Color.Primary : Color.Default)" Variant="Variant.Outlined" OnClick="() => SetScope(ItemScopeFilter.Official)">Official</MudChip>
+        <MudChip T="string" Color="@(scopeFilter==ItemScopeFilter.MyVault ? Color.Primary : Color.Default)" Variant="Variant.Outlined" OnClick="() => SetScope(ItemScopeFilter.MyVault)">My Vault</MudChip>
+        <MudChip T="string" Color="@(scopeFilter==ItemScopeFilter.Shared ? Color.Primary : Color.Default)" Variant="Variant.Outlined" OnClick="() => SetScope(ItemScopeFilter.Shared)">Shared</MudChip>
+    </MudStack>
+
     @if (isAdmin)
     {
         <MudSwitch T="bool" Value="showAllAdmin" ValueChanged="OnShowAllChanged" Color="Color.Info" Label="Show All (Admin)" />
@@ -25,19 +32,21 @@
 
     <MudTable Items="rows" Dense="true" Hover="true" Outlined="true" Elevation="0">
         <HeaderContent>
-            <MudTh>Name</MudTh><MudTh>Type</MudTh><MudTh>Rarity</MudTh><MudTh>Source</MudTh><MudTh>Cost</MudTh><MudTh></MudTh>
+            <MudTh>Name</MudTh><MudTh>Owner</MudTh><MudTh>Type</MudTh><MudTh>Rarity</MudTh><MudTh>Source</MudTh><MudTh>Cost</MudTh><MudTh></MudTh>
         </HeaderContent>
         <RowTemplate>
             <MudTd>@context.Name</MudTd>
+            <MudTd>@(context.IsSystem ? "System" : (string.IsNullOrWhiteSpace(context.OwnerUsername) ? "—" : context.OwnerUsername))</MudTd>
             <MudTd>@TypeLabel(context.ItemType)</MudTd>
             <MudTd>@RarityLabel(context.Rarity)</MudTd>
             <MudTd>@FormatSource(context)</MudTd>
             <MudTd>@(context.CostAmount is null ? "—" : $"{context.CostAmount} {context.CostCurrency}")</MudTd>
             <MudTd Style="text-align:right; white-space:nowrap;">
-                <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" OnClick="() => OpenEdit(context.ItemId)" />
-                <MudIconButton Icon="@Icons.Material.Filled.GroupAdd" Color="Color.Info" Size="Size.Small" OnClick="() => OpenShare(context.ItemId)" />
-                <MudIconButton Icon="@Icons.Material.Filled.Public" Color="Color.Success" Size="Size.Small" OnClick="() => PublishItem(context.ItemId, context.Name)" />
-                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="() => Delete(context.ItemId)" />
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" Disabled="@(!CanEdit(context))" OnClick="() => OpenEdit(context.ItemId)" />
+                <MudIconButton Icon="@Icons.Material.Filled.GroupAdd" Color="Color.Info" Size="Size.Small" Disabled="@(!CanShare(context))" OnClick="() => OpenShare(context.ItemId)" />
+                <MudIconButton Icon="@Icons.Material.Filled.Public" Color="Color.Success" Size="Size.Small" Disabled="@(!CanPublish(context))" OnClick="() => PublishItem(context.ItemId, context.Name)" />
+                <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Color="Color.Warning" Size="Size.Small" OnClick="() => CloneToVault(context.ItemId)" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" Disabled="@(!CanDelete(context))" OnClick="() => Delete(context.ItemId)" />
             </MudTd>
         </RowTemplate>
         <NoRecordsContent>
@@ -145,6 +154,8 @@
     private bool isSaving;
     private bool isAdmin;
     private bool showAllAdmin;
+    private ItemScopeFilter scopeFilter = ItemScopeFilter.All;
+    private string ShowAllQuery => (isAdmin && showAllAdmin) ? "?showAll=true" : string.Empty;
     private ItemForm form = new() { ItemType = 9, Rarity = 1, SourceType = 1, CostCurrency = "gp" };
     private bool isShare;
     private int? shareItemId;
@@ -176,6 +187,7 @@
         _loaded = true;
         var auth = await AuthStateProvider.GetAuthenticationStateAsync();
         isAdmin = auth.User.IsInRole("Admin");
+        currentUsername = auth.User.Identity?.Name;
         await Load();
         StateHasChanged();
     }
@@ -184,14 +196,22 @@
     {
         try
         {
-            var endpoint = showAllAdmin && isAdmin ? "/api/items?showAll=true" : "/api/items";
+            var endpoint = "/api/items" + ShowAllQuery;
             var r1 = await JS.InvokeAsync<ApiResult<List<ItemRow>>>("ruleforgeApi.get", endpoint);
             var r2 = await JS.InvokeAsync<ApiResult<FriendsOverview>>("ruleforgeApi.get", "/api/friends");
             if (!r1.Ok) { error = ApiErrorMessage(r1, "Failed to load items."); rows = new(); return; }
             rows = r1.Data ?? new();
+            rows = ApplyScope(rows);
             friends = r2.Data?.Friends ?? new();
         }
         catch (Exception ex) { error = ex.Message; rows = new(); friends = new(); }
+    }
+
+    private async Task SetScope(ItemScopeFilter value)
+    {
+        scopeFilter = value;
+        await Load();
+        StateHasChanged();
     }
 
     private async Task OnShowAllChanged(bool value)
@@ -203,6 +223,44 @@
 
     private void OpenCreate() { form = new ItemForm { ItemType = 9, Rarity = 1, SourceType = 1, CostCurrency = "gp" }; isEdit = true; }
     private void OpenShare(int id) { shareItemId = id; shareUserId = null; sharePermission = 0; isShare = true; }
+    private bool CanEdit(ItemRow row)
+    {
+        if (isAdmin) return true;
+        if (row.IsSystem) return isAdmin;
+        if (string.IsNullOrWhiteSpace(currentUsername)) return false;
+        return string.Equals(row.OwnerUsername, currentUsername, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool CanDelete(ItemRow row)
+    {
+        if (isAdmin) return true;
+        if (row.IsSystem) return isAdmin;
+        if (string.IsNullOrWhiteSpace(currentUsername)) return false;
+        return string.Equals(row.OwnerUsername, currentUsername, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool CanPublish(ItemRow row)
+    {
+        // disallow publishing official-source records (system or user variants)
+        if (isAdmin) return true;
+        return !row.IsSystem;
+    }
+
+    private bool CanShare(ItemRow row)
+    {
+        if (row.IsSystem) return isAdmin;
+        if (isAdmin) return true;
+        if (string.IsNullOrWhiteSpace(currentUsername)) return false;
+        return string.Equals(row.OwnerUsername, currentUsername, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task CloneToVault(int id)
+    {
+        var res = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.post", $"/api/items/{id}/clone", new { });
+        if (!res.Ok) { error = ApiErrorMessage(res, "Clone failed."); return; }
+        await Load();
+    }
+
     private async Task PublishItem(int itemId, string name)
     {
         var title = await JS.InvokeAsync<string?>("prompt", "Marketplace title:", name);
@@ -217,11 +275,11 @@
     private async Task SaveShare()
     {
         if (!shareItemId.HasValue || !shareUserId.HasValue) { error = "Pick a friend to share with."; return; }
-        var res = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.post", $"/api/items/{shareItemId.Value}/share", new { userId = shareUserId.Value, permission = sharePermission });
+        var res = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.post", $"/api/items/{shareItemId.Value}/share{ShowAllQuery}", new { userId = shareUserId.Value, permission = sharePermission });
         if (!res.Ok) { error = ApiErrorMessage(res, "Share failed."); return; }
         isShare = false;
     }
-    private async Task OpenEdit(int id){ var r=await JS.InvokeAsync<ApiResult<ItemRow>>("ruleforgeApi.get", $"/api/items/{id}"); if(!r.Ok || r.Data is null){ error = string.IsNullOrWhiteSpace(r.Text) ? "Item not found." : r.Text; return; } form = new ItemForm(r.Data); isEdit=true; }
+    private async Task OpenEdit(int id){ var r=await JS.InvokeAsync<ApiResult<ItemRow>>("ruleforgeApi.get", $"/api/items/{id}{ShowAllQuery}"); if(!r.Ok || r.Data is null){ error = string.IsNullOrWhiteSpace(r.Text) ? "Item not found." : r.Text; return; } form = new ItemForm(r.Data); isEdit=true; }
 
     private async Task Save()
     {
@@ -230,7 +288,7 @@
         try
         {
             ApiResult<object> res = form.ItemId.HasValue
-                ? await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.put", $"/api/items/{form.ItemId.Value}", form)
+                ? await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.put", $"/api/items/{form.ItemId.Value}{ShowAllQuery}", form)
                 : await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.post", "/api/items", form);
             if(!res.Ok){ error = ApiErrorMessage(res, "Save failed."); return; }
             isEdit=false; await Load();
@@ -242,13 +300,32 @@
     {
         var ok = await JS.InvokeAsync<bool>("confirm", "Delete this item?");
         if(!ok) return;
-        var res = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.delete", $"/api/items/{id}"); if(!res.Ok){ error = ApiErrorMessage(res, "Delete failed."); return; } await Load();
+        var res = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.delete", $"/api/items/{id}{ShowAllQuery}"); if(!res.Ok){ error = ApiErrorMessage(res, "Delete failed."); return; } await Load();
     }
+
+    private List<ItemRow> ApplyScope(List<ItemRow> src)
+    {
+        return scopeFilter switch
+        {
+            ItemScopeFilter.Official => src.Where(x => x.IsSystem).ToList(),
+            ItemScopeFilter.MyVault => src.Where(x => !x.IsSystem && x.OwnerAppUserId.HasValue && x.OwnerUsername == currentUsername).ToList(),
+            ItemScopeFilter.Shared => src.Where(x => !x.IsSystem && x.OwnerUsername != currentUsername).ToList(),
+            _ => src
+        };
+    }
+
+    private string? currentUsername;
 
     private static string TypeLabel(int t)=> t switch {1=>"Weapon",2=>"Armor",3=>"Consumable",4=>"Gear",5=>"Treasure",6=>"Spell Focus",7=>"Tool",8=>"Ammunition",_=>"Other"};
     private static string RarityLabel(int r)=> r switch {1=>"Common",2=>"Uncommon",3=>"Rare",4=>"Very Rare",5=>"Legendary",_=>"Artifact"};
     private static string SourceTypeLabel(int? s)=> s switch {1=>"Official",2=>"Homebrew",3=>"Third Party",4=>"Other",_=>"Other"};
-    private static string FormatSource(ItemRow row) => string.IsNullOrWhiteSpace(row.Source) ? SourceTypeLabel(row.SourceType) : $"{SourceTypeLabel(row.SourceType)} · {row.Source}";
+    private static string FormatSource(ItemRow row)
+    {
+        var baseLabel = string.IsNullOrWhiteSpace(row.Source) ? SourceTypeLabel(row.SourceType) : $"{SourceTypeLabel(row.SourceType)} · {row.Source}";
+        if (row.IsSystem) return baseLabel + " • System";
+        if (row.IsUserVariant) return baseLabel + " (User Variant)";
+        return baseLabel;
+    }
 
     private static string ApiErrorMessage<T>(ApiResult<T> res, string fallback)
     {
@@ -331,6 +408,8 @@
         }
     }
 
+    private enum ItemScopeFilter { All, Official, MyVault, Shared }
+
     private record FriendUser(int AppUserId, string Username, string Email);
     private record FriendsOverview(List<FriendUser> Friends);
 
@@ -338,5 +417,11 @@
         int ItemId,string Name,string? Description,int ItemType,int Rarity,decimal? Weight,decimal? CostAmount,string? CostCurrency,bool RequiresAttunement,
         int? SourceType,string? Source,string? Tags,string? WeaponCategory,string? DamageDice,string? DamageType,string? Properties,int? RangeNormal,int? RangeMax,bool IsMagicWeapon,
         int? AttackBonus,int? DamageBonus,string? ArmorCategory,int? ArmorClassBase,int? DexCap,int? StrengthRequirement,bool StealthDisadvantage,bool IsMagicArmor,
-        int? ArmorBonus,int? Charges,int? MaxCharges,string? RechargeRule,string? ConsumableEffect,int? Quantity,bool Stackable,string? Notes);
+        int? ArmorBonus,int? Charges,int? MaxCharges,string? RechargeRule,string? ConsumableEffect,int? Quantity,bool Stackable,string? Notes)
+    {
+        public int? OwnerAppUserId { get; init; }
+        public string? OwnerUsername { get; init; }
+        public bool IsSystem { get; init; }
+        public bool IsUserVariant { get; init; }
+    }
 }

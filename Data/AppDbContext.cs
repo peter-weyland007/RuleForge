@@ -18,6 +18,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<Campaign> Campaigns => Set<Campaign>();
     public DbSet<CampaignShare> CampaignShares => Set<CampaignShare>();
     public DbSet<Creature> Creatures => Set<Creature>();
+    public DbSet<CreatureShare> CreatureShares => Set<CreatureShare>();
     public DbSet<Encounter> Encounters => Set<Encounter>();
     public DbSet<EncounterParticipant> EncounterParticipants => Set<EncounterParticipant>();
     public DbSet<Party> Parties => Set<Party>();
@@ -139,6 +140,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         it.Property(x => x.Notes).HasMaxLength(2000);
         it.HasIndex(x => x.Name);
         it.Property(x => x.OwnerAppUserId);
+        it.Property(x => x.IsSystem).HasDefaultValue(false);
         it.HasIndex(x => x.OwnerAppUserId);
 
         var fl = modelBuilder.Entity<FriendLink>();
@@ -183,6 +185,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         var ma = modelBuilder.Entity<MarketplaceAuditEvent>();
         ma.HasKey(x => x.MarketplaceAuditEventId);
         ma.HasIndex(x => new { x.MarketplaceListingId, x.DateUtc });
+
+        var crs = modelBuilder.Entity<CreatureShare>();
+        crs.HasKey(x => x.CreatureShareId);
+        crs.HasIndex(x => new { x.CreatureId, x.SharedWithUserId }).IsUnique();
 
 
     }

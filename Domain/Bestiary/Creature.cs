@@ -5,6 +5,8 @@ public sealed class Creature
     public int CreatureId { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
+    public bool IsSystem { get; set; }
+    public int? OwnerAppUserId { get; set; }
 
     public int? ArmorClass { get; set; }
     public int? HitPoints { get; set; }

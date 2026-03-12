@@ -29,4 +29,6 @@ public sealed class UpsertCreatureRequest
     public int? Intelligence { get; set; }
     public int? Wisdom { get; set; }
     public int? Charisma { get; set; }
+    public bool IsSystem { get; set; }
+    public int? OwnerAppUserId { get; set; }
 }

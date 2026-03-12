@@ -5,6 +5,7 @@ public sealed class Item
     public int ItemId { get; set; }
     public string Name { get; set; } = string.Empty;
     public int? OwnerAppUserId { get; set; }
+    public bool IsSystem { get; set; }
     public string? Description { get; set; }
     public ItemType ItemType { get; set; } = ItemType.Other;
     public ItemRarity Rarity { get; set; } = ItemRarity.Common;

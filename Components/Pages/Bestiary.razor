@@ -1,7 +1,9 @@
+@using Microsoft.AspNetCore.Components.Authorization
 @page "/bestiary"
 @inject IHttpClientFactory HttpFactory
 @inject NavigationManager Nav
 @inject IJSRuntime JS
+@inject AuthenticationStateProvider AuthStateProvider
 
 <PageTitle>Bestiary</PageTitle>
 
@@ -15,6 +17,13 @@
     </MudStack>
 
     <ApiErrorAlert Message="@error" />
+
+    <MudStack Row="true" Spacing="1">
+        <MudChip T="string" Color="@(scopeFilter==CreatureScopeFilter.All ? Color.Primary : Color.Default)" Variant="Variant.Outlined" OnClick="() => SetScope(CreatureScopeFilter.All)">All</MudChip>
+        <MudChip T="string" Color="@(scopeFilter==CreatureScopeFilter.Official ? Color.Primary : Color.Default)" Variant="Variant.Outlined" OnClick="() => SetScope(CreatureScopeFilter.Official)">Official</MudChip>
+        <MudChip T="string" Color="@(scopeFilter==CreatureScopeFilter.MyVault ? Color.Primary : Color.Default)" Variant="Variant.Outlined" OnClick="() => SetScope(CreatureScopeFilter.MyVault)">My Vault</MudChip>
+        <MudChip T="string" Color="@(scopeFilter==CreatureScopeFilter.Shared ? Color.Primary : Color.Default)" Variant="Variant.Outlined" OnClick="() => SetScope(CreatureScopeFilter.Shared)">Shared</MudChip>
+    </MudStack>
 
     <MudTable Items="rows" Dense="true" Hover="true" Outlined="true" Elevation="0">
         <HeaderContent>
@@ -34,9 +43,11 @@
             <MudTd>@(context.InitiativeModifier?.ToString() ?? "—")</MudTd>
             <MudTd>@(context.ExperiencePoints?.ToString() ?? "—")</MudTd>
             <MudTd Style="text-align: right; white-space: nowrap;">
-                <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" OnClick="() => OpenEdit(context.CreatureId)" />
-                <MudIconButton Icon="@Icons.Material.Filled.Public" Color="Color.Success" Size="Size.Small" OnClick="() => PublishCreature(context.CreatureId, context.Name)" />
-                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="() => Delete(context.CreatureId)" />
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" Disabled="@(!CanEdit(context))" OnClick="() => OpenEdit(context.CreatureId)" />
+                <MudIconButton Icon="@Icons.Material.Filled.GroupAdd" Color="Color.Info" Size="Size.Small" Disabled="@(!CanShare(context))" OnClick="() => OpenShare(context.CreatureId)" />
+                <MudIconButton Icon="@Icons.Material.Filled.Public" Color="Color.Success" Size="Size.Small" Disabled="@(!CanPublish(context))" OnClick="() => PublishCreature(context.CreatureId, context.Name)" />
+                <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Color="Color.Warning" Size="Size.Small" OnClick="() => CloneCreatureToVault(context.CreatureId)" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" Disabled="@(!CanDelete(context))" OnClick="() => Delete(context.CreatureId)" />
             </MudTd>
         </RowTemplate>
         <NoRecordsContent>
@@ -112,6 +123,14 @@
     private List<CreatureRow> rows = new();
     private string? error;
     private bool isSaving;
+    private bool isAdmin;
+    private CreatureScopeFilter scopeFilter = CreatureScopeFilter.All;
+    private string? currentUsername;
+    private bool isShare;
+    private int? shareCreatureId;
+    private int? shareUserId;
+    private int sharePermission;
+    private List<FriendUser> friends = new();
     private bool isCreate;
     private CreatureForm form = new();
 
@@ -121,6 +140,18 @@
     {
         if (!firstRender || _loaded) return;
         _loaded = true;
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        isAdmin = auth.User.IsInRole("Admin");
+        currentUsername = auth.User.Identity?.Name;
+        var idStr = auth.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        currentUserId = int.TryParse(idStr, out var idv) ? idv : null;
+        await Load();
+        StateHasChanged();
+    }
+
+    private async Task SetScope(CreatureScopeFilter value)
+    {
+        scopeFilter = value;
         await Load();
         StateHasChanged();
     }
@@ -132,7 +163,9 @@
             error = null;
             var r = await JS.InvokeAsync<ApiResult<List<CreatureRow>>>("ruleforgeApi.get", "/api/creatures");
             if (!r.Ok) { error = ApiErrorMessage(r, "Failed to load creatures."); rows = new(); return; }
-            rows = r.Data ?? new();
+            rows = ApplyScope(r.Data ?? new());
+            var fr = await JS.InvokeAsync<ApiResult<FriendsOverview>>("ruleforgeApi.get", "/api/friends");
+            friends = fr.Data?.Friends ?? new();
         }
         catch (Exception ex)
         {
@@ -185,6 +218,55 @@
         {
             error = ex.Message;
         }
+    }
+
+    private bool CanEdit(CreatureRow row)
+    {
+        if (isAdmin) return true;
+        if (row.IsSystem) return false;
+        return true;
+    }
+
+    private bool CanShare(CreatureRow row)
+    {
+        if (isAdmin) return true;
+        if (row.IsSystem) return false;
+        return true;
+    }
+
+    private void OpenShare(int id)
+    {
+        shareCreatureId = id;
+        shareUserId = null;
+        sharePermission = 0;
+        isShare = true;
+    }
+
+    private async Task SaveShare()
+    {
+        if (!shareCreatureId.HasValue || !shareUserId.HasValue) { error = "Pick a friend to share with."; return; }
+        var res = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.post", $"/api/creatures/{shareCreatureId.Value}/share", new { userId = shareUserId.Value, permission = sharePermission });
+        if (!res.Ok) { error = ApiErrorMessage(res, "Share failed."); return; }
+        isShare = false;
+    }
+
+    private bool CanPublish(CreatureRow row)
+    {
+        if (isAdmin) return true;
+        return !row.IsSystem;
+    }
+
+    private bool CanDelete(CreatureRow row)
+    {
+        if (isAdmin) return true;
+        return !row.IsSystem;
+    }
+
+    private async Task CloneCreatureToVault(int id)
+    {
+        var res = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.post", $"/api/creatures/{id}/clone", new { });
+        if (!res.Ok) { error = ApiErrorMessage(res, "Clone failed."); return; }
+        await Load();
     }
 
     private async Task PublishCreature(int creatureId, string name)
@@ -308,6 +390,19 @@
 
     private sealed class ApiResult<T> { public bool Ok { get; set; } public int Status { get; set; } public T? Data { get; set; } public string? Text { get; set; } }
 
+    private List<CreatureRow> ApplyScope(List<CreatureRow> src)
+    {
+        return scopeFilter switch
+        {
+            CreatureScopeFilter.Official => src.Where(x => x.IsSystem).ToList(),
+            CreatureScopeFilter.MyVault => src.Where(x => !x.IsSystem && x.OwnerAppUserId.HasValue && x.OwnerAppUserId == currentUserId).ToList(),
+            CreatureScopeFilter.Shared => src.Where(x => !x.IsSystem && (!x.OwnerAppUserId.HasValue || x.OwnerAppUserId != currentUserId)).ToList(),
+            _ => src
+        };
+    }
+
+    private int? currentUserId;
+
     private static int AbilityMod(int? score) => score.HasValue ? (int)Math.Floor((score.Value - 10) / 2.0) : 0;
     private static string ModLabel(int? score) => $"{(AbilityMod(score) >= 0 ? "+" : string.Empty)}{AbilityMod(score)}";
     private static string AbilityLabel(string abbr, int? score) => $"{abbr} ({ModLabel(score)})";
@@ -332,6 +427,11 @@
         public int? Charisma { get; set; }
     }
 
+    private enum CreatureScopeFilter { All, Official, MyVault, Shared }
+
+    private record FriendUser(int AppUserId, string Username, string Email);
+    private record FriendsOverview(List<FriendUser> Friends);
+
     private sealed record CreatureRow(
         int CreatureId,
         string Name,
@@ -348,5 +448,5 @@
         int? Constitution,
         int? Intelligence,
         int? Wisdom,
-        int? Charisma);
+        int? Charisma, bool IsSystem, int? OwnerAppUserId);
 }
