@@ -424,6 +424,14 @@
         return t;
     }
 
+    private sealed class ApiResult<T>
+    {
+        public bool Ok { get; set; }
+        public int Status { get; set; }
+        public T? Data { get; set; }
+        public string? Text { get; set; }
+    }
+
     private sealed class EncounterForm
     {
         public int? EncounterId { get; set; }
