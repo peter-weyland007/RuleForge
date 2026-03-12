@@ -14,12 +14,14 @@ window.ruleforgeApi = {
       try { text = await res.text(); } catch {}
     }
 
-    if (!res.ok && !text && data !== null && data !== undefined) {
-      if (typeof data === 'string') {
+    if (!res.ok && data !== null && data !== undefined) {
+      if (!text && typeof data === 'string') {
         text = data;
-      } else if (typeof data === 'object') {
+      } else if (!text && typeof data === 'object') {
         text = data.message || data.Message || data.title || data.error || '';
       }
+      // prevent typed C# interop deserialization failures on error envelopes
+      data = null;
     }
 
     let traceId = null;
