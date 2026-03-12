@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authentication;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.HttpOverrides;
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using RuleForge.Contracts.Characters;
@@ -73,6 +74,13 @@ builder.Services.AddAuthorization();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
 var configuredProvider = builder.Configuration["Database:Provider"]
     ?? Environment.GetEnvironmentVariable("RULEFORGE_DB_PROVIDER");
 var dbProvider = string.IsNullOrWhiteSpace(configuredProvider)
@@ -138,6 +146,8 @@ app.UseHttpsRedirection();
 app.UseAntiforgery();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseForwardedHeaders();
+
 app.MapStaticAssets();
 
 app.Use(async (ctx, next) =>

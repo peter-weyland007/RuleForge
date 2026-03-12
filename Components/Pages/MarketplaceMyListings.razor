@@ -1,4 +1,6 @@
+@using Microsoft.AspNetCore.Authorization
 @page "/marketplace/my-listings"
+@attribute [Authorize]
 @inject IJSRuntime JS
 
 <PageTitle>My Marketplace Listings</PageTitle>

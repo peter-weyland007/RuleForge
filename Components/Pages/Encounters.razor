@@ -1,4 +1,6 @@
+@using Microsoft.AspNetCore.Authorization
 @page "/encounters"
+@attribute [Authorize]
 @inject IHttpClientFactory HttpFactory
 @inject NavigationManager Nav
 @inject IJSRuntime JS
