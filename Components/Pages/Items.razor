@@ -36,6 +36,7 @@
             <MudTd Style="text-align:right; white-space:nowrap;">
                 <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" OnClick="() => OpenEdit(context.ItemId)" />
                 <MudIconButton Icon="@Icons.Material.Filled.GroupAdd" Color="Color.Info" Size="Size.Small" OnClick="() => OpenShare(context.ItemId)" />
+                <MudIconButton Icon="@Icons.Material.Filled.Public" Color="Color.Success" Size="Size.Small" OnClick="() => PublishItem(context.ItemId, context.Name)" />
                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="() => Delete(context.ItemId)" />
             </MudTd>
         </RowTemplate>
@@ -202,6 +203,17 @@
 
     private void OpenCreate() { form = new ItemForm { ItemType = 9, Rarity = 1, SourceType = 1, CostCurrency = "gp" }; isEdit = true; }
     private void OpenShare(int id) { shareItemId = id; shareUserId = null; sharePermission = 0; isShare = true; }
+    private async Task PublishItem(int itemId, string name)
+    {
+        var title = await JS.InvokeAsync<string?>("prompt", "Marketplace title:", name);
+        if (string.IsNullOrWhiteSpace(title)) return;
+        var summary = await JS.InvokeAsync<string?>("prompt", "Summary (optional):", "");
+        var tags = await JS.InvokeAsync<string?>("prompt", "Tags comma-separated (optional):", "");
+        var req = new { assetType = 1, sourceEntityId = itemId, title = title, summary = summary, tags = string.IsNullOrWhiteSpace(tags) ? null : tags.Split(',').Select(x => x.Trim()).Where(x => x.Length > 0).ToArray() };
+        var res = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.post", "/api/marketplace/publish", req);
+        if (!res.Ok) { error = ApiErrorMessage(res, "Publish failed."); return; }
+    }
+
     private async Task SaveShare()
     {
         if (!shareItemId.HasValue || !shareUserId.HasValue) { error = "Pick a friend to share with."; return; }

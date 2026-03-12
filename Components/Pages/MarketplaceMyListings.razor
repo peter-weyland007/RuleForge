@@ -1,0 +1,57 @@
+@page "/marketplace/my-listings"
+@inject IJSRuntime JS
+
+<PageTitle>My Marketplace Listings</PageTitle>
+
+<MudStack Spacing="2">
+    <MudText Typo="Typo.h4">My Listings</MudText>
+    <ApiErrorAlert Message="@error" />
+
+    <MudTable Items="rows" Dense="true" Hover="true" Outlined="true" Elevation="0">
+        <HeaderContent>
+            <MudTh>Type</MudTh><MudTh>Title</MudTh><MudTh>State</MudTh><MudTh></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>@(context.AssetType == 1 ? "Item" : "Creature")</MudTd>
+            <MudTd>@context.Title</MudTd>
+            <MudTd>@(context.State == 2 ? "Removed" : "Public")</MudTd>
+            <MudTd Style="text-align:right;">
+                @if (context.State != 2)
+                {
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="() => Unpublish(context.MarketplaceListingId)">Unpublish</MudButton>
+                }
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+</MudStack>
+
+@code {
+    private string? error;
+    private List<Row> rows = new();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        await Load();
+        StateHasChanged();
+    }
+
+    private async Task Load()
+    {
+        var res = await JS.InvokeAsync<ApiResult<List<Row>>>("ruleforgeApi.get", "/api/marketplace/me/listings");
+        if (!res.Ok) { error = res.Text ?? "Failed to load listings."; rows = new(); return; }
+        rows = res.Data ?? new();
+    }
+
+    private async Task Unpublish(int id)
+    {
+        var ok = await JS.InvokeAsync<bool>("confirm", "Unpublish this listing?");
+        if (!ok) return;
+        var res = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.post", $"/api/marketplace/listings/{id}/unpublish", new { });
+        if (!res.Ok) { error = res.Text ?? "Unpublish failed."; return; }
+        await Load();
+    }
+
+    private sealed class ApiResult<T> { public bool Ok { get; set; } public int Status { get; set; } public T? Data { get; set; } public string? Text { get; set; } }
+    private sealed record Row(int MarketplaceListingId, int AssetType, int State, string Title);
+}

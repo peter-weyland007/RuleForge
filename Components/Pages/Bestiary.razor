@@ -35,6 +35,7 @@
             <MudTd>@(context.ExperiencePoints?.ToString() ?? "—")</MudTd>
             <MudTd Style="text-align: right; white-space: nowrap;">
                 <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" OnClick="() => OpenEdit(context.CreatureId)" />
+                <MudIconButton Icon="@Icons.Material.Filled.Public" Color="Color.Success" Size="Size.Small" OnClick="() => PublishCreature(context.CreatureId, context.Name)" />
                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="() => Delete(context.CreatureId)" />
             </MudTd>
         </RowTemplate>
@@ -87,12 +88,12 @@
 
                 <MudText Typo="Typo.subtitle2" Class="mt-2">Ability Scores</MudText>
                 <MudGrid>
-                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Strength" Label="STR" Variant="Variant.Outlined" /></MudItem>
-                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Dexterity" Label="DEX" Variant="Variant.Outlined" /></MudItem>
-                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Constitution" Label="CON" Variant="Variant.Outlined" /></MudItem>
-                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Intelligence" Label="INT" Variant="Variant.Outlined" /></MudItem>
-                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Wisdom" Label="WIS" Variant="Variant.Outlined" /></MudItem>
-                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Charisma" Label="CHA" Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Strength" Label='@($"STR ({ModLabel(form.Strength)})")' Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Dexterity" Label='@($"DEX ({ModLabel(form.Dexterity)})")' Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Constitution" Label='@($"CON ({ModLabel(form.Constitution)})")' Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Intelligence" Label='@($"INT ({ModLabel(form.Intelligence)})")' Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Wisdom" Label='@($"WIS ({ModLabel(form.Wisdom)})")' Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Charisma" Label='@($"CHA ({ModLabel(form.Charisma)})")' Variant="Variant.Outlined" /></MudItem>
                 </MudGrid>
 
                 <MudText Typo="Typo.subtitle2" Class="mt-2">Notes</MudText>
@@ -184,6 +185,17 @@
         {
             error = ex.Message;
         }
+    }
+
+    private async Task PublishCreature(int creatureId, string name)
+    {
+        var title = await JS.InvokeAsync<string?>("prompt", "Marketplace title:", name);
+        if (string.IsNullOrWhiteSpace(title)) return;
+        var summary = await JS.InvokeAsync<string?>("prompt", "Summary (optional):", "");
+        var tags = await JS.InvokeAsync<string?>("prompt", "Tags comma-separated (optional):", "");
+        var req = new { assetType = 2, sourceEntityId = creatureId, title = title, summary = summary, tags = string.IsNullOrWhiteSpace(tags) ? null : tags.Split(',').Select(x => x.Trim()).Where(x => x.Length > 0).ToArray() };
+        var res = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.post", "/api/marketplace/publish", req);
+        if (!res.Ok) { error = ApiErrorMessage(res, "Publish failed."); return; }
     }
 
     private async Task Delete(int creatureId)
@@ -295,6 +307,10 @@
     }
 
     private sealed class ApiResult<T> { public bool Ok { get; set; } public int Status { get; set; } public T? Data { get; set; } public string? Text { get; set; } }
+
+    private static int AbilityMod(int? score) => score.HasValue ? (int)Math.Floor((score.Value - 10) / 2.0) : 0;
+    private static string ModLabel(int? score) => $"{(AbilityMod(score) >= 0 ? "+" : string.Empty)}{AbilityMod(score)}";
+    private static string AbilityLabel(string abbr, int? score) => $"{abbr} ({ModLabel(score)})";
 
     private sealed class CreatureForm
     {

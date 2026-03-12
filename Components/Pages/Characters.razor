@@ -28,6 +28,9 @@
             <MudTh>Name</MudTh>
             <MudTh>Type</MudTh>
             <MudTh>Class</MudTh>
+            <MudTh>Subclass</MudTh>
+            <MudTh>Race</MudTh>
+            <MudTh>Subrace</MudTh>
             <MudTh>Lvl</MudTh>
             <MudTh>AC</MudTh>
             <MudTh>HP</MudTh>
@@ -41,6 +44,9 @@
                 </MudChip>
             </MudTd>
             <MudTd>@context.ClassName</MudTd>
+            <MudTd>@context.SubclassName</MudTd>
+            <MudTd>@context.RaceName</MudTd>
+            <MudTd>@context.SubraceName</MudTd>
             <MudTd>@context.Level</MudTd>
             <MudTd>@context.ArmorClass</MudTd>
             <MudTd>@($"{context.HitPointsCurrent}/{context.HitPointsMax}")</MudTd>
@@ -132,6 +138,15 @@
                     <MudItem xs="12" md="3">
                         <MudTextField @bind-Value="form.ClassName" Label="Class" Placeholder="e.g., Ranger" Variant="Variant.Outlined" />
                     </MudItem>
+                    <MudItem xs="12" md="3">
+                        <MudTextField @bind-Value="form.SubclassName" Label="Subclass" Placeholder="e.g., Gloom Stalker" Variant="Variant.Outlined" />
+                    </MudItem>
+                    <MudItem xs="12" md="3">
+                        <MudTextField @bind-Value="form.RaceName" Label="Race" Placeholder="e.g., Elf" Variant="Variant.Outlined" />
+                    </MudItem>
+                    <MudItem xs="12" md="3">
+                        <MudTextField @bind-Value="form.SubraceName" Label="Subrace" Placeholder="e.g., Wood Elf" Variant="Variant.Outlined" />
+                    </MudItem>
                     <MudItem xs="12" md="2">
                         <MudNumericField T="int?" @bind-Value="form.ArmorClass" Label="AC" Variant="Variant.Outlined" />
                     </MudItem>
@@ -145,12 +160,12 @@
 
                 <MudText Typo="Typo.subtitle2" Class="mt-2">Ability Scores</MudText>
                 <MudGrid>
-                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Strength" Label="STR" Variant="Variant.Outlined" /></MudItem>
-                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Dexterity" Label="DEX" Variant="Variant.Outlined" /></MudItem>
-                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Constitution" Label="CON" Variant="Variant.Outlined" /></MudItem>
-                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Intelligence" Label="INT" Variant="Variant.Outlined" /></MudItem>
-                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Wisdom" Label="WIS" Variant="Variant.Outlined" /></MudItem>
-                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Charisma" Label="CHA" Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Strength" Label='@($"STR ({ModLabel(form.Strength)})")' Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Dexterity" Label='@($"DEX ({ModLabel(form.Dexterity)})")' Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Constitution" Label='@($"CON ({ModLabel(form.Constitution)})")' Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Intelligence" Label='@($"INT ({ModLabel(form.Intelligence)})")' Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Wisdom" Label='@($"WIS ({ModLabel(form.Wisdom)})")' Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Charisma" Label='@($"CHA ({ModLabel(form.Charisma)})")' Variant="Variant.Outlined" /></MudItem>
                 </MudGrid>
 
                 <MudText Typo="Typo.subtitle2" Class="mt-2">Notes</MudText>
@@ -258,6 +273,9 @@
                 HitPointsMax = row.HitPointsMax,
                 Level = row.Level,
                 ClassName = row.ClassName,
+                SubclassName = row.SubclassName,
+                RaceName = row.RaceName,
+                SubraceName = row.SubraceName,
                 Strength = row.Strength,
                 Dexterity = row.Dexterity,
                 Constitution = row.Constitution,
@@ -347,6 +365,9 @@
                 hitPointsMax = form.HitPointsMax,
                 level = form.Level,
                 className = form.ClassName,
+                subclassName = form.SubclassName,
+                raceName = form.RaceName,
+                subraceName = form.SubraceName,
                 strength = form.Strength,
                 dexterity = form.Dexterity,
                 constitution = form.Constitution,
@@ -369,6 +390,9 @@
         catch (Exception ex) { error = ex.Message; }
         finally { isSaving = false; }
     }
+
+    private static int AbilityMod(int? score) => score.HasValue ? (int)Math.Floor((score.Value - 10) / 2.0) : 0;
+    private static string ModLabel(int? score) => $"{(AbilityMod(score) >= 0 ? "+" : string.Empty)}{AbilityMod(score)}";
 
     private static string DisplayName(CharacterRow row) => row.CharacterType == 1 && !string.IsNullOrWhiteSpace(row.PlayerName) ? $"{row.Name} ({row.PlayerName})" : row.Name;
 
@@ -416,6 +440,9 @@
         public int? HitPointsMax { get; set; }
         public int? Level { get; set; }
         public string? ClassName { get; set; }
+        public string? SubclassName { get; set; }
+        public string? RaceName { get; set; }
+        public string? SubraceName { get; set; }
         public int? Strength { get; set; }
         public int? Dexterity { get; set; }
         public int? Constitution { get; set; }
@@ -425,8 +452,8 @@
         public string? Notes { get; set; }
     }
 
-    private sealed record CharacterRow(int CharacterId, int? CampaignId, int? PartyId, int CharacterType, string Name, string? PlayerName, int? ArmorClass, int? HitPointsCurrent, int? HitPointsMax, int? Level, string? ClassName);
-    private sealed record CharacterDetail(int CharacterId, int? CampaignId, int? PartyId, int CharacterType, string Name, string? PlayerName, int? ArmorClass, int? HitPointsCurrent, int? HitPointsMax, int? Level, string? ClassName, int? Strength, int? Dexterity, int? Constitution, int? Intelligence, int? Wisdom, int? Charisma, string? Notes);
+    private sealed record CharacterRow(int CharacterId, int? CampaignId, int? PartyId, int CharacterType, string Name, string? PlayerName, int? ArmorClass, int? HitPointsCurrent, int? HitPointsMax, int? Level, string? ClassName, string? SubclassName, string? RaceName, string? SubraceName);
+    private sealed record CharacterDetail(int CharacterId, int? CampaignId, int? PartyId, int CharacterType, string Name, string? PlayerName, int? ArmorClass, int? HitPointsCurrent, int? HitPointsMax, int? Level, string? ClassName, string? SubclassName, string? RaceName, string? SubraceName, int? Strength, int? Dexterity, int? Constitution, int? Intelligence, int? Wisdom, int? Charisma, string? Notes);
     private sealed record CampaignOption(int CampaignId, string Name);
     private sealed record PartyOption(int PartyId, string Name);
     private sealed record FriendUser(int AppUserId, string Username, string Email);

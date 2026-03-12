@@ -34,6 +34,9 @@ public sealed class UpsertCharacterRequest
 
     public int? Level { get; set; }
     public string? ClassName { get; set; }
+    public string? SubclassName { get; set; }
+    public string? RaceName { get; set; }
+    public string? SubraceName { get; set; }
     public int? PassivePerception { get; set; }
 
     public string? Conditions { get; set; }

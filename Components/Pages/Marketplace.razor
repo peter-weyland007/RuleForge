@@ -1,0 +1,74 @@
+@page "/marketplace"
+@inject IJSRuntime JS
+
+<PageTitle>Marketplace</PageTitle>
+
+<MudStack Spacing="2">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+        <MudText Typo="Typo.h4">Marketplace</MudText>
+        <MudButton Variant="Variant.Outlined" Color="Color.Info" Href="/marketplace/my-listings">My Listings</MudButton>
+    </MudStack>
+
+    <MudTextField @bind-Value="query" Label="Search" Variant="Variant.Outlined" Immediate="true" />
+    <MudSelect T="int?" @bind-Value="assetType" Label="Asset Type" Variant="Variant.Outlined">
+        <MudSelectItem T="int?" Value="null">All</MudSelectItem>
+        <MudSelectItem T="int?" Value="1">Items</MudSelectItem>
+        <MudSelectItem T="int?" Value="2">Creatures</MudSelectItem>
+    </MudSelect>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Load">Search</MudButton>
+
+    <ApiErrorAlert Message="@error" />
+
+    <MudTable Items="rows" Dense="true" Hover="true" Outlined="true" Elevation="0">
+        <HeaderContent>
+            <MudTh>Type</MudTh>
+            <MudTh>Title</MudTh>
+            <MudTh>Summary</MudTh>
+            <MudTh></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>@(context.AssetType == 1 ? "Item" : "Creature")</MudTd>
+            <MudTd>@context.Title</MudTd>
+            <MudTd>@context.Summary</MudTd>
+            <MudTd Style="text-align:right;">
+                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="() => Import(context.MarketplaceListingId)">Import</MudButton>
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+</MudStack>
+
+@code {
+    private string? query;
+    private int? assetType;
+    private string? error;
+    private List<Row> rows = new();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        await Load();
+        StateHasChanged();
+    }
+
+    private async Task Load()
+    {
+        error = null;
+        var qs = new List<string>();
+        if (!string.IsNullOrWhiteSpace(query)) qs.Add($"q={Uri.EscapeDataString(query)}");
+        if (assetType.HasValue) qs.Add($"assetType={assetType.Value}");
+        var url = "/api/marketplace/listings" + (qs.Count > 0 ? "?" + string.Join("&", qs) : string.Empty);
+        var res = await JS.InvokeAsync<ApiResult<List<Row>>>("ruleforgeApi.get", url);
+        if (!res.Ok) { error = res.Text ?? "Failed to load marketplace."; rows = new(); return; }
+        rows = res.Data ?? new();
+    }
+
+    private async Task Import(int listingId)
+    {
+        error = null;
+        var res = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.post", $"/api/marketplace/listings/{listingId}/import", new { });
+        if (!res.Ok) { error = res.Text ?? "Import failed."; return; }
+    }
+
+    private sealed class ApiResult<T> { public bool Ok { get; set; } public int Status { get; set; } public T? Data { get; set; } public string? Text { get; set; } }
+    private sealed record Row(int MarketplaceListingId, int AssetType, string Title, string? Summary);
+}

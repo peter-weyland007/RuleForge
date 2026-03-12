@@ -6,6 +6,7 @@ using RuleForge.Domain.Encounters;
 using RuleForge.Domain.Parties;
 using RuleForge.Domain.Quests;
 using RuleForge.Domain.Users;
+using RuleForge.Domain.Marketplace;
 using RuleForge.Domain.Items;
 using RuleForge.Domain.Common;
 
@@ -30,6 +31,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<CharacterShare> CharacterShares => Set<CharacterShare>();
     public DbSet<ItemShare> ItemShares => Set<ItemShare>();
     public DbSet<FriendLink> FriendLinks => Set<FriendLink>();
+    public DbSet<MarketplaceListing> MarketplaceListings => Set<MarketplaceListing>();
+    public DbSet<MarketplaceListingVersion> MarketplaceListingVersions => Set<MarketplaceListingVersion>();
+    public DbSet<MarketplaceImport> MarketplaceImports => Set<MarketplaceImport>();
+    public DbSet<MarketplaceAuditEvent> MarketplaceAuditEvents => Set<MarketplaceAuditEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -161,6 +166,24 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         var qsh = modelBuilder.Entity<QuestShare>();
         qsh.HasKey(x => x.QuestShareId);
         qsh.HasIndex(x => new { x.QuestId, x.SharedWithUserId }).IsUnique();
+
+        var ml = modelBuilder.Entity<MarketplaceListing>();
+        ml.HasKey(x => x.MarketplaceListingId);
+        ml.HasIndex(x => new { x.AssetType, x.State });
+        ml.HasIndex(x => new { x.OwnerUserId, x.State });
+
+        var mv = modelBuilder.Entity<MarketplaceListingVersion>();
+        mv.HasKey(x => x.MarketplaceListingVersionId);
+        mv.HasIndex(x => new { x.MarketplaceListingId, x.DateCreatedUtc });
+
+        var mi = modelBuilder.Entity<MarketplaceImport>();
+        mi.HasKey(x => x.MarketplaceImportId);
+        mi.HasIndex(x => new { x.ImportedByUserId, x.DateImportedUtc });
+
+        var ma = modelBuilder.Entity<MarketplaceAuditEvent>();
+        ma.HasKey(x => x.MarketplaceAuditEventId);
+        ma.HasIndex(x => new { x.MarketplaceListingId, x.DateUtc });
+
 
     }
 }

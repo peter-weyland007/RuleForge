@@ -27,11 +27,15 @@
         <HeaderContent>
             <MudTh>Title</MudTh>
             <MudTh>Description</MudTh>
+            <MudTh>Quests</MudTh>
+            <MudTh>Encounters</MudTh>
             <MudTh></MudTh>
         </HeaderContent>
         <RowTemplate>
             <MudTd>@context.Name</MudTd>
             <MudTd>@(string.IsNullOrWhiteSpace(context.Description) ? "—" : context.Description)</MudTd>
+            <MudTd>@context.QuestCount</MudTd>
+            <MudTd>@context.EncounterCount</MudTd>
             <MudTd Style="text-align: right; white-space: nowrap;">
                 <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" OnClick="() => OpenEdit(context.CampaignId)" />
                 <MudIconButton Icon="@Icons.Material.Filled.GroupAdd" Color="Color.Info" Size="Size.Small" OnClick="() => OpenShare(context.CampaignId)" />
@@ -250,7 +254,7 @@
         public string? Description { get; set; }
     }
 
-    private sealed record CampaignRow(int CampaignId, string Name, string? Description);
+    private sealed record CampaignRow(int CampaignId, string Name, string? Description, int QuestCount, int EncounterCount);
     private sealed class ApiResult<T> { public bool Ok { get; set; } public int Status { get; set; } public T? Data { get; set; } public string? Text { get; set; } }
 
     private static string ApiErrorMessage(ApiResult<object> res, string fallback)
