@@ -1,9 +1,15 @@
 using Microsoft.AspNetCore.Authentication;
+using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.HttpOverrides;
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using Serilog;
+using Serilog.Context;
+using Serilog.Events;
 using RuleForge.Contracts.Characters;
 using RuleForge.Contracts.Campaigns;
 using RuleForge.Contracts.Bestiary;
@@ -29,6 +35,33 @@ using MudBlazor.Services;
 using RuleForge.Components;
 
 var builder = WebApplication.CreateBuilder(args);
+var localSeqSettings = LoadLocalSeqSettings(builder.Environment.ContentRootPath);
+
+builder.Host.UseSerilog((context, services, loggerConfiguration) =>
+{
+    var seqUrl = Environment.GetEnvironmentVariable("RULEFORGE_SEQ_URL")
+        ?? localSeqSettings.ServerUrl
+        ?? context.Configuration["Logging:Seq:ServerUrl"];
+    var seqApiKey = Environment.GetEnvironmentVariable("RULEFORGE_SEQ_API_KEY")
+        ?? localSeqSettings.ApiKey
+        ?? context.Configuration["Logging:Seq:ApiKey"];
+    var appName = localSeqSettings.AppName
+        ?? context.Configuration["Logging:Seq:AppName"]
+        ?? "RuleForge";
+
+    loggerConfiguration
+        .ReadFrom.Configuration(context.Configuration)
+        .ReadFrom.Services(services)
+        .Enrich.FromLogContext()
+        .Enrich.WithMachineName()
+        .Enrich.WithProperty("Application", appName)
+        .Enrich.WithProperty("Environment", context.HostingEnvironment.EnvironmentName);
+
+    if (!string.IsNullOrWhiteSpace(seqUrl))
+    {
+        loggerConfiguration.WriteTo.Seq(seqUrl, apiKey: string.IsNullOrWhiteSpace(seqApiKey) ? null : seqApiKey);
+    }
+});
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
@@ -117,6 +150,41 @@ builder.Services.AddDbContext<AppDbContext>(o =>
 
 var app = builder.Build();
 
+app.Use(async (ctx, next) =>
+{
+    var userId = ctx.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "anonymous";
+    var username = ctx.User.Identity?.Name ?? "anonymous";
+
+    using (LogContext.PushProperty("TraceId", ctx.TraceIdentifier))
+    using (LogContext.PushProperty("RequestPath", ctx.Request.Path.Value ?? string.Empty))
+    using (LogContext.PushProperty("RequestMethod", ctx.Request.Method))
+    using (LogContext.PushProperty("UserId", userId))
+    using (LogContext.PushProperty("Username", username))
+    {
+        await next();
+    }
+});
+
+app.UseSerilogRequestLogging(options =>
+{
+    options.GetLevel = (httpContext, elapsed, ex) =>
+    {
+        if (ex is not null || httpContext.Response.StatusCode >= 500) return LogEventLevel.Error;
+        if (httpContext.Response.StatusCode >= 400) return LogEventLevel.Warning;
+        return LogEventLevel.Information;
+    };
+
+    options.EnrichDiagnosticContext = (diagnosticContext, httpContext) =>
+    {
+        diagnosticContext.Set("TraceId", httpContext.TraceIdentifier);
+        diagnosticContext.Set("RequestHost", httpContext.Request.Host.Value);
+        diagnosticContext.Set("RequestScheme", httpContext.Request.Scheme);
+        diagnosticContext.Set("RemoteIpAddress", httpContext.Connection.RemoteIpAddress?.ToString() ?? string.Empty);
+        diagnosticContext.Set("UserId", httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "anonymous");
+        diagnosticContext.Set("Username", httpContext.User.Identity?.Name ?? "anonymous");
+    };
+});
+
 // API exception envelope middleware
 app.Use(async (ctx, next) =>
 {
@@ -126,12 +194,69 @@ app.Use(async (ctx, next) =>
     }
     catch (Exception ex)
     {
+        Log.Error(ex,
+            "Unhandled API exception for {Method} {Path}. TraceId: {TraceId}",
+            ctx.Request.Method,
+            ctx.Request.Path.Value,
+            ctx.TraceIdentifier);
+
         if (!ctx.Request.Path.StartsWithSegments("/api")) throw;
         ctx.Response.StatusCode = StatusCodes.Status500InternalServerError;
         ctx.Response.ContentType = "application/json";
         var code = ex is DbUpdateException ? "DB_UPDATE_ERROR" : "UNHANDLED_ERROR";
         var msg = ex is DbUpdateException ? "A database error occurred while saving." : "An unexpected error occurred.";
         await ctx.Response.WriteAsync(JsonSerializer.Serialize(new ApiError(code, msg, ctx.TraceIdentifier)));
+    }
+});
+
+app.Use(async (ctx, next) =>
+{
+    if (!ctx.Request.Path.StartsWithSegments("/api"))
+    {
+        await next();
+        return;
+    }
+
+    var originalBody = ctx.Response.Body;
+    await using var responseBuffer = new MemoryStream();
+    ctx.Response.Body = responseBuffer;
+
+    try
+    {
+        await next();
+
+        responseBuffer.Position = 0;
+        var responseText = await new StreamReader(responseBuffer, Encoding.UTF8, leaveOpen: true).ReadToEndAsync();
+        responseBuffer.Position = 0;
+
+        if (ctx.Response.StatusCode >= 400)
+        {
+            var contentType = ctx.Response.ContentType ?? string.Empty;
+            string? bodySummary = null;
+
+            if (contentType.Contains("application/json", StringComparison.OrdinalIgnoreCase))
+            {
+                bodySummary = SummarizeApiErrorBody(responseText);
+            }
+            else if (contentType.StartsWith("text/", StringComparison.OrdinalIgnoreCase))
+            {
+                bodySummary = TruncateForLog(responseText);
+            }
+
+            Log.Warning(
+                "API request returned {StatusCode} for {Method} {Path}. TraceId: {TraceId}. ResponseBody: {ResponseBody}",
+                ctx.Response.StatusCode,
+                ctx.Request.Method,
+                ctx.Request.Path.Value,
+                ctx.TraceIdentifier,
+                bodySummary ?? string.Empty);
+        }
+
+        await responseBuffer.CopyToAsync(originalBody);
+    }
+    finally
+    {
+        ctx.Response.Body = originalBody;
     }
 });
 
@@ -1922,7 +2047,7 @@ app.MapDelete("/api/quests/{questId:int}/choices/{choiceId:int}", async (int que
     return Results.NoContent();
 }).RequireAuthorization();
 
-app.MapGet("/api/encounters/options", async (HttpContext http, AppDbContext db) =>
+app.MapGet("/api/encounters/options", async (HttpContext http, AppDbContext db, bool? showAll) =>
 {
     var userId = GetUserId(http); if (userId is null) return Results.Unauthorized();
 
@@ -1930,7 +2055,7 @@ app.MapGet("/api/encounters/options", async (HttpContext http, AppDbContext db) 
     var partyShareIds = await db.PartyShares.Where(x => x.SharedWithUserId == userId.Value).Select(x => x.PartyId).ToListAsync();
     var characterShareIds = await db.CharacterShares.Where(x => x.SharedWithUserId == userId.Value).Select(x => x.CharacterId).ToListAsync();
     var creatureShareIds = await db.CreatureShares.Where(x => x.SharedWithUserId == userId.Value).Select(x => x.CreatureId).ToListAsync();
-    var includeAll = IsAdmin(http);
+    var includeAll = IsAdmin(http) && showAll == true;
 
     var response = new EncounterOptionsResponse
     {
@@ -1959,11 +2084,22 @@ app.MapGet("/api/encounters/options", async (HttpContext http, AppDbContext db) 
     return Results.Ok(response);
 }).RequireAuthorization();
 
-app.MapGet("/api/encounters", async (AppDbContext db) =>
+app.MapGet("/api/encounters", async (HttpContext http, AppDbContext db, bool? showAll) =>
 {
+    var userId = GetUserId(http); if (userId is null) return Results.Unauthorized();
+
+    var includeAll = IsAdmin(http) && showAll == true;
+    var campaignShareIds = includeAll ? new List<int>() : await db.CampaignShares.Where(x => x.SharedWithUserId == userId.Value).Select(x => x.CampaignId).ToListAsync();
+    var accessibleCampaignIds = includeAll
+        ? new List<int>()
+        : await db.Campaigns
+            .Where(x => x.DateDeletedUtc == null && (x.OwnerAppUserId == userId.Value || campaignShareIds.Contains(x.CampaignId)))
+            .Select(x => x.CampaignId)
+            .ToListAsync();
+
     var rows = await db.Encounters
         .Include(x => x.Participants)
-        .Where(x => x.DateDeletedUtc == null)
+        .Where(x => x.DateDeletedUtc == null && (includeAll || x.CampaignId == 0 || accessibleCampaignIds.Contains(x.CampaignId)))
         .OrderBy(x => x.Name)
         .Select(x => new EncounterResponse
         {
@@ -2202,6 +2338,132 @@ app.MapPost("/api/admin/purge-soft-deleted/{entity}", async (string entity, AppD
     await db.SaveChangesAsync();
     return Results.Ok($"Purged {deleted} soft-deleted {entity} record(s).");
 });
+
+app.MapGet("/api/admin/logging/seq", (HttpContext http) =>
+{
+    if (!IsAdmin(http)) return Results.Forbid();
+
+    var local = LoadLocalSeqSettings(app.Environment.ContentRootPath);
+    var effectiveServerUrl = Environment.GetEnvironmentVariable("RULEFORGE_SEQ_URL")
+        ?? local.ServerUrl
+        ?? app.Configuration["Logging:Seq:ServerUrl"]
+        ?? string.Empty;
+    var effectiveAppName = local.AppName
+        ?? app.Configuration["Logging:Seq:AppName"]
+        ?? "RuleForge";
+
+    return Results.Ok(new SeqLoggingSettingsResponse(
+        effectiveServerUrl,
+        string.IsNullOrWhiteSpace(local.ApiKey) ? string.Empty : "********",
+        effectiveAppName,
+        local.ServerUrl ?? string.Empty,
+        string.IsNullOrWhiteSpace(local.ApiKey) ? string.Empty : "********",
+        local.AppName ?? string.Empty,
+        "http://localhost:5341",
+        "https://seq.example.com",
+        "Changes are saved to appsettings.Local.json on this server. Restart the app after saving so the Seq sink reconnects using the new settings."
+    ));
+}).RequireAuthorization();
+
+app.MapPost("/api/admin/logging/seq", async (HttpContext http, SeqLoggingSettingsUpdateRequest req) =>
+{
+    if (!IsAdmin(http)) return Results.Forbid();
+
+    var normalizedUrl = req.ServerUrl?.Trim() ?? string.Empty;
+    Uri? parsedUri = null;
+    if (!string.IsNullOrWhiteSpace(normalizedUrl) && !Uri.TryCreate(normalizedUrl, UriKind.Absolute, out parsedUri))
+    {
+        return Results.BadRequest(new ApiError("SEQ_URL_INVALID", "Seq server URL must be a valid absolute URL, for example http://localhost:5341 or https://seq.example.com.", http.TraceIdentifier));
+    }
+
+    if (!string.IsNullOrWhiteSpace(normalizedUrl) && parsedUri is not null && parsedUri.Scheme is not ("http" or "https"))
+    {
+        return Results.BadRequest(new ApiError("SEQ_URL_INVALID", "Seq server URL must start with http:// or https://.", http.TraceIdentifier));
+    }
+
+    var existing = LoadLocalSeqSettings(app.Environment.ContentRootPath);
+    var apiKey = req.ApiKeyMode?.Equals("keep", StringComparison.OrdinalIgnoreCase) == true
+        ? existing.ApiKey
+        : (req.ApiKey?.Trim() ?? string.Empty);
+
+    SaveLocalSeqSettings(app.Environment.ContentRootPath, new LocalSeqSettings(
+        string.IsNullOrWhiteSpace(normalizedUrl) ? null : normalizedUrl,
+        string.IsNullOrWhiteSpace(apiKey) ? null : apiKey,
+        string.IsNullOrWhiteSpace(req.AppName) ? "RuleForge" : req.AppName.Trim()
+    ));
+
+    await Task.CompletedTask;
+    return Results.Ok(new MessageResponse("Seq logging settings saved to appsettings.Local.json. Restart RuleForge to apply the updated sink settings."));
+}).RequireAuthorization();
+
+app.MapPost("/api/admin/logging/seq/test", async (HttpContext http, IHttpClientFactory httpClientFactory) =>
+{
+    if (!IsAdmin(http)) return Results.Forbid();
+
+    var settings = LoadLocalSeqSettings(app.Environment.ContentRootPath);
+    if (string.IsNullOrWhiteSpace(settings.ServerUrl))
+    {
+        return Results.BadRequest(new ApiError("SEQ_NOT_CONFIGURED", "Save a Seq server URL first, then run the test.", http.TraceIdentifier));
+    }
+
+    if (!Uri.TryCreate(settings.ServerUrl, UriKind.Absolute, out var serverUri) || serverUri.Scheme is not ("http" or "https"))
+    {
+        return Results.BadRequest(new ApiError("SEQ_URL_INVALID", "Saved Seq server URL is invalid. Update the Seq settings and try again.", http.TraceIdentifier));
+    }
+
+    var appName = string.IsNullOrWhiteSpace(settings.AppName) ? "RuleForge" : settings.AppName.Trim();
+    var ingestUri = new Uri(serverUri, "/api/events/raw?clef");
+    var client = httpClientFactory.CreateClient();
+    client.Timeout = TimeSpan.FromSeconds(10);
+
+    using var request = new HttpRequestMessage(HttpMethod.Post, ingestUri);
+    request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+    if (!string.IsNullOrWhiteSpace(settings.ApiKey))
+    {
+        request.Headers.Add("X-Seq-ApiKey", settings.ApiKey);
+    }
+
+    var clef = JsonSerializer.Serialize(new Dictionary<string, object?>
+    {
+        ["@t"] = DateTimeOffset.UtcNow,
+        ["@mt"] = "RuleForge Seq connection test from admin settings",
+        ["@l"] = "Information",
+        ["Application"] = appName,
+        ["SourceContext"] = "RuleForge.Settings.SeqTest",
+        ["TraceId"] = http.TraceIdentifier,
+        ["Environment"] = app.Environment.EnvironmentName,
+        ["User"] = http.User.Identity?.Name,
+        ["TestEvent"] = true
+    });
+
+    request.Content = new StringContent(clef, Encoding.UTF8, "application/vnd.serilog.clef");
+
+    HttpResponseMessage response;
+    try
+    {
+        response = await client.SendAsync(request);
+    }
+    catch (Exception ex)
+    {
+        Log.Warning(ex, "Seq test connection failed for {SeqServerUrl}", settings.ServerUrl);
+        return Results.BadRequest(new ApiError("SEQ_TEST_FAILED", $"Could not reach Seq at {settings.ServerUrl}: {ex.Message}", http.TraceIdentifier));
+    }
+
+    var body = await response.Content.ReadAsStringAsync();
+    if (!response.IsSuccessStatusCode)
+    {
+        Log.Warning("Seq test connection returned {StatusCode} for {SeqServerUrl}. Body: {ResponseBody}", (int)response.StatusCode, settings.ServerUrl, body);
+        return Results.BadRequest(new ApiError("SEQ_TEST_FAILED", $"Seq returned {(int)response.StatusCode} {response.ReasonPhrase}. {body}".Trim(), http.TraceIdentifier));
+    }
+
+    Log.Information("Seq test connection succeeded for {SeqServerUrl}", settings.ServerUrl);
+    return Results.Ok(new SeqLoggingTestResponse(
+        $"Test event sent to {settings.ServerUrl}. Check Seq for 'RuleForge Seq connection test from admin settings'.",
+        settings.ServerUrl,
+        appName,
+        (int)response.StatusCode
+    ));
+}).RequireAuthorization();
 
 
 app.MapGet("/api/users", async (AppDbContext db) =>
@@ -2929,7 +3191,97 @@ static void ApplyItem(UpsertItemRequest req, Item row)
     row.Notes = req.Notes;
 }
 
+static LocalSeqSettings LoadLocalSeqSettings(string contentRootPath)
+{
+    var path = Path.Combine(contentRootPath, "appsettings.Local.json");
+    if (!File.Exists(path)) return new LocalSeqSettings(null, null, null);
+
+    try
+    {
+        var root = JsonNode.Parse(File.ReadAllText(path))?.AsObject();
+        var seq = root?["Logging"]?["Seq"];
+        return new LocalSeqSettings(
+            seq?["ServerUrl"]?.GetValue<string>(),
+            seq?["ApiKey"]?.GetValue<string>(),
+            seq?["AppName"]?.GetValue<string>()
+        );
+    }
+    catch
+    {
+        return new LocalSeqSettings(null, null, null);
+    }
+}
+
+static void SaveLocalSeqSettings(string contentRootPath, LocalSeqSettings settings)
+{
+    var path = Path.Combine(contentRootPath, "appsettings.Local.json");
+
+    var root = File.Exists(path)
+        ? JsonNode.Parse(File.ReadAllText(path)) as JsonObject ?? new JsonObject()
+        : new JsonObject();
+
+    var logging = root["Logging"] as JsonObject ?? new JsonObject();
+    var seq = logging["Seq"] as JsonObject ?? new JsonObject();
+
+    seq["ServerUrl"] = string.IsNullOrWhiteSpace(settings.ServerUrl) ? null : settings.ServerUrl;
+    seq["ApiKey"] = string.IsNullOrWhiteSpace(settings.ApiKey) ? null : settings.ApiKey;
+    seq["AppName"] = string.IsNullOrWhiteSpace(settings.AppName) ? "RuleForge" : settings.AppName;
+
+    logging["Seq"] = seq;
+    root["Logging"] = logging;
+
+    File.WriteAllText(path, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+}
+
+static string SummarizeApiErrorBody(string? responseText)
+{
+    if (string.IsNullOrWhiteSpace(responseText)) return string.Empty;
+
+    try
+    {
+        using var document = JsonDocument.Parse(responseText);
+        if (document.RootElement.ValueKind != JsonValueKind.Object)
+        {
+            return TruncateForLog(responseText);
+        }
+
+        var root = document.RootElement;
+        var pieces = new List<string>();
+
+        if (root.TryGetProperty("Code", out var code) && code.ValueKind == JsonValueKind.String)
+            pieces.Add($"Code={code.GetString()}");
+        if (root.TryGetProperty("Message", out var message) && message.ValueKind == JsonValueKind.String)
+            pieces.Add($"Message={message.GetString()}");
+        if (root.TryGetProperty("TraceId", out var traceId) && traceId.ValueKind == JsonValueKind.String)
+            pieces.Add($"TraceId={traceId.GetString()}");
+        if (root.TryGetProperty("Error", out var error) && error.ValueKind == JsonValueKind.String)
+            pieces.Add($"Error={error.GetString()}");
+        if (root.TryGetProperty("title", out var title) && title.ValueKind == JsonValueKind.String)
+            pieces.Add($"Title={title.GetString()}");
+        if (root.TryGetProperty("detail", out var detail) && detail.ValueKind == JsonValueKind.String)
+            pieces.Add($"Detail={detail.GetString()}");
+
+        return pieces.Count > 0 ? TruncateForLog(string.Join(" | ", pieces)) : TruncateForLog(responseText);
+    }
+    catch
+    {
+        return TruncateForLog(responseText);
+    }
+}
+
+static string TruncateForLog(string? value, int maxLength = 800)
+{
+    if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+
+    var normalized = value.Replace("\r", " ").Replace("\n", " ").Trim();
+    return normalized.Length <= maxLength ? normalized : normalized[..maxLength] + "…";
+}
+
 app.Run();
 
-
 sealed record ApiError(string Code, string Message, string TraceId);
+sealed record MessageResponse(string Message);
+sealed record SeqLoggingSettingsUpdateRequest(string? ServerUrl, string? ApiKey, string? ApiKeyMode, string? AppName);
+sealed record SeqLoggingSettingsResponse(string EffectiveServerUrl, string EffectiveApiKeyMasked, string EffectiveAppName, string LocalServerUrl, string LocalApiKeyMasked, string LocalAppName, string ExampleLocalUrl, string ExampleHostedUrl, string Notes);
+sealed record SeqLoggingTestResponse(string Message, string ServerUrl, string AppName, int StatusCode);
+sealed record LocalSeqSettings(string? ServerUrl, string? ApiKey, string? AppName);

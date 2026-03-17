@@ -1,7 +1,9 @@
 @using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
 @page "/encounters"
 @attribute [Authorize]
 @inject IJSRuntime JS
+@inject AuthenticationStateProvider AuthStateProvider
 
 <PageTitle>Encounters</PageTitle>
 
@@ -16,6 +18,11 @@
     </MudStack>
 
     <ApiErrorAlert Message="@error" />
+
+    @if (isAdmin)
+    {
+        <MudSwitch T="bool" Value="showAllAdmin" ValueChanged="OnShowAllChanged" Color="Color.Info" Label="Show All (Admin)" />
+    }
 
     <MudTable Items="rows" Dense="true" Hover="true" Outlined="true" Elevation="0">
         <HeaderContent>
@@ -172,21 +179,33 @@
     private string? error;
     private bool isSaving;
     private bool isEdit;
+    private bool isAdmin;
+    private bool showAllAdmin;
     private int addType = 1;
     private int addSourceId;
     private int addCount = 1;
     private int _localId = 1;
     private EncounterForm form = new();
+    private bool _loaded;
 
-    protected override async Task OnInitializedAsync() => await Load();
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _loaded) return;
+        _loaded = true;
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        isAdmin = auth.User.IsInRole("Admin");
+        await Load();
+        StateHasChanged();
+    }
 
     private async Task Load()
     {
         try
         {
             error = null;
-            var encounterRes = await JS.InvokeAsync<ApiResult<List<EncounterRow>>>("ruleforgeApi.get", "/api/encounters");
-            var optionsRes = await JS.InvokeAsync<ApiResult<EncounterOptions>>("ruleforgeApi.get", "/api/encounters/options");
+            var query = showAllAdmin && isAdmin ? "?showAll=true" : string.Empty;
+            var encounterRes = await JS.InvokeAsync<ApiResult<List<EncounterRow>>>("ruleforgeApi.get", $"/api/encounters{query}");
+            var optionsRes = await JS.InvokeAsync<ApiResult<EncounterOptions>>("ruleforgeApi.get", $"/api/encounters/options{query}");
 
             if (!encounterRes.Ok)
             {
@@ -218,6 +237,13 @@
             error = ex.Message;
             rows = new();
         }
+    }
+
+    private async Task OnShowAllChanged(bool value)
+    {
+        showAllAdmin = value;
+        await Load();
+        StateHasChanged();
     }
 
     private void OpenCreate()

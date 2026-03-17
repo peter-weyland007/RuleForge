@@ -12,3 +12,6 @@ obj/
 # Local runtime/dev artifacts
 .run/
 *.db
+*.db-shm
+*.db-wal
+appsettings.Local.json
