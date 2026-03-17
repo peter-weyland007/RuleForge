@@ -141,7 +141,24 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
-app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+app.UseStatusCodePages(async statusContext =>
+{
+    var http = statusContext.HttpContext;
+    if (http.Request.Path.StartsWithSegments("/api"))
+    {
+        http.Response.ContentType = "application/json";
+        var traceId = http.TraceIdentifier;
+        var payload = http.Response.StatusCode switch
+        {
+            StatusCodes.Status404NotFound => new ApiError("NOT_FOUND", "The requested API resource was not found.", traceId),
+            StatusCodes.Status401Unauthorized => new ApiError("AUTH_REQUIRED", "Authentication required.", traceId),
+            StatusCodes.Status403Forbidden => new ApiError("FORBIDDEN", "You do not have access.", traceId),
+            _ => new ApiError("HTTP_ERROR", "The request could not be completed.", traceId)
+        };
+
+        await http.Response.WriteAsync(JsonSerializer.Serialize(payload));
+    }
+});
 app.UseHttpsRedirection();
 app.UseAntiforgery();
 app.UseAuthentication();
@@ -1416,6 +1433,530 @@ app.MapPost("/api/creatures/{id:int}/clone", async (int id, HttpContext http, Ap
     db.Creatures.Add(clone);
     await db.SaveChangesAsync();
     return Results.Ok(new { clone.CreatureId });
+}).RequireAuthorization();
+
+app.MapGet("/api/parties", async (HttpContext http, AppDbContext db, bool? showAll) =>
+{
+    var userId = GetUserId(http); if (userId is null) return Results.Unauthorized();
+    var includeAll = IsAdmin(http) && showAll == true;
+    var sharedIds = includeAll ? new List<int>() : await db.PartyShares.Where(x => x.SharedWithUserId == userId.Value).Select(x => x.PartyId).ToListAsync();
+
+    var rows = await db.Parties
+        .Where(x => x.DateDeletedUtc == null && (includeAll || x.OwnerAppUserId == userId.Value || sharedIds.Contains(x.PartyId)))
+        .OrderBy(x => x.Name)
+        .Select(x => new PartyResponse
+        {
+            PartyId = x.PartyId,
+            OwnerAppUserId = x.OwnerAppUserId,
+            Name = x.Name,
+            Description = x.Description,
+            CampaignId = x.CampaignId == 0 ? null : x.CampaignId,
+            MemberCount = db.Characters.Count(c => c.DateDeletedUtc == null && c.PartyId == x.PartyId)
+        })
+        .ToListAsync();
+
+    return Results.Ok(rows);
+}).RequireAuthorization();
+
+app.MapGet("/api/parties/{id:int}", async (int id, HttpContext http, AppDbContext db, bool? showAll) =>
+{
+    var userId = GetUserId(http); if (userId is null) return Results.Unauthorized();
+    var includeAll = IsAdmin(http) && showAll == true;
+    var row = await db.Parties.FirstOrDefaultAsync(x => x.PartyId == id && x.DateDeletedUtc == null);
+    if (row is null) return Results.NotFound();
+
+    var canView = includeAll || row.OwnerAppUserId == userId.Value || await db.PartyShares.AnyAsync(x => x.PartyId == id && x.SharedWithUserId == userId.Value);
+    if (!canView) return Results.Forbid();
+
+    var memberCount = await db.Characters.CountAsync(c => c.DateDeletedUtc == null && c.PartyId == row.PartyId);
+    return Results.Ok(new PartyResponse
+    {
+        PartyId = row.PartyId,
+        OwnerAppUserId = row.OwnerAppUserId,
+        Name = row.Name,
+        Description = row.Description,
+        CampaignId = row.CampaignId == 0 ? null : row.CampaignId,
+        MemberCount = memberCount
+    });
+}).RequireAuthorization();
+
+app.MapGet("/api/parties/{id:int}/members", async (int id, HttpContext http, AppDbContext db, bool? showAll) =>
+{
+    var userId = GetUserId(http); if (userId is null) return Results.Unauthorized();
+    var includeAll = IsAdmin(http) && showAll == true;
+    var row = await db.Parties.FirstOrDefaultAsync(x => x.PartyId == id && x.DateDeletedUtc == null);
+    if (row is null) return Results.NotFound();
+
+    var canView = includeAll || row.OwnerAppUserId == userId.Value || await db.PartyShares.AnyAsync(x => x.PartyId == id && x.SharedWithUserId == userId.Value);
+    if (!canView) return Results.Forbid();
+
+    var members = await db.Characters
+        .Where(x => x.DateDeletedUtc == null && x.PartyId == id)
+        .OrderBy(x => x.Name)
+        .Select(x => new
+        {
+            x.CharacterId,
+            x.Name,
+            x.ClassName,
+            x.Level,
+            x.ArmorClass,
+            x.HitPointsCurrent,
+            x.HitPointsMax
+        })
+        .ToListAsync();
+
+    return Results.Ok(members);
+}).RequireAuthorization();
+
+app.MapPost("/api/parties", async (UpsertPartyRequest req, HttpContext http, AppDbContext db) =>
+{
+    var userId = GetUserId(http); if (userId is null) return Results.Unauthorized();
+    if (string.IsNullOrWhiteSpace(req.Name)) return Results.BadRequest(new ApiError("PARTY_NAME_REQUIRED", "Party name is required.", http.TraceIdentifier));
+
+    var normalizedName = TitleNormalization.ToPascalTitle(req.Name);
+    var campaignId = req.CampaignId ?? 0;
+    var exists = await db.Parties.AnyAsync(x => x.DateDeletedUtc == null && x.CampaignId == campaignId && x.Name == normalizedName);
+    if (exists) return Results.BadRequest(new ApiError("PARTY_DUPLICATE_NAME", "Party name already exists in that campaign.", http.TraceIdentifier));
+
+    var row = new Party
+    {
+        OwnerAppUserId = userId.Value,
+        Name = normalizedName,
+        Description = string.IsNullOrWhiteSpace(req.Description) ? null : req.Description.Trim(),
+        CampaignId = campaignId,
+        DateCreatedUtc = DateTime.UtcNow,
+        DateModifiedUtc = DateTime.UtcNow
+    };
+
+    db.Parties.Add(row);
+    await db.SaveChangesAsync();
+    return Results.Ok(new { row.PartyId });
+}).RequireAuthorization();
+
+app.MapPut("/api/parties/{id:int}", async (int id, UpsertPartyRequest req, HttpContext http, AppDbContext db) =>
+{
+    var userId = GetUserId(http); if (userId is null) return Results.Unauthorized();
+    if (string.IsNullOrWhiteSpace(req.Name)) return Results.BadRequest(new ApiError("PARTY_NAME_REQUIRED", "Party name is required.", http.TraceIdentifier));
+
+    var row = await db.Parties.FirstOrDefaultAsync(x => x.PartyId == id && x.DateDeletedUtc == null);
+    if (row is null) return Results.NotFound();
+
+    var canEdit = row.OwnerAppUserId == userId.Value || await db.PartyShares.AnyAsync(x => x.PartyId == id && x.SharedWithUserId == userId.Value && x.Permission == SharePermission.Edit);
+    if (!canEdit && !IsAdmin(http)) return Results.Forbid();
+
+    var normalizedName = TitleNormalization.ToPascalTitle(req.Name);
+    var campaignId = req.CampaignId ?? 0;
+    var exists = await db.Parties.AnyAsync(x => x.DateDeletedUtc == null && x.PartyId != id && x.CampaignId == campaignId && x.Name == normalizedName);
+    if (exists) return Results.BadRequest(new ApiError("PARTY_DUPLICATE_NAME", "Party name already exists in that campaign.", http.TraceIdentifier));
+
+    row.Name = normalizedName;
+    row.Description = string.IsNullOrWhiteSpace(req.Description) ? null : req.Description.Trim();
+    row.CampaignId = campaignId;
+    row.DateModifiedUtc = DateTime.UtcNow;
+    await db.SaveChangesAsync();
+    return Results.Ok(new { row.PartyId });
+}).RequireAuthorization();
+
+app.MapDelete("/api/parties/{id:int}", async (int id, HttpContext http, AppDbContext db) =>
+{
+    var userId = GetUserId(http); if (userId is null) return Results.Unauthorized();
+    var row = await db.Parties.FirstOrDefaultAsync(x => x.PartyId == id && x.DateDeletedUtc == null);
+    if (row is null) return Results.NotFound();
+    if (row.OwnerAppUserId != userId.Value && !IsAdmin(http)) return Results.Forbid();
+
+    row.DateDeletedUtc = DateTime.UtcNow;
+    row.DateModifiedUtc = DateTime.UtcNow;
+    await db.SaveChangesAsync();
+    return Results.NoContent();
+}).RequireAuthorization();
+
+app.MapPost("/api/parties/{id:int}/share", async (int id, ShareRecordRequest req, HttpContext http, AppDbContext db) =>
+{
+    var me = GetUserId(http); if (me is null) return Results.Unauthorized();
+    var row = await db.Parties.FirstOrDefaultAsync(x => x.PartyId == id && x.DateDeletedUtc == null);
+    if (row is null) return Results.NotFound();
+    if (row.OwnerAppUserId != me.Value && !IsAdmin(http)) return Results.Forbid();
+
+    var exists = await db.Users.AnyAsync(x => x.AppUserId == req.UserId && x.DateDeletedUtc == null);
+    if (!exists) return Results.NotFound();
+    if (req.Permission is < 0 or > 1) return Results.BadRequest("Invalid permission.");
+
+    var link = await db.PartyShares.FirstOrDefaultAsync(x => x.PartyId == id && x.SharedWithUserId == req.UserId);
+    if (link is null)
+        db.PartyShares.Add(new PartyShare { PartyId = id, SharedWithUserId = req.UserId, Permission = (SharePermission)req.Permission, DateCreatedUtc = DateTime.UtcNow });
+    else
+        link.Permission = (SharePermission)req.Permission;
+
+    await db.SaveChangesAsync();
+    return Results.Ok();
+}).RequireAuthorization();
+
+app.MapDelete("/api/parties/{id:int}/share/{userId:int}", async (int id, int userId, HttpContext http, AppDbContext db) =>
+{
+    var me = GetUserId(http); if (me is null) return Results.Unauthorized();
+    var row = await db.Parties.FirstOrDefaultAsync(x => x.PartyId == id && x.DateDeletedUtc == null);
+    if (row is null) return Results.NotFound();
+    if (row.OwnerAppUserId != me.Value && !IsAdmin(http)) return Results.Forbid();
+
+    var link = await db.PartyShares.FirstOrDefaultAsync(x => x.PartyId == id && x.SharedWithUserId == userId);
+    if (link is null) return Results.NotFound();
+    db.PartyShares.Remove(link);
+    await db.SaveChangesAsync();
+    return Results.NoContent();
+}).RequireAuthorization();
+
+app.MapGet("/api/quests", async (HttpContext http, AppDbContext db, bool? showAll) =>
+{
+    var userId = GetUserId(http); if (userId is null) return Results.Unauthorized();
+    var includeAll = IsAdmin(http) && showAll == true;
+    var sharedIds = includeAll ? new List<int>() : await db.QuestShares.Where(x => x.SharedWithUserId == userId.Value).Select(x => x.QuestId).ToListAsync();
+
+    var rows = await db.Quests
+        .Where(x => x.DateDeletedUtc == null && (includeAll || x.OwnerAppUserId == userId.Value || sharedIds.Contains(x.QuestId)))
+        .OrderBy(x => x.Title)
+        .Select(x => new QuestResponse
+        {
+            QuestId = x.QuestId,
+            OwnerAppUserId = x.OwnerAppUserId,
+            CampaignId = x.CampaignId == 0 ? null : x.CampaignId,
+            Title = x.Title,
+            Summary = x.Summary,
+            Mode = (int)x.Mode,
+            UseChoiceMode = x.UseChoiceMode,
+            StartNodeId = x.StartNodeId
+        })
+        .ToListAsync();
+
+    return Results.Ok(rows);
+}).RequireAuthorization();
+
+app.MapGet("/api/quests/{id:int}", async (int id, HttpContext http, AppDbContext db, bool? showAll) =>
+{
+    var userId = GetUserId(http); if (userId is null) return Results.Unauthorized();
+    var includeAll = IsAdmin(http) && showAll == true;
+    var row = await db.Quests.FirstOrDefaultAsync(x => x.QuestId == id && x.DateDeletedUtc == null);
+    if (row is null) return Results.NotFound();
+
+    var canView = includeAll || row.OwnerAppUserId == userId.Value || await db.QuestShares.AnyAsync(x => x.QuestId == id && x.SharedWithUserId == userId.Value);
+    if (!canView) return Results.Forbid();
+
+    var nodes = await db.QuestNodes.Where(x => x.QuestId == id && x.DateDeletedUtc == null).OrderBy(x => x.OrderIndex)
+        .Select(x => new QuestNodeResponse
+        {
+            QuestNodeId = x.QuestNodeId,
+            Title = x.Title,
+            NodeType = (int)x.NodeType,
+            OrderIndex = x.OrderIndex,
+            BodyMarkdown = x.BodyMarkdown,
+            DmHints = x.DmHints,
+            EncounterId = x.EncounterId,
+            CanvasX = x.CanvasX,
+            CanvasY = x.CanvasY
+        }).ToListAsync();
+
+    var choices = await db.QuestChoices.Where(x => x.QuestId == id && x.DateDeletedUtc == null).OrderBy(x => x.OrderIndex)
+        .Select(x => new QuestChoiceResponse
+        {
+            QuestChoiceId = x.QuestChoiceId,
+            FromNodeId = x.FromNodeId,
+            ToNodeId = x.ToNodeId,
+            Label = x.Label,
+            ConditionExpression = x.ConditionExpression,
+            EffectsJson = x.EffectsJson,
+            OrderIndex = x.OrderIndex
+        }).ToListAsync();
+
+    return Results.Ok(new QuestResponse
+    {
+        QuestId = row.QuestId,
+        OwnerAppUserId = row.OwnerAppUserId,
+        CampaignId = row.CampaignId == 0 ? null : row.CampaignId,
+        Title = row.Title,
+        Summary = row.Summary,
+        Mode = (int)row.Mode,
+        UseChoiceMode = row.UseChoiceMode,
+        StartNodeId = row.StartNodeId,
+        Nodes = nodes,
+        Choices = choices
+    });
+}).RequireAuthorization();
+
+app.MapPost("/api/quests", async (UpsertQuestRequest req, HttpContext http, AppDbContext db) =>
+{
+    var userId = GetUserId(http); if (userId is null) return Results.Unauthorized();
+    if (string.IsNullOrWhiteSpace(req.Title)) return Results.BadRequest(new ApiError("QUEST_TITLE_REQUIRED", "Quest title is required.", http.TraceIdentifier));
+
+    var row = new Quest
+    {
+        OwnerAppUserId = userId.Value,
+        CampaignId = req.CampaignId ?? 0,
+        Title = TitleNormalization.ToPascalTitle(req.Title),
+        Summary = string.IsNullOrWhiteSpace(req.Summary) ? null : req.Summary.Trim(),
+        Mode = Enum.IsDefined(typeof(QuestMode), req.Mode) ? (QuestMode)req.Mode : QuestMode.Hybrid,
+        UseChoiceMode = req.UseChoiceMode,
+        StartNodeId = req.StartNodeId,
+        DateCreatedUtc = DateTime.UtcNow,
+        DateModifiedUtc = DateTime.UtcNow
+    };
+
+    db.Quests.Add(row);
+    await db.SaveChangesAsync();
+    return Results.Ok(new { row.QuestId });
+}).RequireAuthorization();
+
+app.MapPut("/api/quests/{id:int}", async (int id, UpsertQuestRequest req, HttpContext http, AppDbContext db) =>
+{
+    var userId = GetUserId(http); if (userId is null) return Results.Unauthorized();
+    if (string.IsNullOrWhiteSpace(req.Title)) return Results.BadRequest(new ApiError("QUEST_TITLE_REQUIRED", "Quest title is required.", http.TraceIdentifier));
+
+    var row = await db.Quests.FirstOrDefaultAsync(x => x.QuestId == id && x.DateDeletedUtc == null);
+    if (row is null) return Results.NotFound();
+
+    var canEdit = row.OwnerAppUserId == userId.Value || await db.QuestShares.AnyAsync(x => x.QuestId == id && x.SharedWithUserId == userId.Value && x.Permission == SharePermission.Edit);
+    if (!canEdit && !IsAdmin(http)) return Results.Forbid();
+
+    row.CampaignId = req.CampaignId ?? 0;
+    row.Title = TitleNormalization.ToPascalTitle(req.Title);
+    row.Summary = string.IsNullOrWhiteSpace(req.Summary) ? null : req.Summary.Trim();
+    row.Mode = Enum.IsDefined(typeof(QuestMode), req.Mode) ? (QuestMode)req.Mode : QuestMode.Hybrid;
+    row.UseChoiceMode = req.UseChoiceMode;
+    row.StartNodeId = req.StartNodeId;
+    row.DateModifiedUtc = DateTime.UtcNow;
+    await db.SaveChangesAsync();
+    return Results.Ok(new { row.QuestId });
+}).RequireAuthorization();
+
+app.MapDelete("/api/quests/{id:int}", async (int id, HttpContext http, AppDbContext db) =>
+{
+    var userId = GetUserId(http); if (userId is null) return Results.Unauthorized();
+    var row = await db.Quests.FirstOrDefaultAsync(x => x.QuestId == id && x.DateDeletedUtc == null);
+    if (row is null) return Results.NotFound();
+    if (row.OwnerAppUserId != userId.Value && !IsAdmin(http)) return Results.Forbid();
+
+    row.DateDeletedUtc = DateTime.UtcNow;
+    row.DateModifiedUtc = DateTime.UtcNow;
+    await db.SaveChangesAsync();
+    return Results.NoContent();
+}).RequireAuthorization();
+
+app.MapPost("/api/quests/{id:int}/share", async (int id, ShareRecordRequest req, HttpContext http, AppDbContext db) =>
+{
+    var me = GetUserId(http); if (me is null) return Results.Unauthorized();
+    var row = await db.Quests.FirstOrDefaultAsync(x => x.QuestId == id && x.DateDeletedUtc == null);
+    if (row is null) return Results.NotFound();
+    if (row.OwnerAppUserId != me.Value && !IsAdmin(http)) return Results.Forbid();
+
+    var exists = await db.Users.AnyAsync(x => x.AppUserId == req.UserId && x.DateDeletedUtc == null);
+    if (!exists) return Results.NotFound();
+    if (req.Permission is < 0 or > 1) return Results.BadRequest("Invalid permission.");
+
+    var link = await db.QuestShares.FirstOrDefaultAsync(x => x.QuestId == id && x.SharedWithUserId == req.UserId);
+    if (link is null)
+        db.QuestShares.Add(new QuestShare { QuestId = id, SharedWithUserId = req.UserId, Permission = (SharePermission)req.Permission, DateCreatedUtc = DateTime.UtcNow });
+    else
+        link.Permission = (SharePermission)req.Permission;
+
+    await db.SaveChangesAsync();
+    return Results.Ok();
+}).RequireAuthorization();
+
+app.MapDelete("/api/quests/{id:int}/share/{userId:int}", async (int id, int userId, HttpContext http, AppDbContext db) =>
+{
+    var me = GetUserId(http); if (me is null) return Results.Unauthorized();
+    var row = await db.Quests.FirstOrDefaultAsync(x => x.QuestId == id && x.DateDeletedUtc == null);
+    if (row is null) return Results.NotFound();
+    if (row.OwnerAppUserId != me.Value && !IsAdmin(http)) return Results.Forbid();
+
+    var link = await db.QuestShares.FirstOrDefaultAsync(x => x.QuestId == id && x.SharedWithUserId == userId);
+    if (link is null) return Results.NotFound();
+    db.QuestShares.Remove(link);
+    await db.SaveChangesAsync();
+    return Results.NoContent();
+}).RequireAuthorization();
+
+app.MapPost("/api/quests/{id:int}/nodes", async (int id, UpsertQuestNodeRequest req, HttpContext http, AppDbContext db) =>
+{
+    var userId = GetUserId(http); if (userId is null) return Results.Unauthorized();
+    var quest = await db.Quests.FirstOrDefaultAsync(x => x.QuestId == id && x.DateDeletedUtc == null);
+    if (quest is null) return Results.NotFound();
+    var canEdit = quest.OwnerAppUserId == userId.Value || await db.QuestShares.AnyAsync(x => x.QuestId == id && x.SharedWithUserId == userId.Value && x.Permission == SharePermission.Edit);
+    if (!canEdit && !IsAdmin(http)) return Results.Forbid();
+
+    var node = new QuestNode
+    {
+        QuestId = id,
+        Title = TitleNormalization.ToPascalTitle(string.IsNullOrWhiteSpace(req.Title) ? "Untitled Node" : req.Title),
+        NodeType = Enum.IsDefined(typeof(QuestNodeType), req.NodeType) ? (QuestNodeType)req.NodeType : QuestNodeType.Scene,
+        OrderIndex = req.OrderIndex,
+        BodyMarkdown = req.BodyMarkdown,
+        DmHints = req.DmHints,
+        EncounterId = req.EncounterId,
+        CanvasX = req.CanvasX,
+        CanvasY = req.CanvasY,
+        DateCreatedUtc = DateTime.UtcNow,
+        DateModifiedUtc = DateTime.UtcNow
+    };
+
+    db.QuestNodes.Add(node);
+    await db.SaveChangesAsync();
+    return Results.Ok(new { node.QuestNodeId });
+}).RequireAuthorization();
+
+app.MapPut("/api/quests/{questId:int}/nodes/{nodeId:int}", async (int questId, int nodeId, UpsertQuestNodeRequest req, HttpContext http, AppDbContext db) =>
+{
+    var userId = GetUserId(http); if (userId is null) return Results.Unauthorized();
+    var quest = await db.Quests.FirstOrDefaultAsync(x => x.QuestId == questId && x.DateDeletedUtc == null);
+    if (quest is null) return Results.NotFound();
+    var canEdit = quest.OwnerAppUserId == userId.Value || await db.QuestShares.AnyAsync(x => x.QuestId == questId && x.SharedWithUserId == userId.Value && x.Permission == SharePermission.Edit);
+    if (!canEdit && !IsAdmin(http)) return Results.Forbid();
+
+    var node = await db.QuestNodes.FirstOrDefaultAsync(x => x.QuestNodeId == nodeId && x.QuestId == questId && x.DateDeletedUtc == null);
+    if (node is null) return Results.NotFound();
+
+    node.Title = TitleNormalization.ToPascalTitle(string.IsNullOrWhiteSpace(req.Title) ? "Untitled Node" : req.Title);
+    node.NodeType = Enum.IsDefined(typeof(QuestNodeType), req.NodeType) ? (QuestNodeType)req.NodeType : QuestNodeType.Scene;
+    node.OrderIndex = req.OrderIndex;
+    node.BodyMarkdown = req.BodyMarkdown;
+    node.DmHints = req.DmHints;
+    node.EncounterId = req.EncounterId;
+    node.CanvasX = req.CanvasX;
+    node.CanvasY = req.CanvasY;
+    node.DateModifiedUtc = DateTime.UtcNow;
+    await db.SaveChangesAsync();
+    return Results.Ok(new { node.QuestNodeId });
+}).RequireAuthorization();
+
+app.MapPost("/api/quests/{questId:int}/nodes/{nodeId:int}/position", async (int questId, int nodeId, JsonElement req, HttpContext http, AppDbContext db) =>
+{
+    var userId = GetUserId(http); if (userId is null) return Results.Unauthorized();
+    var quest = await db.Quests.FirstOrDefaultAsync(x => x.QuestId == questId && x.DateDeletedUtc == null);
+    if (quest is null) return Results.NotFound();
+    var canEdit = quest.OwnerAppUserId == userId.Value || await db.QuestShares.AnyAsync(x => x.QuestId == questId && x.SharedWithUserId == userId.Value && x.Permission == SharePermission.Edit);
+    if (!canEdit && !IsAdmin(http)) return Results.Forbid();
+
+    var node = await db.QuestNodes.FirstOrDefaultAsync(x => x.QuestNodeId == nodeId && x.QuestId == questId && x.DateDeletedUtc == null);
+    if (node is null) return Results.NotFound();
+
+    if (req.TryGetProperty("x", out var xProp) && xProp.ValueKind == JsonValueKind.Number) node.CanvasX = xProp.GetDouble();
+    if (req.TryGetProperty("y", out var yProp) && yProp.ValueKind == JsonValueKind.Number) node.CanvasY = yProp.GetDouble();
+    node.DateModifiedUtc = DateTime.UtcNow;
+    await db.SaveChangesAsync();
+    return Results.Ok();
+}).RequireAuthorization();
+
+app.MapDelete("/api/quests/{questId:int}/nodes/{nodeId:int}", async (int questId, int nodeId, HttpContext http, AppDbContext db) =>
+{
+    var userId = GetUserId(http); if (userId is null) return Results.Unauthorized();
+    var quest = await db.Quests.FirstOrDefaultAsync(x => x.QuestId == questId && x.DateDeletedUtc == null);
+    if (quest is null) return Results.NotFound();
+    if (quest.OwnerAppUserId != userId.Value && !IsAdmin(http)) return Results.Forbid();
+
+    var node = await db.QuestNodes.FirstOrDefaultAsync(x => x.QuestNodeId == nodeId && x.QuestId == questId && x.DateDeletedUtc == null);
+    if (node is null) return Results.NotFound();
+    node.DateDeletedUtc = DateTime.UtcNow;
+    node.DateModifiedUtc = DateTime.UtcNow;
+    await db.SaveChangesAsync();
+    return Results.NoContent();
+}).RequireAuthorization();
+
+app.MapPost("/api/quests/{id:int}/choices", async (int id, UpsertQuestChoiceRequest req, HttpContext http, AppDbContext db) =>
+{
+    var userId = GetUserId(http); if (userId is null) return Results.Unauthorized();
+    var quest = await db.Quests.FirstOrDefaultAsync(x => x.QuestId == id && x.DateDeletedUtc == null);
+    if (quest is null) return Results.NotFound();
+    var canEdit = quest.OwnerAppUserId == userId.Value || await db.QuestShares.AnyAsync(x => x.QuestId == id && x.SharedWithUserId == userId.Value && x.Permission == SharePermission.Edit);
+    if (!canEdit && !IsAdmin(http)) return Results.Forbid();
+
+    var choice = new QuestChoice
+    {
+        QuestId = id,
+        FromNodeId = req.FromNodeId,
+        ToNodeId = req.ToNodeId,
+        Label = string.IsNullOrWhiteSpace(req.Label) ? "Next" : req.Label.Trim(),
+        ConditionExpression = req.ConditionExpression,
+        EffectsJson = req.EffectsJson,
+        OrderIndex = req.OrderIndex,
+        DateCreatedUtc = DateTime.UtcNow,
+        DateModifiedUtc = DateTime.UtcNow
+    };
+
+    db.QuestChoices.Add(choice);
+    await db.SaveChangesAsync();
+    return Results.Ok(new { choice.QuestChoiceId });
+}).RequireAuthorization();
+
+app.MapPut("/api/quests/{questId:int}/choices/{choiceId:int}", async (int questId, int choiceId, UpsertQuestChoiceRequest req, HttpContext http, AppDbContext db) =>
+{
+    var userId = GetUserId(http); if (userId is null) return Results.Unauthorized();
+    var quest = await db.Quests.FirstOrDefaultAsync(x => x.QuestId == questId && x.DateDeletedUtc == null);
+    if (quest is null) return Results.NotFound();
+    var canEdit = quest.OwnerAppUserId == userId.Value || await db.QuestShares.AnyAsync(x => x.QuestId == questId && x.SharedWithUserId == userId.Value && x.Permission == SharePermission.Edit);
+    if (!canEdit && !IsAdmin(http)) return Results.Forbid();
+
+    var choice = await db.QuestChoices.FirstOrDefaultAsync(x => x.QuestChoiceId == choiceId && x.QuestId == questId && x.DateDeletedUtc == null);
+    if (choice is null) return Results.NotFound();
+
+    choice.FromNodeId = req.FromNodeId;
+    choice.ToNodeId = req.ToNodeId;
+    choice.Label = string.IsNullOrWhiteSpace(req.Label) ? "Next" : req.Label.Trim();
+    choice.ConditionExpression = req.ConditionExpression;
+    choice.EffectsJson = req.EffectsJson;
+    choice.OrderIndex = req.OrderIndex;
+    choice.DateModifiedUtc = DateTime.UtcNow;
+    await db.SaveChangesAsync();
+    return Results.Ok(new { choice.QuestChoiceId });
+}).RequireAuthorization();
+
+app.MapDelete("/api/quests/{questId:int}/choices/{choiceId:int}", async (int questId, int choiceId, HttpContext http, AppDbContext db) =>
+{
+    var userId = GetUserId(http); if (userId is null) return Results.Unauthorized();
+    var quest = await db.Quests.FirstOrDefaultAsync(x => x.QuestId == questId && x.DateDeletedUtc == null);
+    if (quest is null) return Results.NotFound();
+    if (quest.OwnerAppUserId != userId.Value && !IsAdmin(http)) return Results.Forbid();
+
+    var choice = await db.QuestChoices.FirstOrDefaultAsync(x => x.QuestChoiceId == choiceId && x.QuestId == questId && x.DateDeletedUtc == null);
+    if (choice is null) return Results.NotFound();
+    choice.DateDeletedUtc = DateTime.UtcNow;
+    choice.DateModifiedUtc = DateTime.UtcNow;
+    await db.SaveChangesAsync();
+    return Results.NoContent();
+}).RequireAuthorization();
+
+app.MapGet("/api/encounters/options", async (HttpContext http, AppDbContext db) =>
+{
+    var userId = GetUserId(http); if (userId is null) return Results.Unauthorized();
+
+    var campaignShareIds = await db.CampaignShares.Where(x => x.SharedWithUserId == userId.Value).Select(x => x.CampaignId).ToListAsync();
+    var partyShareIds = await db.PartyShares.Where(x => x.SharedWithUserId == userId.Value).Select(x => x.PartyId).ToListAsync();
+    var characterShareIds = await db.CharacterShares.Where(x => x.SharedWithUserId == userId.Value).Select(x => x.CharacterId).ToListAsync();
+    var creatureShareIds = await db.CreatureShares.Where(x => x.SharedWithUserId == userId.Value).Select(x => x.CreatureId).ToListAsync();
+    var includeAll = IsAdmin(http);
+
+    var response = new EncounterOptionsResponse
+    {
+        Campaigns = await db.Campaigns
+            .Where(x => x.DateDeletedUtc == null && (includeAll || x.OwnerAppUserId == userId.Value || campaignShareIds.Contains(x.CampaignId)))
+            .OrderBy(x => x.Name)
+            .Select(x => new EncounterOptionItem { Id = x.CampaignId, Name = x.Name })
+            .ToListAsync(),
+        Parties = await db.Parties
+            .Where(x => x.DateDeletedUtc == null && (includeAll || x.OwnerAppUserId == userId.Value || partyShareIds.Contains(x.PartyId)))
+            .OrderBy(x => x.Name)
+            .Select(x => new EncounterOptionItem { Id = x.PartyId, Name = x.Name, PartyId = x.PartyId })
+            .ToListAsync(),
+        Characters = await db.Characters
+            .Where(x => x.DateDeletedUtc == null && (includeAll || x.OwnerAppUserId == userId.Value || characterShareIds.Contains(x.CharacterId)))
+            .OrderBy(x => x.Name)
+            .Select(x => new EncounterOptionItem { Id = x.CharacterId, Name = x.Name, ArmorClass = x.ArmorClass, HitPoints = x.HitPointsCurrent ?? x.HitPointsMax, InitiativeModifier = x.InitiativeModifier, ParticipantType = (int)(x.CharacterType == CharacterType.NPC ? EncounterParticipantType.NPC : EncounterParticipantType.PC) })
+            .ToListAsync(),
+        Creatures = await db.Creatures
+            .Where(x => x.DateDeletedUtc == null && (includeAll || x.IsSystem || x.OwnerAppUserId == userId.Value || creatureShareIds.Contains(x.CreatureId)))
+            .OrderBy(x => x.Name)
+            .Select(x => new EncounterOptionItem { Id = x.CreatureId, Name = x.Name, ArmorClass = x.ArmorClass, HitPoints = x.HitPoints, InitiativeModifier = x.InitiativeModifier, ParticipantType = (int)EncounterParticipantType.Creature })
+            .ToListAsync()
+    };
+
+    return Results.Ok(response);
 }).RequireAuthorization();
 
 app.MapGet("/api/encounters", async (AppDbContext db) =>

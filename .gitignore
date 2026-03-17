@@ -8,3 +8,7 @@ obj/
 
 # OS files
 .DS_Store
+
+# Local runtime/dev artifacts
+.run/
+*.db
