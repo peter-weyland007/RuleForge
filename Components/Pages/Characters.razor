@@ -2,7 +2,6 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @page "/characters"
 @attribute [Authorize]
-@inject IHttpClientFactory HttpFactory
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 @inject AuthenticationStateProvider AuthStateProvider
@@ -15,7 +14,7 @@
             <MudText Typo="Typo.h4">Characters</MudText>
             <MudText Typo="Typo.body2" Color="Color.Secondary">Track PCs and NPCs for your campaign.</MudText>
         </MudStack>
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreate">Add Character</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" Href="/characters/new">Add Character</MudButton>
     </MudStack>
 
     <ApiErrorAlert Message="@error" />
@@ -53,7 +52,7 @@
             <MudTd>@context.ArmorClass</MudTd>
             <MudTd>@($"{context.HitPointsCurrent}/{context.HitPointsMax}")</MudTd>
             <MudTd Style="text-align: right; white-space: nowrap;">
-                <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" OnClick="() => OpenEdit(context.CharacterId)" />
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" Href="@($"/characters/{context.CharacterId}/edit")" />
                 <MudIconButton Icon="@Icons.Material.Filled.GroupAdd" Color="Color.Info" Size="Size.Small" OnClick="() => OpenShare(context.CharacterId)" />
                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="() => Archive(context.CharacterId)" />
             </MudTd>
@@ -62,8 +61,6 @@
             <MudText Typo="Typo.body2" Class="pa-4">No characters yet. Add your first one.</MudText>
         </NoRecordsContent>
     </MudTable>
-
-    
 
     @if (isShare)
     {
@@ -82,112 +79,7 @@
                 </MudSelect>
                 <MudStack Row="true" Spacing="1">
                     <MudButton Variant="Variant.Filled" Color="Color.Info" OnClick="SaveShare">Share</MudButton>
-                    <MudButton Variant="Variant.Outlined" OnClick="() => isShare = false">Cancel</MudButton>
-                </MudStack>
-            </MudStack>
-        </MudPaper>
-    }
-
-
-    @if (isCreate)
-    {
-        <MudPaper Class="pa-4" Outlined="true" Elevation="0">
-            <MudStack Spacing="2">
-                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-                    <MudText Typo="Typo.h6">@(form.CharacterId.HasValue ? "Edit Character / NPC" : "Create Character / NPC")</MudText>
-                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Text">Quick Create</MudChip>
-                </MudStack>
-
-                <MudDivider />
-
-                <MudText Typo="Typo.subtitle2">Identity</MudText>
-                <MudGrid>
-                    <MudItem xs="12" md="6">
-                        <MudTextField @bind-Value="form.Name" Label="Name" Placeholder="e.g., Sir Rowan" Variant="Variant.Outlined" Required="true" HelperText="Display name in party lists and encounter views." />
-                    </MudItem>
-                    <MudItem xs="12" md="3">
-                        <MudTextField @bind-Value="form.PlayerName" Label="Player Name" Placeholder="e.g., Peter" Variant="Variant.Outlined" Disabled="@(form.CharacterType != "PC")" HelperText="Optional for now; later replaced by user account link." />
-                    </MudItem>
-                    <MudItem xs="12" md="3">
-                        <MudSelect T="string" Value="form.CharacterType" ValueChanged="OnTypeChanged" Label="Type" Variant="Variant.Outlined">
-                            <MudSelectItem Value="@("PC")">PC</MudSelectItem>
-                            <MudSelectItem Value="@("NPC")">NPC</MudSelectItem>
-                        </MudSelect>
-                    </MudItem>
-                    <MudItem xs="12" md="3">
-                        <MudSelect T="int?" @bind-Value="form.CampaignId" Label="Campaign" Variant="Variant.Outlined" Disabled="@(!campaigns.Any())" HelperText="@(campaigns.Any() ? "Optional. Leave blank for no campaign association." : "No campaigns available yet. You can still save without one.")" Clearable="true">
-                            @foreach (var campaign in campaigns)
-                            {
-                                <MudSelectItem T="int?" Value="campaign.CampaignId">@campaign.Name</MudSelectItem>
-                            }
-                        </MudSelect>
-                    </MudItem>
-                    <MudItem xs="12" md="3">
-                        <MudSelect T="int?" @bind-Value="form.PartyId" Label="Party" Variant="Variant.Outlined" Disabled="@(form.CharacterType != "PC" || !parties.Any())" HelperText="@(form.CharacterType != "PC" ? "Only PCs can be assigned to parties." : parties.Any() ? "Optional party assignment." : "No parties yet.")" Clearable="true">
-                            @foreach (var party in parties)
-                            {
-                                <MudSelectItem T="int?" Value="party.PartyId">@party.Name</MudSelectItem>
-                            }
-                        </MudSelect>
-                    </MudItem>
-                    <MudItem xs="12" md="3">
-                        <MudSelect T="int?" @bind-Value="form.OwnerAppUserId" Label="Owner" Variant="Variant.Outlined" Disabled="@(!canEditOwnerField || !ownerOptions.Any())">
-                            @foreach (var user in ownerOptions)
-                            {
-                                <MudSelectItem T="int?" Value="user.AppUserId">@user.Username</MudSelectItem>
-                            }
-                        </MudSelect>
-                    </MudItem>
-                </MudGrid>
-                @if (!canEditOwnerField && form.CharacterId.HasValue)
-                {
-                    <MudText Typo="Typo.caption" Color="Color.Secondary">Only the current owner or an admin can transfer character ownership.</MudText>
-                }
-
-                <MudText Typo="Typo.subtitle2" Class="mt-2">Build & Stats</MudText>
-                <MudGrid>
-                    <MudItem xs="12" md="3">
-                        <MudNumericField T="int?" @bind-Value="form.Level" Label="Level" Variant="Variant.Outlined" Min="1" />
-                    </MudItem>
-                    <MudItem xs="12" md="3">
-                        <MudTextField @bind-Value="form.ClassName" Label="Class" Placeholder="e.g., Ranger" Variant="Variant.Outlined" />
-                    </MudItem>
-                    <MudItem xs="12" md="3">
-                        <MudTextField @bind-Value="form.SubclassName" Label="Subclass" Placeholder="e.g., Gloom Stalker" Variant="Variant.Outlined" />
-                    </MudItem>
-                    <MudItem xs="12" md="3">
-                        <MudTextField @bind-Value="form.RaceName" Label="Race" Placeholder="e.g., Elf" Variant="Variant.Outlined" />
-                    </MudItem>
-                    <MudItem xs="12" md="3">
-                        <MudTextField @bind-Value="form.SubraceName" Label="Subrace" Placeholder="e.g., Wood Elf" Variant="Variant.Outlined" />
-                    </MudItem>
-                    <MudItem xs="12" md="2">
-                        <MudNumericField T="int?" @bind-Value="form.ArmorClass" Label="AC" Variant="Variant.Outlined" />
-                    </MudItem>
-                    <MudItem xs="12" md="2">
-                        <MudNumericField T="int?" @bind-Value="form.HitPointsCurrent" Label="HP Current" Variant="Variant.Outlined" />
-                    </MudItem>
-                    <MudItem xs="12" md="2">
-                        <MudNumericField T="int?" @bind-Value="form.HitPointsMax" Label="HP Max" Variant="Variant.Outlined" />
-                    </MudItem>
-                </MudGrid>
-
-                <MudText Typo="Typo.subtitle2" Class="mt-2">Ability Scores</MudText>
-                <MudGrid>
-                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Strength" Label='@($"STR ({ModLabel(form.Strength)})")' Variant="Variant.Outlined" /></MudItem>
-                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Dexterity" Label='@($"DEX ({ModLabel(form.Dexterity)})")' Variant="Variant.Outlined" /></MudItem>
-                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Constitution" Label='@($"CON ({ModLabel(form.Constitution)})")' Variant="Variant.Outlined" /></MudItem>
-                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Intelligence" Label='@($"INT ({ModLabel(form.Intelligence)})")' Variant="Variant.Outlined" /></MudItem>
-                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Wisdom" Label='@($"WIS ({ModLabel(form.Wisdom)})")' Variant="Variant.Outlined" /></MudItem>
-                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Charisma" Label='@($"CHA ({ModLabel(form.Charisma)})")' Variant="Variant.Outlined" /></MudItem>
-                </MudGrid>
-
-                <MudText Typo="Typo.subtitle2" Class="mt-2">Notes</MudText>
-                <MudTextField @bind-Value="form.Notes" Label="Notes" Placeholder="Roleplay notes, hooks, quirks..." Variant="Variant.Outlined" Lines="3" />
-
-                <MudStack Row="true" Spacing="1" Class="mt-3">
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="Save" Disabled="@isSaving">@(isSaving ? "Saving..." : "Save")</MudButton>
-                    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Close" OnClick="CloseCreate">Cancel</MudButton>
+                    <MudButton Variant="Variant.Outlined" OnClick="CloseShare">Cancel</MudButton>
                 </MudStack>
             </MudStack>
         </MudPaper>
@@ -196,23 +88,14 @@
 
 @code {
     private List<CharacterRow> rows = new();
-    private List<CampaignOption> campaigns = new();
-    private List<PartyOption> parties = new();
     private string? error;
-    private bool isSaving;
     private bool isAdmin;
     private bool showAllAdmin;
-    private bool isCreate;
-    private bool canEditOwnerField;
-    private int? currentUserId;
-    private List<UserOption> ownerOptions = new();
-    private CharacterForm form = new();
     private bool isShare;
     private int? shareCharacterId;
     private int? shareUserId;
     private int sharePermission;
     private List<FriendUser> friends = new();
-
     private bool _loaded;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -221,7 +104,6 @@
         _loaded = true;
         var auth = await AuthStateProvider.GetAuthenticationStateAsync();
         isAdmin = auth.User.IsInRole("Admin");
-        currentUserId = int.TryParse(auth.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var id) ? id : null;
         await Load();
         StateHasChanged();
     }
@@ -232,24 +114,23 @@
         {
             error = null;
             var endpoint = showAllAdmin && isAdmin ? "/api/characters?showAll=true" : "/api/characters";
-            var r1 = await JS.InvokeAsync<ApiResult<List<CharacterRow>>>("ruleforgeApi.get", endpoint);
-            var r2 = await JS.InvokeAsync<ApiResult<List<CampaignOption>>>("ruleforgeApi.get", "/api/campaigns");
-            var r3 = await JS.InvokeAsync<ApiResult<List<PartyOption>>>("ruleforgeApi.get", "/api/parties");
-            var r4 = await JS.InvokeAsync<ApiResult<FriendsOverview>>("ruleforgeApi.get", "/api/friends");
-            var r5 = await JS.InvokeAsync<ApiResult<List<UserOption>>>("ruleforgeApi.get", "/api/users");
-            if (!r1.Ok) { error = ApiErrorMessage(r1, "Failed to load characters."); rows = new(); return; }
-            rows = r1.Data ?? new();
-            campaigns = r2.Data ?? new();
-            parties = r3.Data ?? new();
-            friends = r4.Data?.Friends ?? new();
-            ownerOptions = (r5.Ok ? r5.Data : null) ?? new();
+            var rowsResult = await JS.InvokeAsync<ApiResult<List<CharacterRow>>>("ruleforgeApi.get", endpoint);
+            var friendsResult = await JS.InvokeAsync<ApiResult<FriendsOverview>>("ruleforgeApi.get", "/api/friends");
+
+            if (!rowsResult.Ok)
+            {
+                error = ApiErrorMessage(rowsResult, "Failed to load characters.");
+                rows = new();
+                return;
+            }
+
+            rows = rowsResult.Data ?? new();
+            friends = friendsResult.Data?.Friends ?? new();
         }
         catch (Exception ex)
         {
             error = ex.Message;
             rows = new();
-            campaigns = new();
-            parties = new();
             friends = new();
         }
     }
@@ -261,92 +142,20 @@
         StateHasChanged();
     }
 
-    private void OpenCreate()
-    {
-        form = new CharacterForm { CharacterType = "PC", CampaignId = null, OwnerAppUserId = currentUserId };
-        canEditOwnerField = isAdmin;
-        isCreate = true;
-    }
-
-    private async Task OpenEdit(int characterId)
-    {
-        try
-        {
-            error = null;
-            var res = await JS.InvokeAsync<ApiResult<CharacterDetail>>("ruleforgeApi.get", $"/api/characters/{characterId}");
-            var row = res.Data;
-            if (!res.Ok || row is null)
-            {
-                error = string.IsNullOrWhiteSpace(res.Text) ? "Character not found." : res.Text;
-                return;
-            }
-
-            form = new CharacterForm
-            {
-                CharacterId = row.CharacterId,
-                CampaignId = row.CampaignId,
-                PartyId = row.PartyId,
-                CharacterType = row.CharacterType == 2 ? "NPC" : "PC",
-                Name = row.Name,
-                OwnerAppUserId = row.OwnerAppUserId,
-                PlayerName = row.PlayerName,
-                ArmorClass = row.ArmorClass,
-                HitPointsCurrent = row.HitPointsCurrent,
-                HitPointsMax = row.HitPointsMax,
-                Level = row.Level,
-                ClassName = row.ClassName,
-                SubclassName = row.SubclassName,
-                RaceName = row.RaceName,
-                SubraceName = row.SubraceName,
-                Strength = row.Strength,
-                Dexterity = row.Dexterity,
-                Constitution = row.Constitution,
-                Intelligence = row.Intelligence,
-                Wisdom = row.Wisdom,
-                Charisma = row.Charisma,
-                Notes = row.Notes
-            };
-            canEditOwnerField = isAdmin || (currentUserId.HasValue && row.OwnerAppUserId == currentUserId.Value);
-            isCreate = true;
-        }
-        catch (Exception ex)
-        {
-            error = ex.Message;
-        }
-    }
-
-
-    private async Task Archive(int characterId)
-    {
-        try
-        {
-            var ok = await JS.InvokeAsync<bool>("confirm", "Archive this character?");
-            if (!ok) return;
-
-            error = null;
-            var res = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.delete", $"/api/characters/{characterId}");
-            if (!res.Ok)
-            {
-                error = string.IsNullOrWhiteSpace(res.Text) ? "Archive failed." : res.Text;
-                return;
-            }
-
-            await Load();
-        }
-        catch (Exception ex)
-        {
-            error = ex.Message;
-        }
-    }
-
-    private void CloseCreate() => isCreate = false;
-
     private void OpenShare(int characterId)
     {
         shareCharacterId = characterId;
         shareUserId = null;
         sharePermission = 0;
         isShare = true;
+    }
+
+    private void CloseShare()
+    {
+        isShare = false;
+        shareCharacterId = null;
+        shareUserId = null;
+        sharePermission = 0;
     }
 
     private async Task SaveShare()
@@ -364,58 +173,31 @@
             return;
         }
 
-        isShare = false;
+        CloseShare();
     }
-    private void OnTypeChanged(string v) { form.CharacterType = v; if (v != "PC") { form.PartyId = null; form.PlayerName = null; } }
 
-    private async Task Save()
+    private async Task Archive(int characterId)
     {
-        if (isSaving) return;
-        isSaving = true;
         try
         {
+            var ok = await JS.InvokeAsync<bool>("confirm", "Archive this character?");
+            if (!ok) return;
+
             error = null;
-            var req = new
+            var res = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.delete", $"/api/characters/{characterId}");
+            if (!res.Ok)
             {
-                campaignId = form.CampaignId,
-                partyId = form.CharacterType == "PC" ? form.PartyId : null,
-                characterType = form.CharacterType == "NPC" ? 2 : 1,
-                name = form.Name,
-                playerName = form.CharacterType == "PC" ? form.PlayerName : null,
-                ownerAppUserId = form.OwnerAppUserId,
-                armorClass = form.ArmorClass,
-                hitPointsCurrent = form.HitPointsCurrent,
-                hitPointsMax = form.HitPointsMax,
-                level = form.Level,
-                className = form.ClassName,
-                subclassName = form.SubclassName,
-                raceName = form.RaceName,
-                subraceName = form.SubraceName,
-                strength = form.Strength,
-                dexterity = form.Dexterity,
-                constitution = form.Constitution,
-                intelligence = form.Intelligence,
-                wisdom = form.Wisdom,
-                charisma = form.Charisma,
-                notes = form.Notes
-            };
+                error = ApiErrorMessage(res, "Archive failed.");
+                return;
+            }
 
-            ApiResult<object> res;
-            if (form.CharacterId.HasValue)
-                res = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.put", $"/api/characters/{form.CharacterId.Value}", req);
-            else
-                res = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.post", "/api/characters", req);
-
-            if (!res.Ok) { error = ApiErrorMessage(res, "Save failed."); return; }
-            isCreate = false;
             await Load();
         }
-        catch (Exception ex) { error = ex.Message; }
-        finally { isSaving = false; }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
     }
-
-    private static int AbilityMod(int? score) => score.HasValue ? (int)Math.Floor((score.Value - 10) / 2.0) : 0;
-    private static string ModLabel(int? score) => $"{(AbilityMod(score) >= 0 ? "+" : string.Empty)}{AbilityMod(score)}";
 
     private static string DisplayName(CharacterRow row) => row.CharacterType == 1 && !string.IsNullOrWhiteSpace(row.PlayerName) ? $"{row.Name} ({row.PlayerName})" : row.Name;
 
@@ -435,9 +217,9 @@
     private static string NormalizeErrorText(string text)
     {
         var t = text.Trim();
-        if (t.Length >= 2 && t.StartsWith(""") && t.EndsWith("""))
+        if (t.Length >= 2 && t.StartsWith("\"") && t.EndsWith("\""))
         {
-            try { return System.Text.Json.JsonSerializer.Deserialize<string>(t) ?? t.Trim(new char[] {'"'}); } catch { return t.Trim(new char[] {'"'}); }
+            try { return System.Text.Json.JsonSerializer.Deserialize<string>(t) ?? t.Trim(new char[] { '"' }); } catch { return t.Trim(new char[] { '"' }); }
         }
         return t;
     }
@@ -450,37 +232,7 @@
         public string? Text { get; set; }
     }
 
-    private sealed class CharacterForm
-    {
-        public int? CharacterId { get; set; }
-        public int? CampaignId { get; set; }
-        public int? PartyId { get; set; }
-        public int? OwnerAppUserId { get; set; }
-        public string CharacterType { get; set; } = "PC";
-        public string Name { get; set; } = string.Empty;
-        public string? PlayerName { get; set; }
-        public int? ArmorClass { get; set; }
-        public int? HitPointsCurrent { get; set; }
-        public int? HitPointsMax { get; set; }
-        public int? Level { get; set; }
-        public string? ClassName { get; set; }
-        public string? SubclassName { get; set; }
-        public string? RaceName { get; set; }
-        public string? SubraceName { get; set; }
-        public int? Strength { get; set; }
-        public int? Dexterity { get; set; }
-        public int? Constitution { get; set; }
-        public int? Intelligence { get; set; }
-        public int? Wisdom { get; set; }
-        public int? Charisma { get; set; }
-        public string? Notes { get; set; }
-    }
-
     private sealed record CharacterRow(int CharacterId, int? CampaignId, int? PartyId, int CharacterType, string Name, int? OwnerAppUserId, string? OwnerUsername, string? PlayerName, int? ArmorClass, int? HitPointsCurrent, int? HitPointsMax, int? Level, string? ClassName, string? SubclassName, string? RaceName, string? SubraceName);
-    private sealed record CharacterDetail(int CharacterId, int? CampaignId, int? PartyId, int CharacterType, string Name, int? OwnerAppUserId, string? OwnerUsername, string? PlayerName, int? ArmorClass, int? HitPointsCurrent, int? HitPointsMax, int? Level, string? ClassName, string? SubclassName, string? RaceName, string? SubraceName, int? Strength, int? Dexterity, int? Constitution, int? Intelligence, int? Wisdom, int? Charisma, string? Notes);
-    private sealed record CampaignOption(int CampaignId, string Name);
-    private sealed record PartyOption(int PartyId, string Name);
-    private sealed record UserOption(int AppUserId, string Username);
     private sealed record FriendUser(int AppUserId, string Username, string Email);
     private sealed record FriendsOverview(List<FriendUser> Friends);
 }
