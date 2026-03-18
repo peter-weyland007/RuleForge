@@ -9,4 +9,6 @@ public sealed class UpsertCampaignRequest
 
     [StringLength(2000)]
     public string? Description { get; set; }
+
+    public int? OwnerAppUserId { get; set; }
 }

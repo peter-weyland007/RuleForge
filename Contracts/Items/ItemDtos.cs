@@ -49,6 +49,7 @@ public class ItemResponse
 
 public class UpsertItemRequest
 {
+    public int? OwnerAppUserId { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public int ItemType { get; set; }

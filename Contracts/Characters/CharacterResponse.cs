@@ -10,6 +10,7 @@ public sealed class CharacterResponse
     public CharacterType CharacterType { get; set; }
     public string Name { get; set; } = string.Empty;
     public int? OwnerAppUserId { get; set; }
+    public string? OwnerUsername { get; set; }
     public string? PlayerName { get; set; }
 
     public int? ArmorClass { get; set; }

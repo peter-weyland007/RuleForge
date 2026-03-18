@@ -130,7 +130,19 @@
                             }
                         </MudSelect>
                     </MudItem>
+                    <MudItem xs="12" md="3">
+                        <MudSelect T="int?" @bind-Value="form.OwnerAppUserId" Label="Owner" Variant="Variant.Outlined" Disabled="@(!canEditOwnerField || !ownerOptions.Any())">
+                            @foreach (var user in ownerOptions)
+                            {
+                                <MudSelectItem T="int?" Value="user.AppUserId">@user.Username</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
                 </MudGrid>
+                @if (!canEditOwnerField && form.CharacterId.HasValue)
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Only the current owner or an admin can transfer character ownership.</MudText>
+                }
 
                 <MudText Typo="Typo.subtitle2" Class="mt-2">Build & Stats</MudText>
                 <MudGrid>
@@ -191,6 +203,9 @@
     private bool isAdmin;
     private bool showAllAdmin;
     private bool isCreate;
+    private bool canEditOwnerField;
+    private int? currentUserId;
+    private List<UserOption> ownerOptions = new();
     private CharacterForm form = new();
     private bool isShare;
     private int? shareCharacterId;
@@ -206,6 +221,7 @@
         _loaded = true;
         var auth = await AuthStateProvider.GetAuthenticationStateAsync();
         isAdmin = auth.User.IsInRole("Admin");
+        currentUserId = int.TryParse(auth.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var id) ? id : null;
         await Load();
         StateHasChanged();
     }
@@ -220,11 +236,13 @@
             var r2 = await JS.InvokeAsync<ApiResult<List<CampaignOption>>>("ruleforgeApi.get", "/api/campaigns");
             var r3 = await JS.InvokeAsync<ApiResult<List<PartyOption>>>("ruleforgeApi.get", "/api/parties");
             var r4 = await JS.InvokeAsync<ApiResult<FriendsOverview>>("ruleforgeApi.get", "/api/friends");
+            var r5 = await JS.InvokeAsync<ApiResult<List<UserOption>>>("ruleforgeApi.get", "/api/users");
             if (!r1.Ok) { error = ApiErrorMessage(r1, "Failed to load characters."); rows = new(); return; }
             rows = r1.Data ?? new();
             campaigns = r2.Data ?? new();
             parties = r3.Data ?? new();
             friends = r4.Data?.Friends ?? new();
+            ownerOptions = (r5.Ok ? r5.Data : null) ?? new();
         }
         catch (Exception ex)
         {
@@ -245,7 +263,8 @@
 
     private void OpenCreate()
     {
-        form = new CharacterForm { CharacterType = "PC", CampaignId = null };
+        form = new CharacterForm { CharacterType = "PC", CampaignId = null, OwnerAppUserId = currentUserId };
+        canEditOwnerField = isAdmin;
         isCreate = true;
     }
 
@@ -269,6 +288,7 @@
                 PartyId = row.PartyId,
                 CharacterType = row.CharacterType == 2 ? "NPC" : "PC",
                 Name = row.Name,
+                OwnerAppUserId = row.OwnerAppUserId,
                 PlayerName = row.PlayerName,
                 ArmorClass = row.ArmorClass,
                 HitPointsCurrent = row.HitPointsCurrent,
@@ -286,6 +306,7 @@
                 Charisma = row.Charisma,
                 Notes = row.Notes
             };
+            canEditOwnerField = isAdmin || (currentUserId.HasValue && row.OwnerAppUserId == currentUserId.Value);
             isCreate = true;
         }
         catch (Exception ex)
@@ -361,7 +382,7 @@
                 characterType = form.CharacterType == "NPC" ? 2 : 1,
                 name = form.Name,
                 playerName = form.CharacterType == "PC" ? form.PlayerName : null,
-                ownerAppUserId = (int?)null,
+                ownerAppUserId = form.OwnerAppUserId,
                 armorClass = form.ArmorClass,
                 hitPointsCurrent = form.HitPointsCurrent,
                 hitPointsMax = form.HitPointsMax,
@@ -434,6 +455,7 @@
         public int? CharacterId { get; set; }
         public int? CampaignId { get; set; }
         public int? PartyId { get; set; }
+        public int? OwnerAppUserId { get; set; }
         public string CharacterType { get; set; } = "PC";
         public string Name { get; set; } = string.Empty;
         public string? PlayerName { get; set; }
@@ -454,10 +476,11 @@
         public string? Notes { get; set; }
     }
 
-    private sealed record CharacterRow(int CharacterId, int? CampaignId, int? PartyId, int CharacterType, string Name, string? PlayerName, int? ArmorClass, int? HitPointsCurrent, int? HitPointsMax, int? Level, string? ClassName, string? SubclassName, string? RaceName, string? SubraceName);
-    private sealed record CharacterDetail(int CharacterId, int? CampaignId, int? PartyId, int CharacterType, string Name, string? PlayerName, int? ArmorClass, int? HitPointsCurrent, int? HitPointsMax, int? Level, string? ClassName, string? SubclassName, string? RaceName, string? SubraceName, int? Strength, int? Dexterity, int? Constitution, int? Intelligence, int? Wisdom, int? Charisma, string? Notes);
+    private sealed record CharacterRow(int CharacterId, int? CampaignId, int? PartyId, int CharacterType, string Name, int? OwnerAppUserId, string? OwnerUsername, string? PlayerName, int? ArmorClass, int? HitPointsCurrent, int? HitPointsMax, int? Level, string? ClassName, string? SubclassName, string? RaceName, string? SubraceName);
+    private sealed record CharacterDetail(int CharacterId, int? CampaignId, int? PartyId, int CharacterType, string Name, int? OwnerAppUserId, string? OwnerUsername, string? PlayerName, int? ArmorClass, int? HitPointsCurrent, int? HitPointsMax, int? Level, string? ClassName, string? SubclassName, string? RaceName, string? SubraceName, int? Strength, int? Dexterity, int? Constitution, int? Intelligence, int? Wisdom, int? Charisma, string? Notes);
     private sealed record CampaignOption(int CampaignId, string Name);
     private sealed record PartyOption(int PartyId, string Name);
+    private sealed record UserOption(int AppUserId, string Username);
     private sealed record FriendUser(int AppUserId, string Username, string Email);
     private sealed record FriendsOverview(List<FriendUser> Friends);
 }

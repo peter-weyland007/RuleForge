@@ -86,6 +86,16 @@
 
                 <MudTextField @bind-Value="form.Name" Label="Title" Placeholder="e.g., Curse of the Crimson Moon" Variant="Variant.Outlined" Required="true" />
                 <MudTextField @bind-Value="form.Description" Label="Description" Placeholder="Campaign summary, tone, themes, house rules..." Variant="Variant.Outlined" Lines="4" />
+                <MudSelect T="int?" @bind-Value="form.OwnerAppUserId" Label="Owner" Variant="Variant.Outlined" Disabled="@(!canEditOwnerField || !ownerOptions.Any())">
+                    @foreach (var user in ownerOptions)
+                    {
+                        <MudSelectItem T="int?" Value="user.AppUserId">@user.Username</MudSelectItem>
+                    }
+                </MudSelect>
+                @if (!canEditOwnerField && form.CampaignId.HasValue)
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Only the current owner or an admin can transfer campaign ownership.</MudText>
+                }
 
                 <MudStack Row="true" Spacing="1" Class="mt-3">
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="Save" Disabled="@isSaving">@(isSaving ? "Saving..." : "Save")</MudButton>
@@ -107,7 +117,10 @@
     private int? shareUserId;
     private int sharePermission;
     private List<FriendUser> friends = new();
+    private List<UserOption> ownerOptions = new();
     private bool isCreate;
+    private bool canEditOwnerField;
+    private int? currentUserId;
     private CampaignForm form = new();
 
     private bool _loaded;
@@ -118,6 +131,7 @@
         _loaded = true;
         var auth = await AuthStateProvider.GetAuthenticationStateAsync();
         isAdmin = auth.User.IsInRole("Admin");
+        currentUserId = int.TryParse(auth.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var id) ? id : null;
         await Load();
         StateHasChanged();
     }
@@ -130,9 +144,11 @@
             var endpoint = showAllAdmin && isAdmin ? "/api/campaigns?showAll=true" : "/api/campaigns";
             var r1 = await JS.InvokeAsync<ApiResult<List<CampaignRow>>>("ruleforgeApi.get", endpoint);
             var fr = await JS.InvokeAsync<ApiResult<FriendsOverview>>("ruleforgeApi.get", "/api/friends");
+            var usersRes = await JS.InvokeAsync<ApiResult<List<UserOption>>>("ruleforgeApi.get", "/api/users");
             if (!r1.Ok) { error = string.IsNullOrWhiteSpace(r1.Text) ? "Failed to load campaigns." : r1.Text; rows = new(); return; }
             rows = r1.Data ?? new();
             friends = fr.Data?.Friends ?? new();
+            ownerOptions = (usersRes.Ok ? usersRes.Data : null) ?? new();
         }
         catch (Exception ex)
         {
@@ -150,7 +166,8 @@
 
     private void OpenCreate()
     {
-        form = new CampaignForm();
+        form = new CampaignForm { OwnerAppUserId = currentUserId };
+        canEditOwnerField = isAdmin;
         isCreate = true;
     }
 
@@ -171,8 +188,10 @@
             {
                 CampaignId = row.CampaignId,
                 Name = row.Name,
-                Description = row.Description
+                Description = row.Description,
+                OwnerAppUserId = row.OwnerAppUserId
             };
+            canEditOwnerField = isAdmin || (currentUserId.HasValue && row.OwnerAppUserId == currentUserId.Value);
             isCreate = true;
         }
         catch (Exception ex)
@@ -204,7 +223,11 @@
         }
     }
 
-    private void CloseCreate() => isCreate = false;
+    private void CloseCreate()
+    {
+        isCreate = false;
+        canEditOwnerField = false;
+    }
 
     private void OpenShare(int id) { shareId = id; shareUserId = null; sharePermission = 0; isShare = true; }
     private async Task SaveShare()
@@ -225,7 +248,8 @@
             var req = new
             {
                 name = form.Name,
-                description = form.Description
+                description = form.Description,
+                ownerAppUserId = form.OwnerAppUserId
             };
 
             ApiResult<object> res;
@@ -252,12 +276,14 @@
     private sealed class CampaignForm
     {
         public int? CampaignId { get; set; }
+        public int? OwnerAppUserId { get; set; }
         public string Name { get; set; } = string.Empty;
         public string? Description { get; set; }
     }
 
-    private sealed record CampaignRow(int CampaignId, string Name, string? Description, int QuestCount, int EncounterCount);
+    private sealed record CampaignRow(int CampaignId, int? OwnerAppUserId, string? OwnerUsername, string Name, string? Description, int QuestCount, int EncounterCount);
     private sealed class ApiResult<T> { public bool Ok { get; set; } public int Status { get; set; } public T? Data { get; set; } public string? Text { get; set; } }
+    private sealed record UserOption(int AppUserId, string Username);
 
     private static string ApiErrorMessage(ApiResult<object> res, string fallback)
     {

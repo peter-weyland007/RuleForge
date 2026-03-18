@@ -858,7 +858,7 @@ app.MapGet("/api/items/{id:int}", async (int id, HttpContext http, AppDbContext 
     var row = await db.Items.FirstOrDefaultAsync(x => x.ItemId == id && x.DateDeletedUtc == null);
     if (row is null) return Results.NotFound();
     if (row.IsSystem && !IsAdmin(http)) return Results.Forbid();
-    var canView = includeAll || row.IsSystem || row.OwnerAppUserId == userId.Value || await db.ItemShares.AnyAsync(x => x.ItemId == id && x.SharedWithUserId == userId.Value);
+    var canView = isAdmin || includeAll || row.IsSystem || row.OwnerAppUserId == userId.Value || await db.ItemShares.AnyAsync(x => x.ItemId == id && x.SharedWithUserId == userId.Value);
     if (!canView) return Results.Forbid();
 
     return Results.Ok(new ItemResponse
@@ -913,7 +913,15 @@ app.MapPut("/api/items/{id:int}", async (int id, UpsertItemRequest req, HttpCont
     if (!canEdit && !IsAdmin(http)) return Results.Forbid();
     if (row.IsSystem && !IsAdmin(http)) return Results.Forbid();
     if (req.SourceType == 1 && !IsAdmin(http)) return Results.Forbid();
+    var requestedOwnerId = req.OwnerAppUserId ?? row.OwnerAppUserId;
+    if (requestedOwnerId is null) return Results.BadRequest(new ApiError("ITEM_OWNER_REQUIRED", "Item owner is required.", http.TraceIdentifier));
+    var ownerChanged = requestedOwnerId != row.OwnerAppUserId;
+    if (ownerChanged && row.OwnerAppUserId != userId.Value && !IsAdmin(http)) return Results.Forbid();
+    var ownerExists = await db.Users.AnyAsync(x => x.AppUserId == requestedOwnerId.Value && x.DateDeletedUtc == null);
+    if (!ownerExists) return Results.BadRequest(new ApiError("ITEM_OWNER_INVALID", "Selected owner was not found.", http.TraceIdentifier));
+
     ApplyItem(req, row);
+    row.OwnerAppUserId = requestedOwnerId.Value;
     row.DateModifiedUtc = DateTime.UtcNow;
     await db.SaveChangesAsync();
     return Results.Ok(new { row.ItemId });
@@ -1043,6 +1051,7 @@ app.MapGet("/api/characters", async (HttpContext http, AppDbContext db, bool? sh
             CharacterType = x.CharacterType,
             Name = x.Name,
             OwnerAppUserId = x.OwnerAppUserId,
+            OwnerUsername = db.Users.Where(u => u.AppUserId == x.OwnerAppUserId).Select(u => u.Username).FirstOrDefault(),
             PlayerName = x.PlayerName,
             ArmorClass = x.ArmorClass,
             HitPointsCurrent = x.HitPointsCurrent,
@@ -1077,11 +1086,12 @@ app.MapGet("/api/characters/{id:int}", async (int id, HttpContext http, AppDbCon
 {
     var userId = GetUserId(http);
     if (userId is null) return Results.Unauthorized();
-    var includeAll = IsAdmin(http) && showAll == true;
+    var isAdmin = IsAdmin(http);
+    var includeAll = isAdmin && showAll == true;
 
     var row = await db.Characters.FirstOrDefaultAsync(x => x.CharacterId == id && x.DateDeletedUtc == null);
     if (row is null) return Results.NotFound();
-    var canView = includeAll || row.OwnerAppUserId == userId.Value || await db.CharacterShares.AnyAsync(x => x.CharacterId == id && x.SharedWithUserId == userId.Value);
+    var canView = isAdmin || includeAll || row.OwnerAppUserId == userId.Value || await db.CharacterShares.AnyAsync(x => x.CharacterId == id && x.SharedWithUserId == userId.Value);
     if (!canView) return Results.Forbid();
 
     return Results.Ok(new CharacterResponse
@@ -1092,6 +1102,7 @@ app.MapGet("/api/characters/{id:int}", async (int id, HttpContext http, AppDbCon
         CharacterType = row.CharacterType,
         Name = row.Name,
         OwnerAppUserId = row.OwnerAppUserId,
+        OwnerUsername = await db.Users.Where(u => u.AppUserId == row.OwnerAppUserId).Select(u => u.Username).FirstOrDefaultAsync(),
         PlayerName = row.PlayerName,
         ArmorClass = row.ArmorClass,
         HitPointsCurrent = row.HitPointsCurrent,
@@ -1182,10 +1193,18 @@ app.MapPut("/api/characters/{id:int}", async (int id, UpsertCharacterRequest req
     var canEdit = row.OwnerAppUserId == userId.Value || await db.CharacterShares.AnyAsync(x => x.CharacterId == id && x.SharedWithUserId == userId.Value && x.Permission == SharePermission.Edit);
     if (!canEdit && !IsAdmin(http)) return Results.Forbid();
 
+    var requestedOwnerId = req.OwnerAppUserId ?? row.OwnerAppUserId;
+    if (requestedOwnerId is null) return Results.BadRequest(new ApiError("CHARACTER_OWNER_REQUIRED", "Character owner is required.", http.TraceIdentifier));
+    var ownerChanged = requestedOwnerId != row.OwnerAppUserId;
+    if (ownerChanged && row.OwnerAppUserId != userId.Value && !IsAdmin(http)) return Results.Forbid();
+    var ownerExists = await db.Users.AnyAsync(x => x.AppUserId == requestedOwnerId.Value && x.DateDeletedUtc == null);
+    if (!ownerExists) return Results.BadRequest(new ApiError("CHARACTER_OWNER_INVALID", "Selected owner was not found.", http.TraceIdentifier));
+
     row.CampaignId = req.CampaignId ?? 0;
     row.PartyId = req.PartyId ?? 0;
     row.CharacterType = req.CharacterType;
     row.Name = normalizedName;
+    row.OwnerAppUserId = requestedOwnerId.Value;
     row.PlayerName = string.IsNullOrWhiteSpace(req.PlayerName) ? null : req.PlayerName.Trim();
     row.ArmorClass = req.ArmorClass;
     row.HitPointsCurrent = req.HitPointsCurrent;
@@ -1272,21 +1291,22 @@ app.MapGet("/api/campaigns", async (HttpContext http, AppDbContext db, bool? sho
     var includeAll = IsAdmin(http) && showAll == true;
     var sharedIds = includeAll ? new List<int>() : await db.CampaignShares.Where(x => x.SharedWithUserId == userId.Value).Select(x => x.CampaignId).ToListAsync();
     var rows = await db.Campaigns.Where(x => x.DateDeletedUtc == null && (includeAll || x.OwnerAppUserId == userId.Value || sharedIds.Contains(x.CampaignId))).OrderBy(x => x.Name)
-        .Select(x => new CampaignResponse { CampaignId = x.CampaignId, OwnerAppUserId = x.OwnerAppUserId, Name = x.Name, Description = x.Description, QuestCount = db.Quests.Count(q => q.DateDeletedUtc == null && q.CampaignId == x.CampaignId), EncounterCount = db.Encounters.Count(e => e.DateDeletedUtc == null && e.CampaignId == x.CampaignId) }).ToListAsync();
+        .Select(x => new CampaignResponse { CampaignId = x.CampaignId, OwnerAppUserId = x.OwnerAppUserId, OwnerUsername = db.Users.Where(u => u.AppUserId == x.OwnerAppUserId).Select(u => u.Username).FirstOrDefault(), Name = x.Name, Description = x.Description, QuestCount = db.Quests.Count(q => q.DateDeletedUtc == null && q.CampaignId == x.CampaignId), EncounterCount = db.Encounters.Count(e => e.DateDeletedUtc == null && e.CampaignId == x.CampaignId) }).ToListAsync();
     return Results.Ok(rows);
 }).RequireAuthorization();
 
 app.MapGet("/api/campaigns/{id:int}", async (int id, HttpContext http, AppDbContext db, bool? showAll) =>
 {
     var userId = GetUserId(http); if (userId is null) return Results.Unauthorized();
-    var includeAll = IsAdmin(http) && showAll == true;
+    var isAdmin = IsAdmin(http);
+    var includeAll = isAdmin && showAll == true;
     var row = await db.Campaigns.FirstOrDefaultAsync(x => x.CampaignId == id && x.DateDeletedUtc == null);
     if (row is null) return Results.NotFound();
-    var canView = includeAll || row.OwnerAppUserId == userId.Value || await db.CampaignShares.AnyAsync(x => x.CampaignId == id && x.SharedWithUserId == userId.Value);
+    var canView = isAdmin || includeAll || row.OwnerAppUserId == userId.Value || await db.CampaignShares.AnyAsync(x => x.CampaignId == id && x.SharedWithUserId == userId.Value);
     if (!canView) return Results.Forbid();
     var questCount = await db.Quests.CountAsync(q => q.DateDeletedUtc == null && q.CampaignId == row.CampaignId);
     var encounterCount = await db.Encounters.CountAsync(e => e.DateDeletedUtc == null && e.CampaignId == row.CampaignId);
-    return Results.Ok(new CampaignResponse { CampaignId = row.CampaignId, OwnerAppUserId = row.OwnerAppUserId, Name = row.Name, Description = row.Description, QuestCount = questCount, EncounterCount = encounterCount });
+    return Results.Ok(new CampaignResponse { CampaignId = row.CampaignId, OwnerAppUserId = row.OwnerAppUserId, OwnerUsername = await db.Users.Where(u => u.AppUserId == row.OwnerAppUserId).Select(u => u.Username).FirstOrDefaultAsync(), Name = row.Name, Description = row.Description, QuestCount = questCount, EncounterCount = encounterCount });
 }).RequireAuthorization();
 
 app.MapPost("/api/campaigns", async (UpsertCampaignRequest req, HttpContext http, AppDbContext db) =>
@@ -1318,7 +1338,18 @@ app.MapPut("/api/campaigns/{id:int}", async (int id, UpsertCampaignRequest req, 
     var exists = await db.Campaigns.AnyAsync(x => x.DateDeletedUtc == null && x.CampaignId != id && x.Name == normalizedName);
     if (exists) return Results.BadRequest(new ApiError("CAMPAIGN_DUPLICATE_NAME", "Campaign name already exists.", http.TraceIdentifier));
 
-    row.Name = normalizedName; row.Description = string.IsNullOrWhiteSpace(req.Description) ? null : req.Description.Trim(); row.DateModifiedUtc = DateTime.UtcNow;
+    var requestedOwnerId = req.OwnerAppUserId ?? row.OwnerAppUserId;
+    if (requestedOwnerId is null) return Results.BadRequest(new ApiError("CAMPAIGN_OWNER_REQUIRED", "Campaign owner is required.", http.TraceIdentifier));
+    var ownerChanged = requestedOwnerId != row.OwnerAppUserId;
+    if (ownerChanged && row.OwnerAppUserId != userId.Value && !IsAdmin(http))
+        return Results.Forbid();
+    var ownerExists = await db.Users.AnyAsync(x => x.AppUserId == requestedOwnerId.Value && x.DateDeletedUtc == null);
+    if (!ownerExists) return Results.BadRequest(new ApiError("CAMPAIGN_OWNER_INVALID", "Selected owner was not found.", http.TraceIdentifier));
+
+    row.Name = normalizedName;
+    row.Description = string.IsNullOrWhiteSpace(req.Description) ? null : req.Description.Trim();
+    row.OwnerAppUserId = requestedOwnerId.Value;
+    row.DateModifiedUtc = DateTime.UtcNow;
     try { await db.SaveChangesAsync(); }
     catch (DbUpdateException ex) when ((ex.InnerException?.Message ?? ex.Message).Contains("IX_Campaigns_Name", StringComparison.OrdinalIgnoreCase) || (ex.InnerException?.Message ?? ex.Message).Contains("UNIQUE", StringComparison.OrdinalIgnoreCase))
     {
@@ -1369,6 +1400,7 @@ app.MapGet("/api/creatures", async (HttpContext http, AppDbContext db, bool? sho
             CreatureId = x.CreatureId,
             IsSystem = x.IsSystem,
             OwnerAppUserId = x.OwnerAppUserId,
+            OwnerUsername = db.Users.Where(u => u.AppUserId == x.OwnerAppUserId).Select(u => u.Username).FirstOrDefault(),
             Name = x.Name,
             Description = x.Description,
             ArmorClass = x.ArmorClass,
@@ -1393,12 +1425,13 @@ app.MapGet("/api/creatures", async (HttpContext http, AppDbContext db, bool? sho
 app.MapGet("/api/creatures/{id:int}", async (int id, HttpContext http, AppDbContext db, bool? showAll) =>
 {
     var userId = GetUserId(http); if (userId is null) return Results.Unauthorized();
-    var includeAll = IsAdmin(http) && showAll == true;
+    var isAdmin = IsAdmin(http);
+    var includeAll = isAdmin && showAll == true;
 
     var row = await db.Creatures.FirstOrDefaultAsync(x => x.CreatureId == id && x.DateDeletedUtc == null);
     if (row is null) return Results.NotFound();
 
-    var canView = includeAll || row.IsSystem || row.OwnerAppUserId == userId.Value || await db.CreatureShares.AnyAsync(x => x.CreatureId == id && x.SharedWithUserId == userId.Value);
+    var canView = isAdmin || includeAll || row.IsSystem || row.OwnerAppUserId == userId.Value || await db.CreatureShares.AnyAsync(x => x.CreatureId == id && x.SharedWithUserId == userId.Value);
     if (!canView) return Results.Forbid();
 
     return Results.Ok(new CreatureResponse
@@ -1406,6 +1439,7 @@ app.MapGet("/api/creatures/{id:int}", async (int id, HttpContext http, AppDbCont
         CreatureId = row.CreatureId,
         IsSystem = row.IsSystem,
         OwnerAppUserId = row.OwnerAppUserId,
+        OwnerUsername = await db.Users.Where(u => u.AppUserId == row.OwnerAppUserId).Select(u => u.Username).FirstOrDefaultAsync(),
         Name = row.Name,
         Description = row.Description,
         ArmorClass = row.ArmorClass,
@@ -1469,9 +1503,17 @@ app.MapPut("/api/creatures/{id:int}", async (int id, UpsertCreatureRequest req, 
     if (!canEdit) return Results.Forbid();
     if (row.IsSystem && !IsAdmin(http)) return Results.Forbid();
 
+    var requestedOwnerId = req.OwnerAppUserId ?? row.OwnerAppUserId;
+    if (requestedOwnerId is null) return Results.BadRequest(new ApiError("CREATURE_OWNER_REQUIRED", "Creature owner is required.", http.TraceIdentifier));
+    var ownerChanged = requestedOwnerId != row.OwnerAppUserId;
+    if (ownerChanged && row.OwnerAppUserId != userId.Value && !IsAdmin(http)) return Results.Forbid();
+    var ownerExists = await db.Users.AnyAsync(x => x.AppUserId == requestedOwnerId.Value && x.DateDeletedUtc == null);
+    if (!ownerExists) return Results.BadRequest(new ApiError("CREATURE_OWNER_INVALID", "Selected owner was not found.", http.TraceIdentifier));
+
     row.Name = req.Name.Trim();
     row.Description = string.IsNullOrWhiteSpace(req.Description) ? null : req.Description.Trim();
     row.IsSystem = req.IsSystem && IsAdmin(http);
+    row.OwnerAppUserId = requestedOwnerId.Value;
     row.ArmorClass = req.ArmorClass;
     row.HitPoints = req.HitPoints;
     row.InitiativeModifier = req.InitiativeModifier;
@@ -1602,11 +1644,12 @@ app.MapGet("/api/parties", async (HttpContext http, AppDbContext db, bool? showA
 app.MapGet("/api/parties/{id:int}", async (int id, HttpContext http, AppDbContext db, bool? showAll) =>
 {
     var userId = GetUserId(http); if (userId is null) return Results.Unauthorized();
-    var includeAll = IsAdmin(http) && showAll == true;
+    var isAdmin = IsAdmin(http);
+    var includeAll = isAdmin && showAll == true;
     var row = await db.Parties.FirstOrDefaultAsync(x => x.PartyId == id && x.DateDeletedUtc == null);
     if (row is null) return Results.NotFound();
 
-    var canView = includeAll || row.OwnerAppUserId == userId.Value || await db.PartyShares.AnyAsync(x => x.PartyId == id && x.SharedWithUserId == userId.Value);
+    var canView = isAdmin || includeAll || row.OwnerAppUserId == userId.Value || await db.PartyShares.AnyAsync(x => x.PartyId == id && x.SharedWithUserId == userId.Value);
     if (!canView) return Results.Forbid();
 
     var memberCount = await db.Characters.CountAsync(c => c.DateDeletedUtc == null && c.PartyId == row.PartyId);
@@ -1624,11 +1667,12 @@ app.MapGet("/api/parties/{id:int}", async (int id, HttpContext http, AppDbContex
 app.MapGet("/api/parties/{id:int}/members", async (int id, HttpContext http, AppDbContext db, bool? showAll) =>
 {
     var userId = GetUserId(http); if (userId is null) return Results.Unauthorized();
-    var includeAll = IsAdmin(http) && showAll == true;
+    var isAdmin = IsAdmin(http);
+    var includeAll = isAdmin && showAll == true;
     var row = await db.Parties.FirstOrDefaultAsync(x => x.PartyId == id && x.DateDeletedUtc == null);
     if (row is null) return Results.NotFound();
 
-    var canView = includeAll || row.OwnerAppUserId == userId.Value || await db.PartyShares.AnyAsync(x => x.PartyId == id && x.SharedWithUserId == userId.Value);
+    var canView = isAdmin || includeAll || row.OwnerAppUserId == userId.Value || await db.PartyShares.AnyAsync(x => x.PartyId == id && x.SharedWithUserId == userId.Value);
     if (!canView) return Results.Forbid();
 
     var members = await db.Characters
@@ -1774,11 +1818,12 @@ app.MapGet("/api/quests", async (HttpContext http, AppDbContext db, bool? showAl
 app.MapGet("/api/quests/{id:int}", async (int id, HttpContext http, AppDbContext db, bool? showAll) =>
 {
     var userId = GetUserId(http); if (userId is null) return Results.Unauthorized();
-    var includeAll = IsAdmin(http) && showAll == true;
+    var isAdmin = IsAdmin(http);
+    var includeAll = isAdmin && showAll == true;
     var row = await db.Quests.FirstOrDefaultAsync(x => x.QuestId == id && x.DateDeletedUtc == null);
     if (row is null) return Results.NotFound();
 
-    var canView = includeAll || row.OwnerAppUserId == userId.Value || await db.QuestShares.AnyAsync(x => x.QuestId == id && x.SharedWithUserId == userId.Value);
+    var canView = isAdmin || includeAll || row.OwnerAppUserId == userId.Value || await db.QuestShares.AnyAsync(x => x.QuestId == id && x.SharedWithUserId == userId.Value);
     if (!canView) return Results.Forbid();
 
     var nodes = await db.QuestNodes.Where(x => x.QuestId == id && x.DateDeletedUtc == null).OrderBy(x => x.OrderIndex)
@@ -2140,33 +2185,36 @@ app.MapGet("/api/encounters", async (HttpContext http, AppDbContext db, bool? sh
     return Results.Ok(rows);
 });
 
-app.MapGet("/api/encounters/{id:int}", async (int id, AppDbContext db) =>
+app.MapGet("/api/encounters/{id:int}", async (int id, HttpContext http, AppDbContext db, bool? showAll) =>
 {
+    var userId = GetUserId(http); if (userId is null) return Results.Unauthorized();
+    var includeAll = IsAdmin(http) && showAll == true;
+
     var row = await db.Encounters
         .Include(x => x.Participants)
-        .Where(x => x.EncounterId == id && x.DateDeletedUtc == null)
-        .Select(x => new EncounterResponse
-        {
-            EncounterId = x.EncounterId,
-            CampaignId = x.CampaignId == 0 ? null : x.CampaignId,
-            Name = x.Name,
-            EncounterType = (int)x.EncounterType,
-            Description = x.Description,
-            Participants = x.Participants.Select(p => new EncounterParticipantResponse
-            {
-                EncounterParticipantId = p.EncounterParticipantId,
-                ParticipantType = (int)p.ParticipantType,
-                SourceId = p.SourceId,
-                NameSnapshot = p.NameSnapshot,
-                ArmorClassSnapshot = p.ArmorClassSnapshot,
-                HitPointsCurrent = p.HitPointsCurrent,
-                InitiativeModifierSnapshot = p.InitiativeModifierSnapshot
-            }).ToList()
-        })
-        .FirstOrDefaultAsync();
+        .FirstOrDefaultAsync(x => x.EncounterId == id && x.DateDeletedUtc == null);
+    if (row is null) return Results.NotFound();
+    if (!includeAll && !await CanAccessEncounter(http, db, row, requireEdit: false)) return Results.Forbid();
 
-    return row is null ? Results.NotFound() : Results.Ok(row);
-});
+    return Results.Ok(new EncounterResponse
+    {
+        EncounterId = row.EncounterId,
+        CampaignId = row.CampaignId == 0 ? null : row.CampaignId,
+        Name = row.Name,
+        EncounterType = (int)row.EncounterType,
+        Description = row.Description,
+        Participants = row.Participants.Select(p => new EncounterParticipantResponse
+        {
+            EncounterParticipantId = p.EncounterParticipantId,
+            ParticipantType = (int)p.ParticipantType,
+            SourceId = p.SourceId,
+            NameSnapshot = p.NameSnapshot,
+            ArmorClassSnapshot = p.ArmorClassSnapshot,
+            HitPointsCurrent = p.HitPointsCurrent,
+            InitiativeModifierSnapshot = p.InitiativeModifierSnapshot
+        }).ToList()
+    });
+}).RequireAuthorization();
 
 app.MapPost("/api/encounters", async (UpsertEncounterRequest req, HttpContext http, AppDbContext db) =>
 {
@@ -2199,10 +2247,12 @@ app.MapPost("/api/encounters", async (UpsertEncounterRequest req, HttpContext ht
 
 app.MapPut("/api/encounters/{id:int}", async (int id, UpsertEncounterRequest req, HttpContext http, AppDbContext db) =>
 {
+    var userId = GetUserId(http); if (userId is null) return Results.Unauthorized();
     if (string.IsNullOrWhiteSpace(req.Name)) return Results.BadRequest(new ApiError("ENCOUNTER_NAME_REQUIRED", "Encounter name is required.", http.TraceIdentifier));
 
     var row = await db.Encounters.Include(x => x.Participants).FirstOrDefaultAsync(x => x.EncounterId == id && x.DateDeletedUtc == null);
     if (row is null) return Results.NotFound();
+    if (!await CanAccessEncounter(http, db, row, requireEdit: true)) return Results.Forbid();
 
     row.CampaignId = req.CampaignId ?? 0;
     row.Name = TitleNormalization.ToPascalTitle(req.Name);
@@ -2226,18 +2276,20 @@ app.MapPut("/api/encounters/{id:int}", async (int id, UpsertEncounterRequest req
 
     await db.SaveChangesAsync();
     return Results.Ok(new { row.EncounterId });
-});
+}).RequireAuthorization();
 
-app.MapDelete("/api/encounters/{id:int}", async (int id, AppDbContext db) =>
+app.MapDelete("/api/encounters/{id:int}", async (int id, HttpContext http, AppDbContext db) =>
 {
+    var userId = GetUserId(http); if (userId is null) return Results.Unauthorized();
     var row = await db.Encounters.FirstOrDefaultAsync(x => x.EncounterId == id && x.DateDeletedUtc == null);
     if (row is null) return Results.NotFound();
+    if (!await CanAccessEncounter(http, db, row, requireEdit: true)) return Results.Forbid();
 
     row.DateDeletedUtc = DateTime.UtcNow;
     row.DateModifiedUtc = DateTime.UtcNow;
     await db.SaveChangesAsync();
     return Results.NoContent();
-});
+}).RequireAuthorization();
 
 
 
@@ -3168,6 +3220,22 @@ static int? GetUserId(HttpContext http)
 }
 
 static bool IsAdmin(HttpContext http) => http.User.IsInRole("Admin");
+
+static async Task<bool> CanAccessEncounter(HttpContext http, AppDbContext db, Encounter row, bool requireEdit)
+{
+    var userId = GetUserId(http);
+    if (userId is null) return false;
+    if (IsAdmin(http)) return true;
+    if (row.CampaignId == 0) return true;
+
+    var campaign = await db.Campaigns.FirstOrDefaultAsync(x => x.CampaignId == row.CampaignId && x.DateDeletedUtc == null);
+    if (campaign is null) return false;
+    if (campaign.OwnerAppUserId == userId.Value) return true;
+
+    return requireEdit
+        ? await db.CampaignShares.AnyAsync(x => x.CampaignId == row.CampaignId && x.SharedWithUserId == userId.Value && x.Permission == SharePermission.Edit)
+        : await db.CampaignShares.AnyAsync(x => x.CampaignId == row.CampaignId && x.SharedWithUserId == userId.Value);
+}
 
 static void ApplyItem(UpsertItemRequest req, Item row)
 {

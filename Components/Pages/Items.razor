@@ -106,6 +106,16 @@
                     <MudItem xs="12" md="2"><MudTextField @bind-Value="form.CostCurrency" Label="Currency" Variant="Variant.Outlined" /></MudItem>
                 </MudGrid>
                 <MudTextField @bind-Value="form.Description" Label="Description" Variant="Variant.Outlined" Lines="2" />
+                <MudSelect T="int?" @bind-Value="form.OwnerAppUserId" Label="Owner" Variant="Variant.Outlined" Disabled="@(!canEditOwnerField || !ownerOptions.Any())">
+                    @foreach (var user in ownerOptions)
+                    {
+                        <MudSelectItem T="int?" Value="user.AppUserId">@user.Username</MudSelectItem>
+                    }
+                </MudSelect>
+                @if (!canEditOwnerField && form.ItemId.HasValue)
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Only the current owner or an admin can transfer item ownership.</MudText>
+                }
 
                 @if (form.ItemType == 1)
                 {
@@ -159,6 +169,9 @@
     private ItemScopeFilter scopeFilter = ItemScopeFilter.All;
     private string ShowAllQuery => (isAdmin && showAllAdmin) ? "?showAll=true" : string.Empty;
     private ItemForm form = new() { ItemType = 9, Rarity = 1, SourceType = 1, CostCurrency = "gp" };
+    private bool canEditOwnerField;
+    private int? currentUserId;
+    private List<UserOption> ownerOptions = new();
     private bool isShare;
     private int? shareItemId;
     private int? shareUserId;
@@ -190,6 +203,7 @@
         var auth = await AuthStateProvider.GetAuthenticationStateAsync();
         isAdmin = auth.User.IsInRole("Admin");
         currentUsername = auth.User.Identity?.Name;
+        currentUserId = int.TryParse(auth.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var id) ? id : null;
         await Load();
         StateHasChanged();
     }
@@ -201,10 +215,12 @@
             var endpoint = "/api/items" + ShowAllQuery;
             var r1 = await JS.InvokeAsync<ApiResult<List<ItemRow>>>("ruleforgeApi.get", endpoint);
             var r2 = await JS.InvokeAsync<ApiResult<FriendsOverview>>("ruleforgeApi.get", "/api/friends");
+            var r3 = await JS.InvokeAsync<ApiResult<List<UserOption>>>("ruleforgeApi.get", "/api/users");
             if (!r1.Ok) { error = ApiErrorMessage(r1, "Failed to load items."); rows = new(); return; }
             rows = r1.Data ?? new();
             rows = ApplyScope(rows);
             friends = r2.Data?.Friends ?? new();
+            ownerOptions = (r3.Ok ? r3.Data : null) ?? new();
         }
         catch (Exception ex) { error = ex.Message; rows = new(); friends = new(); }
     }
@@ -223,7 +239,7 @@
         StateHasChanged();
     }
 
-    private void OpenCreate() { form = new ItemForm { ItemType = 9, Rarity = 1, SourceType = 1, CostCurrency = "gp" }; isEdit = true; }
+    private void OpenCreate() { form = new ItemForm { ItemType = 9, Rarity = 1, SourceType = 1, CostCurrency = "gp", OwnerAppUserId = currentUserId }; canEditOwnerField = isAdmin; isEdit = true; }
     private void OpenShare(int id) { shareItemId = id; shareUserId = null; sharePermission = 0; isShare = true; }
     private bool CanEdit(ItemRow row)
     {
@@ -281,7 +297,7 @@
         if (!res.Ok) { error = ApiErrorMessage(res, "Share failed."); return; }
         isShare = false;
     }
-    private async Task OpenEdit(int id){ var r=await JS.InvokeAsync<ApiResult<ItemRow>>("ruleforgeApi.get", $"/api/items/{id}{ShowAllQuery}"); if(!r.Ok || r.Data is null){ error = string.IsNullOrWhiteSpace(r.Text) ? "Item not found." : r.Text; return; } form = new ItemForm(r.Data); isEdit=true; }
+    private async Task OpenEdit(int id){ var r=await JS.InvokeAsync<ApiResult<ItemRow>>("ruleforgeApi.get", $"/api/items/{id}{ShowAllQuery}"); if(!r.Ok || r.Data is null){ error = string.IsNullOrWhiteSpace(r.Text) ? "Item not found." : r.Text; return; } form = new ItemForm(r.Data); canEditOwnerField = isAdmin || (currentUserId.HasValue && r.Data.OwnerAppUserId == currentUserId.Value); isEdit=true; }
 
     private async Task Save()
     {
@@ -363,6 +379,7 @@
     private class ItemForm
     {
         public int? ItemId { get; set; }
+        public int? OwnerAppUserId { get; set; }
         public string Name { get; set; } = string.Empty;
         public string? Description { get; set; }
         public int ItemType { get; set; }
@@ -401,7 +418,7 @@
         public ItemForm(){}
         public ItemForm(ItemRow r)
         {
-            ItemId=r.ItemId; Name=r.Name; Description=r.Description; ItemType=r.ItemType; Rarity=r.Rarity; Weight=r.Weight; CostAmount=r.CostAmount; CostCurrency=r.CostCurrency;
+            ItemId=r.ItemId; OwnerAppUserId=r.OwnerAppUserId; Name=r.Name; Description=r.Description; ItemType=r.ItemType; Rarity=r.Rarity; Weight=r.Weight; CostAmount=r.CostAmount; CostCurrency=r.CostCurrency;
             RequiresAttunement=r.RequiresAttunement; SourceType=r.SourceType ?? 1; Source=r.Source; Tags=r.Tags; WeaponCategory=r.WeaponCategory; DamageDice=r.DamageDice; DamageType=r.DamageType;
             Properties=r.Properties; RangeNormal=r.RangeNormal; RangeMax=r.RangeMax; IsMagicWeapon=r.IsMagicWeapon; AttackBonus=r.AttackBonus; DamageBonus=r.DamageBonus;
             ArmorCategory=r.ArmorCategory; ArmorClassBase=r.ArmorClassBase; DexCap=r.DexCap; StrengthRequirement=r.StrengthRequirement; StealthDisadvantage=r.StealthDisadvantage;
@@ -414,6 +431,7 @@
 
     private record FriendUser(int AppUserId, string Username, string Email);
     private record FriendsOverview(List<FriendUser> Friends);
+    private record UserOption(int AppUserId, string Username);
 
     private record ItemRow(
         int ItemId,string Name,string? Description,int ItemType,int Rarity,decimal? Weight,decimal? CostAmount,string? CostCurrency,bool RequiresAttunement,

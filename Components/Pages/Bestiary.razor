@@ -111,6 +111,16 @@
 
                 <MudText Typo="Typo.subtitle2" Class="mt-2">Notes</MudText>
                 <MudTextField @bind-Value="form.Description" Label="Description" Placeholder="Lore, behavior, abilities, hooks..." Variant="Variant.Outlined" Lines="4" />
+                <MudSelect T="int?" @bind-Value="form.OwnerAppUserId" Label="Owner" Variant="Variant.Outlined" Disabled="@(!canEditOwnerField || !ownerOptions.Any())">
+                    @foreach (var user in ownerOptions)
+                    {
+                        <MudSelectItem T="int?" Value="user.AppUserId">@user.Username</MudSelectItem>
+                    }
+                </MudSelect>
+                @if (!canEditOwnerField && form.CreatureId.HasValue)
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Only the current owner or an admin can transfer creature ownership.</MudText>
+                }
 
                 <MudStack Row="true" Spacing="1" Class="mt-3">
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="Save" Disabled="@isSaving">@(isSaving ? "Saving..." : "Save")</MudButton>
@@ -133,7 +143,9 @@
     private int? shareUserId;
     private int sharePermission;
     private List<FriendUser> friends = new();
+    private List<UserOption> ownerOptions = new();
     private bool isCreate;
+    private bool canEditOwnerField;
     private CreatureForm form = new();
 
     private bool _loaded;
@@ -167,7 +179,9 @@
             if (!r.Ok) { error = ApiErrorMessage(r, "Failed to load creatures."); rows = new(); return; }
             rows = ApplyScope(r.Data ?? new());
             var fr = await JS.InvokeAsync<ApiResult<FriendsOverview>>("ruleforgeApi.get", "/api/friends");
+            var usersRes = await JS.InvokeAsync<ApiResult<List<UserOption>>>("ruleforgeApi.get", "/api/users");
             friends = fr.Data?.Friends ?? new();
+            ownerOptions = (usersRes.Ok ? usersRes.Data : null) ?? new();
         }
         catch (Exception ex)
         {
@@ -178,7 +192,8 @@
 
     private void OpenCreate()
     {
-        form = new CreatureForm();
+        form = new CreatureForm { OwnerAppUserId = currentUserId };
+        canEditOwnerField = isAdmin;
         isCreate = true;
     }
 
@@ -198,6 +213,7 @@
             form = new CreatureForm
             {
                 CreatureId = row.CreatureId,
+                OwnerAppUserId = row.OwnerAppUserId,
                 Name = row.Name,
                 Description = row.Description,
                 ArmorClass = row.ArmorClass,
@@ -214,6 +230,7 @@
                 Wisdom = row.Wisdom,
                 Charisma = row.Charisma
             };
+            canEditOwnerField = isAdmin || (currentUserId.HasValue && row.OwnerAppUserId == currentUserId.Value);
             isCreate = true;
         }
         catch (Exception ex)
@@ -330,7 +347,8 @@
                 constitution = form.Constitution,
                 intelligence = form.Intelligence,
                 wisdom = form.Wisdom,
-                charisma = form.Charisma
+                charisma = form.Charisma,
+                ownerAppUserId = form.OwnerAppUserId
             };
 
             ApiResult<object> res;
@@ -412,6 +430,7 @@
     private sealed class CreatureForm
     {
         public int? CreatureId { get; set; }
+        public int? OwnerAppUserId { get; set; }
         public string Name { get; set; } = string.Empty;
         public string? Description { get; set; }
         public int? ArmorClass { get; set; }
@@ -433,6 +452,7 @@
 
     private record FriendUser(int AppUserId, string Username, string Email);
     private record FriendsOverview(List<FriendUser> Friends);
+    private record UserOption(int AppUserId, string Username);
 
     private sealed record CreatureRow(
         int CreatureId,

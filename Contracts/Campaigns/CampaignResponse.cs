@@ -4,6 +4,7 @@ public sealed class CampaignResponse
 {
     public int CampaignId { get; set; }
     public int? OwnerAppUserId { get; set; }
+    public string? OwnerUsername { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public int QuestCount { get; set; }
