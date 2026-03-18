@@ -330,21 +330,21 @@ using (var scope = app.Services.CreateScope())
     if (!isSqliteProvider)
     {
         // PostgreSQL compatibility patching for evolving schema on existing DBs.
-        try { db.Database.ExecuteSqlRaw("ALTER TABLE \"Characters\" ADD COLUMN IF NOT EXISTS \"PartyId\" integer NOT NULL DEFAULT 0;"); } catch { }
-        try { db.Database.ExecuteSqlRaw("ALTER TABLE \"Characters\" ADD COLUMN IF NOT EXISTS \"PlayerName\" text NULL;"); } catch { }
-        try { db.Database.ExecuteSqlRaw("ALTER TABLE \"Characters\" ADD COLUMN IF NOT EXISTS \"SubclassName\" text NULL;"); } catch { }
-        try { db.Database.ExecuteSqlRaw("ALTER TABLE \"Characters\" ADD COLUMN IF NOT EXISTS \"RaceName\" text NULL;"); } catch { }
-        try { db.Database.ExecuteSqlRaw("ALTER TABLE \"Characters\" ADD COLUMN IF NOT EXISTS \"SubraceName\" text NULL;"); } catch { }
-
-        try { db.Database.ExecuteSqlRaw("ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"PassivePerception\" integer NULL;"); } catch { }
-        try { db.Database.ExecuteSqlRaw("ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"Strength\" integer NULL;"); } catch { }
-        try { db.Database.ExecuteSqlRaw("ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"Dexterity\" integer NULL;"); } catch { }
-        try { db.Database.ExecuteSqlRaw("ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"Constitution\" integer NULL;"); } catch { }
-        try { db.Database.ExecuteSqlRaw("ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"Intelligence\" integer NULL;"); } catch { }
-        try { db.Database.ExecuteSqlRaw("ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"Wisdom\" integer NULL;"); } catch { }
-        try { db.Database.ExecuteSqlRaw("ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"Charisma\" integer NULL;"); } catch { }
-
-        try { db.Database.ExecuteSqlRaw("ALTER TABLE \"Parties\" ADD COLUMN IF NOT EXISTS \"CampaignId\" integer NOT NULL DEFAULT 0;"); } catch { }
+        TryExecuteSqlStatements(db,
+            "ALTER TABLE \"Characters\" ADD COLUMN IF NOT EXISTS \"PartyId\" integer NOT NULL DEFAULT 0;",
+            "ALTER TABLE \"Characters\" ADD COLUMN IF NOT EXISTS \"PlayerName\" text NULL;",
+            "ALTER TABLE \"Characters\" ADD COLUMN IF NOT EXISTS \"SubclassName\" text NULL;",
+            "ALTER TABLE \"Characters\" ADD COLUMN IF NOT EXISTS \"RaceName\" text NULL;",
+            "ALTER TABLE \"Characters\" ADD COLUMN IF NOT EXISTS \"SubraceName\" text NULL;",
+            "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"PassivePerception\" integer NULL;",
+            "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"Strength\" integer NULL;",
+            "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"Dexterity\" integer NULL;",
+            "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"Constitution\" integer NULL;",
+            "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"Intelligence\" integer NULL;",
+            "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"Wisdom\" integer NULL;",
+            "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"Charisma\" integer NULL;",
+            "ALTER TABLE \"Parties\" ADD COLUMN IF NOT EXISTS \"CampaignId\" integer NOT NULL DEFAULT 0;"
+        );
 
         // Quest tables (for existing prod DBs that predate quests feature)
         db.Database.ExecuteSqlRaw("""
@@ -428,24 +428,28 @@ using (var scope = app.Services.CreateScope())
             );
             CREATE INDEX IF NOT EXISTS "IX_Items_Name" ON "Items" ("Name");
         """);
-        try { db.Database.ExecuteSqlRaw("ALTER TABLE \"Users\" ADD COLUMN IF NOT EXISTS \"MustChangePassword\" boolean NOT NULL DEFAULT false;"); } catch { }
-        try { db.Database.ExecuteSqlRaw("ALTER TABLE \"Users\" ADD COLUMN IF NOT EXISTS \"IsSystem\" boolean NOT NULL DEFAULT false;"); } catch { }
-        try { db.Database.ExecuteSqlRaw("ALTER TABLE \"Users\" ADD COLUMN IF NOT EXISTS \"ThemePreference\" text NULL;"); } catch { }
-        try { db.Database.ExecuteSqlRaw("ALTER TABLE \"Users\" ADD COLUMN IF NOT EXISTS \"CampaignNavExpanded\" boolean NULL;"); } catch { }
-        try { db.Database.ExecuteSqlRaw("ALTER TABLE \"Users\" ADD COLUMN IF NOT EXISTS \"CompendiumNavExpanded\" boolean NULL;"); } catch { }
-        try { db.Database.ExecuteSqlRaw("ALTER TABLE \"Campaigns\" ADD COLUMN IF NOT EXISTS \"OwnerAppUserId\" integer NULL;"); } catch { }
-        try { db.Database.ExecuteSqlRaw("ALTER TABLE \"Parties\" ADD COLUMN IF NOT EXISTS \"OwnerAppUserId\" integer NULL;"); } catch { }
-        try { db.Database.ExecuteSqlRaw("ALTER TABLE \"Quests\" ADD COLUMN IF NOT EXISTS \"OwnerAppUserId\" integer NULL;"); } catch { }
-        db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS \"IX_Campaigns_OwnerAppUserId\" ON \"Campaigns\" (\"OwnerAppUserId\");");
-        db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS \"IX_Parties_OwnerAppUserId\" ON \"Parties\" (\"OwnerAppUserId\");");
-        db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS \"IX_Quests_OwnerAppUserId\" ON \"Quests\" (\"OwnerAppUserId\");");
-        try { db.Database.ExecuteSqlRaw("ALTER TABLE \"Items\" ADD COLUMN IF NOT EXISTS \"OwnerAppUserId\" integer NULL;"); } catch { }
-        try { db.Database.ExecuteSqlRaw("ALTER TABLE \"Items\" ADD COLUMN IF NOT EXISTS \"IsSystem\" boolean NOT NULL DEFAULT false;"); } catch { }
-        db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS \"IX_Items_OwnerAppUserId\" ON \"Items\" (\"OwnerAppUserId\");");
-        try { db.Database.ExecuteSqlRaw("ALTER TABLE \"Items\" ADD COLUMN IF NOT EXISTS \"SourceType\" integer NULL;"); } catch { }
-        try { db.Database.ExecuteSqlRaw("ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"OwnerAppUserId\" integer NULL;"); } catch { }
-        try { db.Database.ExecuteSqlRaw("ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"IsSystem\" boolean NOT NULL DEFAULT false;"); } catch { }
-        db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS \"IX_Creatures_OwnerAppUserId\" ON \"Creatures\" (\"OwnerAppUserId\");");
+        TryExecuteSqlStatements(db,
+            "ALTER TABLE \"Users\" ADD COLUMN IF NOT EXISTS \"MustChangePassword\" boolean NOT NULL DEFAULT false;",
+            "ALTER TABLE \"Users\" ADD COLUMN IF NOT EXISTS \"IsSystem\" boolean NOT NULL DEFAULT false;",
+            "ALTER TABLE \"Users\" ADD COLUMN IF NOT EXISTS \"ThemePreference\" text NULL;",
+            "ALTER TABLE \"Users\" ADD COLUMN IF NOT EXISTS \"CampaignNavExpanded\" boolean NULL;",
+            "ALTER TABLE \"Users\" ADD COLUMN IF NOT EXISTS \"CompendiumNavExpanded\" boolean NULL;",
+            "ALTER TABLE \"Campaigns\" ADD COLUMN IF NOT EXISTS \"OwnerAppUserId\" integer NULL;",
+            "ALTER TABLE \"Parties\" ADD COLUMN IF NOT EXISTS \"OwnerAppUserId\" integer NULL;",
+            "ALTER TABLE \"Quests\" ADD COLUMN IF NOT EXISTS \"OwnerAppUserId\" integer NULL;",
+            "ALTER TABLE \"Items\" ADD COLUMN IF NOT EXISTS \"OwnerAppUserId\" integer NULL;",
+            "ALTER TABLE \"Items\" ADD COLUMN IF NOT EXISTS \"IsSystem\" boolean NOT NULL DEFAULT false;",
+            "ALTER TABLE \"Items\" ADD COLUMN IF NOT EXISTS \"SourceType\" integer NULL;",
+            "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"OwnerAppUserId\" integer NULL;",
+            "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"IsSystem\" boolean NOT NULL DEFAULT false;"
+        );
+        ExecuteSqlStatements(db,
+            "CREATE INDEX IF NOT EXISTS \"IX_Campaigns_OwnerAppUserId\" ON \"Campaigns\" (\"OwnerAppUserId\");",
+            "CREATE INDEX IF NOT EXISTS \"IX_Parties_OwnerAppUserId\" ON \"Parties\" (\"OwnerAppUserId\");",
+            "CREATE INDEX IF NOT EXISTS \"IX_Quests_OwnerAppUserId\" ON \"Quests\" (\"OwnerAppUserId\");",
+            "CREATE INDEX IF NOT EXISTS \"IX_Items_OwnerAppUserId\" ON \"Items\" (\"OwnerAppUserId\");",
+            "CREATE INDEX IF NOT EXISTS \"IX_Creatures_OwnerAppUserId\" ON \"Creatures\" (\"OwnerAppUserId\");"
+        );
         db.Database.ExecuteSqlRaw("""
             CREATE TABLE IF NOT EXISTS "CharacterShares" (
                 "CharacterShareId" integer GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
@@ -528,17 +532,19 @@ using (var scope = app.Services.CreateScope())
         CREATE INDEX IF NOT EXISTS IX_Creatures_Name ON Creatures (Name);
     """);
 
-    try { db.Database.ExecuteSqlRaw("ALTER TABLE Creatures ADD COLUMN ArmorClass INTEGER NULL;"); } catch { }
-    try { db.Database.ExecuteSqlRaw("ALTER TABLE Creatures ADD COLUMN HitPoints INTEGER NULL;"); } catch { }
-    try { db.Database.ExecuteSqlRaw("ALTER TABLE Creatures ADD COLUMN InitiativeModifier INTEGER NULL;"); } catch { }
-    try { db.Database.ExecuteSqlRaw("ALTER TABLE Creatures ADD COLUMN Speed TEXT NULL;"); } catch { }
-    try { db.Database.ExecuteSqlRaw("ALTER TABLE Creatures ADD COLUMN ChallengeRating TEXT NULL;"); } catch { }
-    try { db.Database.ExecuteSqlRaw("ALTER TABLE Creatures ADD COLUMN ExperiencePoints INTEGER NULL;"); } catch { }
-    try { db.Database.ExecuteSqlRaw("ALTER TABLE Characters ADD COLUMN PartyId INTEGER NOT NULL DEFAULT 0;"); } catch { }
-    try { db.Database.ExecuteSqlRaw("ALTER TABLE Characters ADD COLUMN PlayerName TEXT NULL;"); } catch { }
-    try { db.Database.ExecuteSqlRaw("ALTER TABLE Characters ADD COLUMN SubclassName TEXT NULL;"); } catch { }
-    try { db.Database.ExecuteSqlRaw("ALTER TABLE Characters ADD COLUMN RaceName TEXT NULL;"); } catch { }
-    try { db.Database.ExecuteSqlRaw("ALTER TABLE Characters ADD COLUMN SubraceName TEXT NULL;"); } catch { }
+    TryExecuteSqlStatements(db,
+        "ALTER TABLE Creatures ADD COLUMN ArmorClass INTEGER NULL;",
+        "ALTER TABLE Creatures ADD COLUMN HitPoints INTEGER NULL;",
+        "ALTER TABLE Creatures ADD COLUMN InitiativeModifier INTEGER NULL;",
+        "ALTER TABLE Creatures ADD COLUMN Speed TEXT NULL;",
+        "ALTER TABLE Creatures ADD COLUMN ChallengeRating TEXT NULL;",
+        "ALTER TABLE Creatures ADD COLUMN ExperiencePoints INTEGER NULL;",
+        "ALTER TABLE Characters ADD COLUMN PartyId INTEGER NOT NULL DEFAULT 0;",
+        "ALTER TABLE Characters ADD COLUMN PlayerName TEXT NULL;",
+        "ALTER TABLE Characters ADD COLUMN SubclassName TEXT NULL;",
+        "ALTER TABLE Characters ADD COLUMN RaceName TEXT NULL;",
+        "ALTER TABLE Characters ADD COLUMN SubraceName TEXT NULL;"
+    );
 
     db.Database.ExecuteSqlRaw("""
         CREATE TABLE IF NOT EXISTS Parties (
@@ -3196,6 +3202,28 @@ static void ApplyItem(UpsertItemRequest req, Item row)
     row.Quantity = req.Quantity;
     row.Stackable = req.Stackable;
     row.Notes = req.Notes;
+}
+
+static void ExecuteSqlStatements(AppDbContext db, params string[] statements)
+{
+    foreach (var statement in statements)
+    {
+        db.Database.ExecuteSqlRaw(statement);
+    }
+}
+
+static void TryExecuteSqlStatements(AppDbContext db, params string[] statements)
+{
+    foreach (var statement in statements)
+    {
+        try
+        {
+            db.Database.ExecuteSqlRaw(statement);
+        }
+        catch
+        {
+        }
+    }
 }
 
 static LocalSeqSettings LoadLocalSeqSettings(string contentRootPath)
