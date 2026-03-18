@@ -505,13 +505,11 @@ using (var scope = app.Services.CreateScope())
         CREATE UNIQUE INDEX IF NOT EXISTS IX_Campaigns_Name ON Campaigns (Name);
     """);
 
-    try
-    {
-        db.Database.ExecuteSqlRaw("ALTER TABLE Campaigns ADD COLUMN Description TEXT NULL;");
-    }
-    catch { }
-    try { db.Database.ExecuteSqlRaw("ALTER TABLE Campaigns ADD COLUMN OwnerAppUserId INTEGER NULL;"); } catch { }
-    try { db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_Campaigns_OwnerAppUserId ON Campaigns (OwnerAppUserId);"); } catch { }
+    TryExecuteSqlStatements(db,
+        "ALTER TABLE Campaigns ADD COLUMN Description TEXT NULL;",
+        "ALTER TABLE Campaigns ADD COLUMN OwnerAppUserId INTEGER NULL;",
+        "CREATE INDEX IF NOT EXISTS IX_Campaigns_OwnerAppUserId ON Campaigns (OwnerAppUserId);"
+    );
 
     db.Database.ExecuteSqlRaw("""
         CREATE TABLE IF NOT EXISTS Creatures (
@@ -556,19 +554,20 @@ using (var scope = app.Services.CreateScope())
             DateDeletedUtc TEXT NULL
         );
     """);
-    try { db.Database.ExecuteSqlRaw("ALTER TABLE Parties ADD COLUMN CampaignId INTEGER NOT NULL DEFAULT 0;"); } catch { }
-    try { db.Database.ExecuteSqlRaw("ALTER TABLE Parties ADD COLUMN OwnerAppUserId INTEGER NULL;"); } catch { }
-    try { db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_Parties_OwnerAppUserId ON Parties (OwnerAppUserId);"); } catch { }
-    try { db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_Parties_CampaignId_Name ON Parties (CampaignId, Name);"); } catch { }
-    try { db.Database.ExecuteSqlRaw("DROP INDEX IF EXISTS IX_Parties_Name;"); } catch { }
-
-    try { db.Database.ExecuteSqlRaw("ALTER TABLE Creatures ADD COLUMN PassivePerception INTEGER NULL;"); } catch { }
-    try { db.Database.ExecuteSqlRaw("ALTER TABLE Creatures ADD COLUMN Strength INTEGER NULL;"); } catch { }
-    try { db.Database.ExecuteSqlRaw("ALTER TABLE Creatures ADD COLUMN Dexterity INTEGER NULL;"); } catch { }
-    try { db.Database.ExecuteSqlRaw("ALTER TABLE Creatures ADD COLUMN Constitution INTEGER NULL;"); } catch { }
-    try { db.Database.ExecuteSqlRaw("ALTER TABLE Creatures ADD COLUMN Intelligence INTEGER NULL;"); } catch { }
-    try { db.Database.ExecuteSqlRaw("ALTER TABLE Creatures ADD COLUMN Wisdom INTEGER NULL;"); } catch { }
-    try { db.Database.ExecuteSqlRaw("ALTER TABLE Creatures ADD COLUMN Charisma INTEGER NULL;"); } catch { }
+    TryExecuteSqlStatements(db,
+        "ALTER TABLE Parties ADD COLUMN CampaignId INTEGER NOT NULL DEFAULT 0;",
+        "ALTER TABLE Parties ADD COLUMN OwnerAppUserId INTEGER NULL;",
+        "CREATE INDEX IF NOT EXISTS IX_Parties_OwnerAppUserId ON Parties (OwnerAppUserId);",
+        "CREATE UNIQUE INDEX IF NOT EXISTS IX_Parties_CampaignId_Name ON Parties (CampaignId, Name);",
+        "DROP INDEX IF EXISTS IX_Parties_Name;",
+        "ALTER TABLE Creatures ADD COLUMN PassivePerception INTEGER NULL;",
+        "ALTER TABLE Creatures ADD COLUMN Strength INTEGER NULL;",
+        "ALTER TABLE Creatures ADD COLUMN Dexterity INTEGER NULL;",
+        "ALTER TABLE Creatures ADD COLUMN Constitution INTEGER NULL;",
+        "ALTER TABLE Creatures ADD COLUMN Intelligence INTEGER NULL;",
+        "ALTER TABLE Creatures ADD COLUMN Wisdom INTEGER NULL;",
+        "ALTER TABLE Creatures ADD COLUMN Charisma INTEGER NULL;"
+    );
 
     db.Database.ExecuteSqlRaw("""
         CREATE TABLE IF NOT EXISTS Encounters (
@@ -662,20 +661,22 @@ using (var scope = app.Services.CreateScope())
         );
         CREATE INDEX IF NOT EXISTS IX_Items_Name ON Items (Name);
     """);
-    try { db.Database.ExecuteSqlRaw("ALTER TABLE Users ADD COLUMN MustChangePassword INTEGER NOT NULL DEFAULT 0;"); } catch { }
-    try { db.Database.ExecuteSqlRaw("ALTER TABLE Users ADD COLUMN IsSystem INTEGER NOT NULL DEFAULT 0;"); } catch { }
-    try { db.Database.ExecuteSqlRaw("ALTER TABLE Users ADD COLUMN ThemePreference TEXT NULL;"); } catch { }
-    try { db.Database.ExecuteSqlRaw("ALTER TABLE Users ADD COLUMN CampaignNavExpanded INTEGER NULL;"); } catch { }
-    try { db.Database.ExecuteSqlRaw("ALTER TABLE Users ADD COLUMN CompendiumNavExpanded INTEGER NULL;"); } catch { }
-    try { db.Database.ExecuteSqlRaw("ALTER TABLE Items ADD COLUMN OwnerAppUserId INTEGER NULL;"); } catch { }
-    try { db.Database.ExecuteSqlRaw("ALTER TABLE Items ADD COLUMN SourceType INTEGER NULL;"); } catch { }
-    try { db.Database.ExecuteSqlRaw("ALTER TABLE Items ADD COLUMN IsSystem INTEGER NOT NULL DEFAULT 0;"); } catch { }
-    try { db.Database.ExecuteSqlRaw("ALTER TABLE Creatures ADD COLUMN IsSystem INTEGER NOT NULL DEFAULT 0;"); } catch { }
-    try { db.Database.ExecuteSqlRaw("ALTER TABLE Creatures ADD COLUMN OwnerAppUserId INTEGER NULL;"); } catch { }
-    try { db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_Creatures_OwnerAppUserId ON Creatures (OwnerAppUserId);"); } catch { }
-    try { db.Database.ExecuteSqlRaw("ALTER TABLE Quests ADD COLUMN OwnerAppUserId INTEGER NULL;"); } catch { }
-    try { db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_Quests_OwnerAppUserId ON Quests (OwnerAppUserId);"); } catch { }
-    try { db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_Items_OwnerAppUserId ON Items (OwnerAppUserId);"); } catch { }
+    TryExecuteSqlStatements(db,
+        "ALTER TABLE Users ADD COLUMN MustChangePassword INTEGER NOT NULL DEFAULT 0;",
+        "ALTER TABLE Users ADD COLUMN IsSystem INTEGER NOT NULL DEFAULT 0;",
+        "ALTER TABLE Users ADD COLUMN ThemePreference TEXT NULL;",
+        "ALTER TABLE Users ADD COLUMN CampaignNavExpanded INTEGER NULL;",
+        "ALTER TABLE Users ADD COLUMN CompendiumNavExpanded INTEGER NULL;",
+        "ALTER TABLE Items ADD COLUMN OwnerAppUserId INTEGER NULL;",
+        "ALTER TABLE Items ADD COLUMN SourceType INTEGER NULL;",
+        "ALTER TABLE Items ADD COLUMN IsSystem INTEGER NOT NULL DEFAULT 0;",
+        "ALTER TABLE Creatures ADD COLUMN IsSystem INTEGER NOT NULL DEFAULT 0;",
+        "ALTER TABLE Creatures ADD COLUMN OwnerAppUserId INTEGER NULL;",
+        "CREATE INDEX IF NOT EXISTS IX_Creatures_OwnerAppUserId ON Creatures (OwnerAppUserId);",
+        "ALTER TABLE Quests ADD COLUMN OwnerAppUserId INTEGER NULL;",
+        "CREATE INDEX IF NOT EXISTS IX_Quests_OwnerAppUserId ON Quests (OwnerAppUserId);",
+        "CREATE INDEX IF NOT EXISTS IX_Items_OwnerAppUserId ON Items (OwnerAppUserId);"
+    );
 
     db.Database.ExecuteSqlRaw("""
         CREATE TABLE IF NOT EXISTS CharacterShares (
@@ -704,8 +705,10 @@ using (var scope = app.Services.CreateScope())
         CREATE UNIQUE INDEX IF NOT EXISTS IX_QuestShares_QuestId_SharedWithUserId ON QuestShares (QuestId, SharedWithUserId);
     """);
 
-    try { db.Database.ExecuteSqlRaw("ALTER TABLE QuestNodes ADD COLUMN CanvasX REAL NULL;"); } catch { }
-    try { db.Database.ExecuteSqlRaw("ALTER TABLE QuestNodes ADD COLUMN CanvasY REAL NULL;"); } catch { }
+    TryExecuteSqlStatements(db,
+        "ALTER TABLE QuestNodes ADD COLUMN CanvasX REAL NULL;",
+        "ALTER TABLE QuestNodes ADD COLUMN CanvasY REAL NULL;"
+    );
 
     db.Database.ExecuteSqlRaw("""
         CREATE TABLE IF NOT EXISTS MarketplaceListings (
