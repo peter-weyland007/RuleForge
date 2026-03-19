@@ -39,6 +39,8 @@ public sealed class UpsertCharacterRequest
     public string? SubraceName { get; set; }
     public int? PassivePerception { get; set; }
 
+    public List<UpsertCharacterSkillRequest> Skills { get; set; } = new();
+
     public string? Conditions { get; set; }
     public string? Notes { get; set; }
 }

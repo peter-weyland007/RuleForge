@@ -39,4 +39,6 @@ public sealed class Character
     public DateTime DateCreatedUtc { get; set; } = DateTime.UtcNow;
     public DateTime DateModifiedUtc { get; set; } = DateTime.UtcNow;
     public DateTime? DateDeletedUtc { get; set; }
+
+    public ICollection<CharacterSkill> Skills { get; set; } = new List<CharacterSkill>();
 }

@@ -34,6 +34,10 @@ public sealed class CharacterResponse
     public string? RaceName { get; set; }
     public string? SubraceName { get; set; }
     public int? PassivePerception { get; set; }
+    public int? PassiveInvestigation { get; set; }
+    public int? PassiveInsight { get; set; }
+
+    public List<CharacterSkillResponse> Skills { get; set; } = new();
 
     public string? Conditions { get; set; }
     public string? Notes { get; set; }

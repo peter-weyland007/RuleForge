@@ -130,6 +130,43 @@
                     <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Charisma" Label='@($"CHA ({ModLabel(form.Charisma)})")' Variant="Variant.Outlined" /></MudItem>
                 </MudGrid>
 
+                <MudText Typo="Typo.subtitle2">Skills</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Standard 5e skill proficiencies with expertise, bonus overrides, and computed totals.</MudText>
+                <MudGrid>
+                    <MudItem xs="12" md="4">
+                        <MudPaper Class="pa-3" Outlined="true" Elevation="0">
+                            <MudText Typo="Typo.subtitle2">Passive Scores</MudText>
+                            <MudText Typo="Typo.body2">Perception: <strong>@PassivePerception</strong></MudText>
+                            <MudText Typo="Typo.body2">Investigation: <strong>@PassiveInvestigation</strong></MudText>
+                            <MudText Typo="Typo.body2">Insight: <strong>@PassiveInsight</strong></MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Computed as 10 + skill modifier.</MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="12" md="8">
+                        <MudNumericField T="int?" @bind-Value="form.ProficiencyBonus" Label="Proficiency Bonus" Variant="Variant.Outlined" HelperText="Leave blank to derive from level." />
+                    </MudItem>
+                </MudGrid>
+                <MudTable Items="form.Skills.OrderBy(x => x.DisplayOrder)" Dense="true" Hover="true" Outlined="true" Elevation="0">
+                    <HeaderContent>
+                        <MudTh>Skill</MudTh>
+                        <MudTh>Ability</MudTh>
+                        <MudTh>Prof</MudTh>
+                        <MudTh>Expertise</MudTh>
+                        <MudTh>Bonus</MudTh>
+                        <MudTh>Total</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd>
+                            <MudText Typo="Typo.body2">@context.Name</MudText>
+                        </MudTd>
+                        <MudTd>@ShortAbility(context.Ability)</MudTd>
+                        <MudTd><MudCheckBox T="bool" @bind-Value="context.IsProficient" /></MudTd>
+                        <MudTd><MudCheckBox T="bool" @bind-Value="context.HasExpertise" Disabled="@(!context.IsProficient)" /></MudTd>
+                        <MudTd><MudNumericField T="int?" @bind-Value="context.BonusOverride" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="false" /></MudTd>
+                        <MudTd><MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">@Signed(TotalModifier(context))</MudChip></MudTd>
+                    </RowTemplate>
+                </MudTable>
+
                 <MudText Typo="Typo.subtitle2">Notes</MudText>
                 <MudText Typo="Typo.caption" Color="Color.Secondary">Roleplay hooks, reminders, and freeform context.</MudText>
                 <MudTextField @bind-Value="form.Notes" Label="Notes" Placeholder="Roleplay notes, hooks, quirks..." Variant="Variant.Outlined" Lines="4" />
@@ -161,6 +198,7 @@
     private bool isAdmin;
     private bool canEditOwnerField;
     private bool isLoaded;
+    private bool _pendingJsLoad;
     private int? currentUserId;
     private int? _loadedCharacterId;
 
@@ -177,6 +215,10 @@
         : parties.Any()
             ? "Optional party assignment."
             : "No parties yet.";
+    private int EffectiveProficiencyBonus => form.ProficiencyBonus is > 0 ? form.ProficiencyBonus.Value : DerivedProficiencyBonus(form.Level);
+    private int PassivePerception => 10 + TotalModifierByKey("perception");
+    private int PassiveInvestigation => 10 + TotalModifierByKey("investigation");
+    private int PassiveInsight => 10 + TotalModifierByKey("insight");
 
     protected override async Task OnParametersSetAsync()
     {
@@ -190,6 +232,15 @@
         isAdmin = auth.User.IsInRole("Admin");
         currentUserId = int.TryParse(auth.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var id) ? id : null;
 
+        _pendingJsLoad = true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_pendingJsLoad) return;
+
+        _pendingJsLoad = false;
+
         await LoadOptions();
 
         if (CharacterId.HasValue)
@@ -198,6 +249,7 @@
             InitializeNewForm();
 
         isLoaded = true;
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task LoadOptions()
@@ -217,7 +269,8 @@
         {
             CharacterType = "PC",
             CampaignId = null,
-            OwnerAppUserId = currentUserId
+            OwnerAppUserId = currentUserId,
+            Skills = NewSkillForms()
         };
         canEditOwnerField = isAdmin;
     }
@@ -255,7 +308,9 @@
             Intelligence = row.Intelligence,
             Wisdom = row.Wisdom,
             Charisma = row.Charisma,
-            Notes = row.Notes
+            ProficiencyBonus = row.ProficiencyBonus,
+            Notes = row.Notes,
+            Skills = MergeSkills(row.Skills)
         };
 
         canEditOwnerField = isAdmin || (currentUserId.HasValue && row.OwnerAppUserId == currentUserId.Value);
@@ -303,6 +358,15 @@
                 intelligence = form.Intelligence,
                 wisdom = form.Wisdom,
                 charisma = form.Charisma,
+                proficiencyBonus = form.ProficiencyBonus,
+                passivePerception = PassivePerception,
+                skills = form.Skills.Select(x => new
+                {
+                    skillId = x.SkillId,
+                    isProficient = x.IsProficient,
+                    hasExpertise = x.IsProficient && x.HasExpertise,
+                    bonusOverride = x.BonusOverride
+                }),
                 notes = form.Notes
             };
 
@@ -332,6 +396,38 @@
 
     private static int AbilityMod(int? score) => score.HasValue ? (int)Math.Floor((score.Value - 10) / 2.0) : 0;
     private static string ModLabel(int? score) => $"{(AbilityMod(score) >= 0 ? "+" : string.Empty)}{AbilityMod(score)}";
+    private static int DerivedProficiencyBonus(int? level)
+    {
+        var safeLevel = level ?? 1;
+        if (safeLevel <= 4) return 2;
+        if (safeLevel <= 8) return 3;
+        if (safeLevel <= 12) return 4;
+        if (safeLevel <= 16) return 5;
+        return 6;
+    }
+    private int TotalModifierByKey(string key) => form.Skills.FirstOrDefault(x => string.Equals(x.Key, key, StringComparison.OrdinalIgnoreCase)) is { } skill ? TotalModifier(skill) : 0;
+    private int TotalModifier(CharacterSkillForm skill) => AbilityMod(AbilityScoreFor(skill.Ability)) + (skill.HasExpertise && skill.IsProficient ? EffectiveProficiencyBonus * 2 : (skill.IsProficient ? EffectiveProficiencyBonus : 0)) + (skill.BonusOverride ?? 0);
+    private int? AbilityScoreFor(int ability) => ability switch
+    {
+        1 => form.Strength,
+        2 => form.Dexterity,
+        3 => form.Constitution,
+        4 => form.Intelligence,
+        5 => form.Wisdom,
+        6 => form.Charisma,
+        _ => null
+    };
+    private static string ShortAbility(int ability) => ability switch
+    {
+        1 => "STR",
+        2 => "DEX",
+        3 => "CON",
+        4 => "INT",
+        5 => "WIS",
+        6 => "CHA",
+        _ => "?"
+    };
+    private static string Signed(int value) => value >= 0 ? $"+{value}" : value.ToString();
 
     private static string ApiErrorMessage<T>(ApiResult<T> res, string fallback)
     {
@@ -364,6 +460,49 @@
         public string? Text { get; set; }
     }
 
+    private List<CharacterSkillForm> NewSkillForms() => new()
+    {
+        new() { SkillId = 0, Key = "acrobatics", Name = "Acrobatics", Ability = 2, DisplayOrder = 1 },
+        new() { SkillId = 0, Key = "animal-handling", Name = "Animal Handling", Ability = 5, DisplayOrder = 2 },
+        new() { SkillId = 0, Key = "arcana", Name = "Arcana", Ability = 4, DisplayOrder = 3 },
+        new() { SkillId = 0, Key = "athletics", Name = "Athletics", Ability = 1, DisplayOrder = 4 },
+        new() { SkillId = 0, Key = "deception", Name = "Deception", Ability = 6, DisplayOrder = 5 },
+        new() { SkillId = 0, Key = "history", Name = "History", Ability = 4, DisplayOrder = 6 },
+        new() { SkillId = 0, Key = "insight", Name = "Insight", Ability = 5, DisplayOrder = 7 },
+        new() { SkillId = 0, Key = "intimidation", Name = "Intimidation", Ability = 6, DisplayOrder = 8 },
+        new() { SkillId = 0, Key = "investigation", Name = "Investigation", Ability = 4, DisplayOrder = 9 },
+        new() { SkillId = 0, Key = "medicine", Name = "Medicine", Ability = 5, DisplayOrder = 10 },
+        new() { SkillId = 0, Key = "nature", Name = "Nature", Ability = 4, DisplayOrder = 11 },
+        new() { SkillId = 0, Key = "perception", Name = "Perception", Ability = 5, DisplayOrder = 12 },
+        new() { SkillId = 0, Key = "performance", Name = "Performance", Ability = 6, DisplayOrder = 13 },
+        new() { SkillId = 0, Key = "persuasion", Name = "Persuasion", Ability = 6, DisplayOrder = 14 },
+        new() { SkillId = 0, Key = "religion", Name = "Religion", Ability = 4, DisplayOrder = 15 },
+        new() { SkillId = 0, Key = "sleight-of-hand", Name = "Sleight of Hand", Ability = 2, DisplayOrder = 16 },
+        new() { SkillId = 0, Key = "stealth", Name = "Stealth", Ability = 2, DisplayOrder = 17 },
+        new() { SkillId = 0, Key = "survival", Name = "Survival", Ability = 5, DisplayOrder = 18 }
+    };
+
+    private List<CharacterSkillForm> MergeSkills(List<CharacterSkillDto>? incoming)
+    {
+        var baseline = NewSkillForms();
+        if (incoming is null || incoming.Count == 0) return baseline;
+
+        foreach (var skill in baseline)
+        {
+            var match = incoming.FirstOrDefault(x => string.Equals(x.Key, skill.Key, StringComparison.OrdinalIgnoreCase) || (x.SkillId > 0 && x.SkillId == skill.SkillId));
+            if (match is null) continue;
+            skill.SkillId = match.SkillId;
+            skill.Name = match.Name;
+            skill.Ability = match.Ability;
+            skill.DisplayOrder = match.DisplayOrder;
+            skill.IsProficient = match.IsProficient;
+            skill.HasExpertise = match.HasExpertise;
+            skill.BonusOverride = match.BonusOverride;
+        }
+
+        return baseline;
+    }
+
     private sealed class CharacterForm
     {
         public int? CharacterId { get; set; }
@@ -377,6 +516,7 @@
         public int? HitPointsCurrent { get; set; }
         public int? HitPointsMax { get; set; }
         public int? Level { get; set; }
+        public int? ProficiencyBonus { get; set; }
         public string? ClassName { get; set; }
         public string? SubclassName { get; set; }
         public string? RaceName { get; set; }
@@ -388,9 +528,23 @@
         public int? Wisdom { get; set; }
         public int? Charisma { get; set; }
         public string? Notes { get; set; }
+        public List<CharacterSkillForm> Skills { get; set; } = new();
     }
 
-    private sealed record CharacterDetail(int CharacterId, int? CampaignId, int? PartyId, int CharacterType, string Name, int? OwnerAppUserId, string? OwnerUsername, string? PlayerName, int? ArmorClass, int? HitPointsCurrent, int? HitPointsMax, int? Level, string? ClassName, string? SubclassName, string? RaceName, string? SubraceName, int? Strength, int? Dexterity, int? Constitution, int? Intelligence, int? Wisdom, int? Charisma, string? Notes);
+    private sealed class CharacterSkillForm
+    {
+        public int SkillId { get; set; }
+        public string Key { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public int Ability { get; set; }
+        public int DisplayOrder { get; set; }
+        public bool IsProficient { get; set; }
+        public bool HasExpertise { get; set; }
+        public int? BonusOverride { get; set; }
+    }
+
+    private sealed record CharacterDetail(int CharacterId, int? CampaignId, int? PartyId, int CharacterType, string Name, int? OwnerAppUserId, string? OwnerUsername, string? PlayerName, int? ArmorClass, int? HitPointsCurrent, int? HitPointsMax, int? Level, int? ProficiencyBonus, string? ClassName, string? SubclassName, string? RaceName, string? SubraceName, int? Strength, int? Dexterity, int? Constitution, int? Intelligence, int? Wisdom, int? Charisma, List<CharacterSkillDto>? Skills, string? Notes);
+    private sealed record CharacterSkillDto(int SkillId, string Key, string Name, int Ability, int DisplayOrder, bool IsProficient, bool HasExpertise, int? BonusOverride, int AbilityModifier, int ProficiencyContribution, int TotalModifier);
     private sealed record CampaignOption(int CampaignId, string Name);
     private sealed record PartyOption(int PartyId, string Name);
     private sealed record UserOption(int AppUserId, string Username);

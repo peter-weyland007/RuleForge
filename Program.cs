@@ -326,6 +326,9 @@ using (var scope = app.Services.CreateScope())
 
     db.Database.EnsureCreated();
 
+    EnsureSkillSchema(db, isSqliteProvider);
+    await SeedSkillsAsync(db);
+    await EnsureCharacterSkillRowsAsync(db);
 
     if (!isSqliteProvider)
     {
@@ -1089,45 +1092,16 @@ app.MapGet("/api/characters/{id:int}", async (int id, HttpContext http, AppDbCon
     var isAdmin = IsAdmin(http);
     var includeAll = isAdmin && showAll == true;
 
-    var row = await db.Characters.FirstOrDefaultAsync(x => x.CharacterId == id && x.DateDeletedUtc == null);
+    var row = await db.Characters
+        .Include(x => x.Skills)
+        .ThenInclude(x => x.Skill)
+        .FirstOrDefaultAsync(x => x.CharacterId == id && x.DateDeletedUtc == null);
     if (row is null) return Results.NotFound();
     var canView = isAdmin || includeAll || row.OwnerAppUserId == userId.Value || await db.CharacterShares.AnyAsync(x => x.CharacterId == id && x.SharedWithUserId == userId.Value);
     if (!canView) return Results.Forbid();
 
-    return Results.Ok(new CharacterResponse
-    {
-        CharacterId = row.CharacterId,
-        CampaignId = row.CampaignId == 0 ? null : row.CampaignId,
-        PartyId = row.PartyId == 0 ? null : row.PartyId,
-        CharacterType = row.CharacterType,
-        Name = row.Name,
-        OwnerAppUserId = row.OwnerAppUserId,
-        OwnerUsername = await db.Users.Where(u => u.AppUserId == row.OwnerAppUserId).Select(u => u.Username).FirstOrDefaultAsync(),
-        PlayerName = row.PlayerName,
-        ArmorClass = row.ArmorClass,
-        HitPointsCurrent = row.HitPointsCurrent,
-        HitPointsMax = row.HitPointsMax,
-        TempHitPoints = row.TempHitPoints,
-        InitiativeModifier = row.InitiativeModifier,
-        Speed = row.Speed,
-        Strength = row.Strength,
-        Dexterity = row.Dexterity,
-        Constitution = row.Constitution,
-        Intelligence = row.Intelligence,
-        Wisdom = row.Wisdom,
-        Charisma = row.Charisma,
-        ProficiencyBonus = row.ProficiencyBonus,
-        Level = row.Level,
-        ClassName = row.ClassName,
-        SubclassName = row.SubclassName,
-        RaceName = row.RaceName,
-        SubraceName = row.SubraceName,
-        PassivePerception = row.PassivePerception,
-        Conditions = row.Conditions,
-        Notes = row.Notes,
-        DateCreatedUtc = row.DateCreatedUtc,
-        DateModifiedUtc = row.DateModifiedUtc
-    });
+    var ownerUsername = await db.Users.Where(u => u.AppUserId == row.OwnerAppUserId).Select(u => u.Username).FirstOrDefaultAsync();
+    return Results.Ok(ToCharacterResponse(row, ownerUsername));
 }).RequireAuthorization();
 
 app.MapPost("/api/characters", async (UpsertCharacterRequest req, HttpContext http, AppDbContext db) =>
@@ -1136,8 +1110,13 @@ app.MapPost("/api/characters", async (UpsertCharacterRequest req, HttpContext ht
     if (userId is null) return Results.Unauthorized();
     if (string.IsNullOrWhiteSpace(req.Name)) return Results.BadRequest(new ApiError("CHARACTER_NAME_REQUIRED", "Name is required.", http.TraceIdentifier));
 
+    var requestedOwnerId = req.OwnerAppUserId ?? userId.Value;
+    if (requestedOwnerId != userId.Value && !IsAdmin(http)) return Results.Forbid();
+    var ownerExists = await db.Users.AnyAsync(x => x.AppUserId == requestedOwnerId && x.DateDeletedUtc == null);
+    if (!ownerExists) return Results.BadRequest(new ApiError("CHARACTER_OWNER_INVALID", "Selected owner was not found.", http.TraceIdentifier));
+
     var normalizedName = TitleNormalization.ToPascalTitle(req.Name);
-    var duplicate = await db.Characters.AnyAsync(x => x.DateDeletedUtc == null && x.OwnerAppUserId == userId.Value && x.CampaignId == (req.CampaignId ?? 0) && x.Name == normalizedName);
+    var duplicate = await db.Characters.AnyAsync(x => x.DateDeletedUtc == null && x.OwnerAppUserId == requestedOwnerId && x.CampaignId == (req.CampaignId ?? 0) && x.Name == normalizedName);
     if (duplicate) return Results.BadRequest(new ApiError("CHARACTER_DUPLICATE", "Character name already exists in this campaign.", http.TraceIdentifier));
 
     var row = new Character
@@ -1146,7 +1125,7 @@ app.MapPost("/api/characters", async (UpsertCharacterRequest req, HttpContext ht
         PartyId = req.PartyId ?? 0,
         CharacterType = req.CharacterType,
         Name = normalizedName,
-        OwnerAppUserId = userId.Value,
+        OwnerAppUserId = requestedOwnerId,
         PlayerName = string.IsNullOrWhiteSpace(req.PlayerName) ? null : req.PlayerName.Trim(),
         ArmorClass = req.ArmorClass,
         HitPointsCurrent = req.HitPointsCurrent,
@@ -1170,11 +1149,13 @@ app.MapPost("/api/characters", async (UpsertCharacterRequest req, HttpContext ht
         Conditions = req.Conditions,
         Notes = req.Notes,
         DateCreatedUtc = DateTime.UtcNow,
-        DateModifiedUtc = DateTime.UtcNow
+        DateModifiedUtc = DateTime.UtcNow,
+        Skills = BuildCharacterSkills(req.Skills)
     };
 
     db.Characters.Add(row);
     await db.SaveChangesAsync();
+    await EnsureCharacterSkillRowsForCharacterAsync(db, row.CharacterId);
     return Results.Ok(new { row.CharacterId });
 }).RequireAuthorization();
 
@@ -1184,11 +1165,9 @@ app.MapPut("/api/characters/{id:int}", async (int id, UpsertCharacterRequest req
     if (userId is null) return Results.Unauthorized();
     if (string.IsNullOrWhiteSpace(req.Name)) return Results.BadRequest(new ApiError("CHARACTER_NAME_REQUIRED", "Name is required.", http.TraceIdentifier));
 
-    var normalizedName = TitleNormalization.ToPascalTitle(req.Name);
-    var duplicate = await db.Characters.AnyAsync(x => x.DateDeletedUtc == null && x.CharacterId != id && x.OwnerAppUserId == userId.Value && x.CampaignId == (req.CampaignId ?? 0) && x.Name == normalizedName);
-    if (duplicate) return Results.BadRequest(new ApiError("CHARACTER_DUPLICATE", "Character name already exists in this campaign.", http.TraceIdentifier));
-
-    var row = await db.Characters.FirstOrDefaultAsync(x => x.CharacterId == id && x.DateDeletedUtc == null);
+    var row = await db.Characters
+        .Include(x => x.Skills)
+        .FirstOrDefaultAsync(x => x.CharacterId == id && x.DateDeletedUtc == null);
     if (row is null) return Results.NotFound();
     var canEdit = row.OwnerAppUserId == userId.Value || await db.CharacterShares.AnyAsync(x => x.CharacterId == id && x.SharedWithUserId == userId.Value && x.Permission == SharePermission.Edit);
     if (!canEdit && !IsAdmin(http)) return Results.Forbid();
@@ -1199,6 +1178,10 @@ app.MapPut("/api/characters/{id:int}", async (int id, UpsertCharacterRequest req
     if (ownerChanged && row.OwnerAppUserId != userId.Value && !IsAdmin(http)) return Results.Forbid();
     var ownerExists = await db.Users.AnyAsync(x => x.AppUserId == requestedOwnerId.Value && x.DateDeletedUtc == null);
     if (!ownerExists) return Results.BadRequest(new ApiError("CHARACTER_OWNER_INVALID", "Selected owner was not found.", http.TraceIdentifier));
+
+    var normalizedName = TitleNormalization.ToPascalTitle(req.Name);
+    var duplicate = await db.Characters.AnyAsync(x => x.DateDeletedUtc == null && x.CharacterId != id && x.OwnerAppUserId == requestedOwnerId.Value && x.CampaignId == (req.CampaignId ?? 0) && x.Name == normalizedName);
+    if (duplicate) return Results.BadRequest(new ApiError("CHARACTER_DUPLICATE", "Character name already exists in this campaign.", http.TraceIdentifier));
 
     row.CampaignId = req.CampaignId ?? 0;
     row.PartyId = req.PartyId ?? 0;
@@ -1229,7 +1212,10 @@ app.MapPut("/api/characters/{id:int}", async (int id, UpsertCharacterRequest req
     row.Notes = req.Notes;
     row.DateModifiedUtc = DateTime.UtcNow;
 
+    SyncCharacterSkills(row, req.Skills);
+
     await db.SaveChangesAsync();
+    await EnsureCharacterSkillRowsForCharacterAsync(db, row.CharacterId);
     return Results.Ok(new { row.CharacterId });
 }).RequireAuthorization();
 
@@ -3235,6 +3221,238 @@ static async Task<bool> CanAccessEncounter(HttpContext http, AppDbContext db, En
     return requireEdit
         ? await db.CampaignShares.AnyAsync(x => x.CampaignId == row.CampaignId && x.SharedWithUserId == userId.Value && x.Permission == SharePermission.Edit)
         : await db.CampaignShares.AnyAsync(x => x.CampaignId == row.CampaignId && x.SharedWithUserId == userId.Value);
+}
+
+static CharacterResponse ToCharacterResponse(Character row, string? ownerUsername)
+{
+    var skills = BuildCharacterSkillResponses(row).OrderBy(x => x.DisplayOrder).ToList();
+    return new CharacterResponse
+    {
+        CharacterId = row.CharacterId,
+        CampaignId = row.CampaignId == 0 ? null : row.CampaignId,
+        PartyId = row.PartyId == 0 ? null : row.PartyId,
+        CharacterType = row.CharacterType,
+        Name = row.Name,
+        OwnerAppUserId = row.OwnerAppUserId,
+        OwnerUsername = ownerUsername,
+        PlayerName = row.PlayerName,
+        ArmorClass = row.ArmorClass,
+        HitPointsCurrent = row.HitPointsCurrent,
+        HitPointsMax = row.HitPointsMax,
+        TempHitPoints = row.TempHitPoints,
+        InitiativeModifier = row.InitiativeModifier,
+        Speed = row.Speed,
+        Strength = row.Strength,
+        Dexterity = row.Dexterity,
+        Constitution = row.Constitution,
+        Intelligence = row.Intelligence,
+        Wisdom = row.Wisdom,
+        Charisma = row.Charisma,
+        ProficiencyBonus = row.ProficiencyBonus,
+        Level = row.Level,
+        ClassName = row.ClassName,
+        SubclassName = row.SubclassName,
+        RaceName = row.RaceName,
+        SubraceName = row.SubraceName,
+        PassivePerception = ResolvePassiveScore(skills, "perception"),
+        PassiveInvestigation = ResolvePassiveScore(skills, "investigation"),
+        PassiveInsight = ResolvePassiveScore(skills, "insight"),
+        Skills = skills,
+        Conditions = row.Conditions,
+        Notes = row.Notes,
+        DateCreatedUtc = row.DateCreatedUtc,
+        DateModifiedUtc = row.DateModifiedUtc
+    };
+}
+
+static List<CharacterSkillResponse> BuildCharacterSkillResponses(Character row)
+{
+    var proficiencyBonus = ResolveProficiencyBonus(row);
+    return row.Skills
+        .Where(x => x.Skill is not null && x.Skill.IsActive)
+        .Select(x =>
+        {
+            var abilityModifier = GetAbilityModifier(row, x.Skill!.Ability);
+            var proficiencyContribution = x.HasExpertise ? proficiencyBonus * 2 : (x.IsProficient ? proficiencyBonus : 0);
+            var total = abilityModifier + proficiencyContribution + (x.BonusOverride ?? 0);
+            return new CharacterSkillResponse
+            {
+                SkillId = x.SkillId,
+                Key = x.Skill.Key,
+                Name = x.Skill.Name,
+                Ability = x.Skill.Ability,
+                DisplayOrder = x.Skill.DisplayOrder,
+                IsProficient = x.IsProficient,
+                HasExpertise = x.HasExpertise,
+                BonusOverride = x.BonusOverride,
+                AbilityModifier = abilityModifier,
+                ProficiencyContribution = proficiencyContribution,
+                TotalModifier = total
+            };
+        })
+        .ToList();
+}
+
+static List<CharacterSkill> BuildCharacterSkills(IEnumerable<UpsertCharacterSkillRequest>? skills)
+{
+    return (skills ?? Enumerable.Empty<UpsertCharacterSkillRequest>())
+        .GroupBy(x => x.SkillId)
+        .Select(g => g.Last())
+        .Where(x => x.SkillId > 0)
+        .Select(x => new CharacterSkill
+        {
+            SkillId = x.SkillId,
+            IsProficient = x.IsProficient,
+            HasExpertise = x.HasExpertise,
+            BonusOverride = x.BonusOverride
+        })
+        .ToList();
+}
+
+static void SyncCharacterSkills(Character row, IEnumerable<UpsertCharacterSkillRequest>? requestedSkills)
+{
+    var requestedBySkillId = (requestedSkills ?? Enumerable.Empty<UpsertCharacterSkillRequest>())
+        .GroupBy(x => x.SkillId)
+        .Select(g => g.Last())
+        .Where(x => x.SkillId > 0)
+        .ToDictionary(x => x.SkillId, x => x);
+
+    foreach (var skill in row.Skills)
+    {
+        if (!requestedBySkillId.TryGetValue(skill.SkillId, out var requested)) continue;
+        skill.IsProficient = requested.IsProficient;
+        skill.HasExpertise = requested.HasExpertise;
+        skill.BonusOverride = requested.BonusOverride;
+    }
+}
+
+static int ResolveProficiencyBonus(Character row)
+{
+    if (row.ProficiencyBonus.HasValue && row.ProficiencyBonus.Value > 0) return row.ProficiencyBonus.Value;
+    var level = row.Level ?? 1;
+    if (level <= 4) return 2;
+    if (level <= 8) return 3;
+    if (level <= 12) return 4;
+    if (level <= 16) return 5;
+    return 6;
+}
+
+static int GetAbilityModifier(Character row, AbilityScoreType ability)
+{
+    var score = ability switch
+    {
+        AbilityScoreType.Strength => row.Strength,
+        AbilityScoreType.Dexterity => row.Dexterity,
+        AbilityScoreType.Constitution => row.Constitution,
+        AbilityScoreType.Intelligence => row.Intelligence,
+        AbilityScoreType.Wisdom => row.Wisdom,
+        AbilityScoreType.Charisma => row.Charisma,
+        _ => null
+    };
+
+    return score.HasValue ? (int)Math.Floor((score.Value - 10) / 2.0) : 0;
+}
+
+static int? ResolvePassiveScore(IEnumerable<CharacterSkillResponse> skills, string key)
+{
+    var skill = skills.FirstOrDefault(x => string.Equals(x.Key, key, StringComparison.OrdinalIgnoreCase));
+    return skill is null ? null : 10 + skill.TotalModifier;
+}
+
+static void EnsureSkillSchema(AppDbContext db, bool isSqliteProvider)
+{
+    if (isSqliteProvider)
+    {
+        ExecuteSqlStatements(db,
+            "CREATE TABLE IF NOT EXISTS Skills (SkillId INTEGER NOT NULL CONSTRAINT PK_Skills PRIMARY KEY AUTOINCREMENT, Key TEXT NOT NULL, Name TEXT NOT NULL, Ability INTEGER NOT NULL, DisplayOrder INTEGER NOT NULL, IsActive INTEGER NOT NULL DEFAULT 1);",
+            "CREATE UNIQUE INDEX IF NOT EXISTS IX_Skills_Key ON Skills (Key);",
+            "CREATE INDEX IF NOT EXISTS IX_Skills_DisplayOrder ON Skills (DisplayOrder);",
+            "CREATE TABLE IF NOT EXISTS CharacterSkills (CharacterSkillId INTEGER NOT NULL CONSTRAINT PK_CharacterSkills PRIMARY KEY AUTOINCREMENT, CharacterId INTEGER NOT NULL, SkillId INTEGER NOT NULL, IsProficient INTEGER NOT NULL DEFAULT 0, HasExpertise INTEGER NOT NULL DEFAULT 0, BonusOverride INTEGER NULL, CONSTRAINT FK_CharacterSkills_Characters_CharacterId FOREIGN KEY (CharacterId) REFERENCES Characters (CharacterId) ON DELETE CASCADE, CONSTRAINT FK_CharacterSkills_Skills_SkillId FOREIGN KEY (SkillId) REFERENCES Skills (SkillId) ON DELETE CASCADE);",
+            "CREATE UNIQUE INDEX IF NOT EXISTS IX_CharacterSkills_CharacterId_SkillId ON CharacterSkills (CharacterId, SkillId);"
+        );
+    }
+    else
+    {
+        ExecuteSqlStatements(db,
+            "CREATE TABLE IF NOT EXISTS \"Skills\" (\"SkillId\" integer GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, \"Key\" text NOT NULL, \"Name\" text NOT NULL, \"Ability\" integer NOT NULL, \"DisplayOrder\" integer NOT NULL, \"IsActive\" boolean NOT NULL DEFAULT true);",
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Skills_Key\" ON \"Skills\" (\"Key\");",
+            "CREATE INDEX IF NOT EXISTS \"IX_Skills_DisplayOrder\" ON \"Skills\" (\"DisplayOrder\");",
+            "CREATE TABLE IF NOT EXISTS \"CharacterSkills\" (\"CharacterSkillId\" integer GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, \"CharacterId\" integer NOT NULL, \"SkillId\" integer NOT NULL, \"IsProficient\" boolean NOT NULL DEFAULT false, \"HasExpertise\" boolean NOT NULL DEFAULT false, \"BonusOverride\" integer NULL);",
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_CharacterSkills_CharacterId_SkillId\" ON \"CharacterSkills\" (\"CharacterId\", \"SkillId\");"
+        );
+    }
+}
+
+static async Task SeedSkillsAsync(AppDbContext db)
+{
+    var seeds = new[]
+    {
+        new Skill { Key = "acrobatics", Name = "Acrobatics", Ability = AbilityScoreType.Dexterity, DisplayOrder = 1 },
+        new Skill { Key = "animal-handling", Name = "Animal Handling", Ability = AbilityScoreType.Wisdom, DisplayOrder = 2 },
+        new Skill { Key = "arcana", Name = "Arcana", Ability = AbilityScoreType.Intelligence, DisplayOrder = 3 },
+        new Skill { Key = "athletics", Name = "Athletics", Ability = AbilityScoreType.Strength, DisplayOrder = 4 },
+        new Skill { Key = "deception", Name = "Deception", Ability = AbilityScoreType.Charisma, DisplayOrder = 5 },
+        new Skill { Key = "history", Name = "History", Ability = AbilityScoreType.Intelligence, DisplayOrder = 6 },
+        new Skill { Key = "insight", Name = "Insight", Ability = AbilityScoreType.Wisdom, DisplayOrder = 7 },
+        new Skill { Key = "intimidation", Name = "Intimidation", Ability = AbilityScoreType.Charisma, DisplayOrder = 8 },
+        new Skill { Key = "investigation", Name = "Investigation", Ability = AbilityScoreType.Intelligence, DisplayOrder = 9 },
+        new Skill { Key = "medicine", Name = "Medicine", Ability = AbilityScoreType.Wisdom, DisplayOrder = 10 },
+        new Skill { Key = "nature", Name = "Nature", Ability = AbilityScoreType.Intelligence, DisplayOrder = 11 },
+        new Skill { Key = "perception", Name = "Perception", Ability = AbilityScoreType.Wisdom, DisplayOrder = 12 },
+        new Skill { Key = "performance", Name = "Performance", Ability = AbilityScoreType.Charisma, DisplayOrder = 13 },
+        new Skill { Key = "persuasion", Name = "Persuasion", Ability = AbilityScoreType.Charisma, DisplayOrder = 14 },
+        new Skill { Key = "religion", Name = "Religion", Ability = AbilityScoreType.Intelligence, DisplayOrder = 15 },
+        new Skill { Key = "sleight-of-hand", Name = "Sleight of Hand", Ability = AbilityScoreType.Dexterity, DisplayOrder = 16 },
+        new Skill { Key = "stealth", Name = "Stealth", Ability = AbilityScoreType.Dexterity, DisplayOrder = 17 },
+        new Skill { Key = "survival", Name = "Survival", Ability = AbilityScoreType.Wisdom, DisplayOrder = 18 }
+    };
+
+    foreach (var seed in seeds)
+    {
+        var existing = await db.Skills.FirstOrDefaultAsync(x => x.Key == seed.Key);
+        if (existing is null)
+        {
+            db.Skills.Add(seed);
+        }
+        else
+        {
+            existing.Name = seed.Name;
+            existing.Ability = seed.Ability;
+            existing.DisplayOrder = seed.DisplayOrder;
+            existing.IsActive = true;
+        }
+    }
+
+    await db.SaveChangesAsync();
+}
+
+static async Task EnsureCharacterSkillRowsAsync(AppDbContext db)
+{
+    var skillIds = await db.Skills.Where(x => x.IsActive).OrderBy(x => x.DisplayOrder).Select(x => x.SkillId).ToListAsync();
+    if (skillIds.Count == 0) return;
+
+    var characterIds = await db.Characters.Where(x => x.DateDeletedUtc == null).Select(x => x.CharacterId).ToListAsync();
+    foreach (var characterId in characterIds)
+    {
+        await EnsureCharacterSkillRowsForCharacterAsync(db, characterId, skillIds);
+    }
+}
+
+static async Task EnsureCharacterSkillRowsForCharacterAsync(AppDbContext db, int characterId, List<int>? skillIds = null)
+{
+    skillIds ??= await db.Skills.Where(x => x.IsActive).OrderBy(x => x.DisplayOrder).Select(x => x.SkillId).ToListAsync();
+    if (skillIds.Count == 0) return;
+
+    var existingSkillIds = await db.CharacterSkills.Where(x => x.CharacterId == characterId).Select(x => x.SkillId).ToListAsync();
+    var missingSkillIds = skillIds.Except(existingSkillIds).ToList();
+    if (missingSkillIds.Count == 0) return;
+
+    foreach (var skillId in missingSkillIds)
+    {
+        db.CharacterSkills.Add(new CharacterSkill { CharacterId = characterId, SkillId = skillId });
+    }
+
+    await db.SaveChangesAsync();
 }
 
 static void ApplyItem(UpsertItemRequest req, Item row)

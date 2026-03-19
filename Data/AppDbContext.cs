@@ -15,6 +15,8 @@ namespace RuleForge.Data;
 public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
     public DbSet<Character> Characters => Set<Character>();
+    public DbSet<Skill> Skills => Set<Skill>();
+    public DbSet<CharacterSkill> CharacterSkills => Set<CharacterSkill>();
     public DbSet<Campaign> Campaigns => Set<Campaign>();
     public DbSet<CampaignShare> CampaignShares => Set<CampaignShare>();
     public DbSet<Creature> Creatures => Set<Creature>();
@@ -44,6 +46,19 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         c.Property(x => x.Name).HasMaxLength(120).IsRequired();
         c.Property(x => x.PlayerName).HasMaxLength(120);
         c.HasIndex(x => new { x.CampaignId, x.Name });
+        c.HasMany(x => x.Skills).WithOne(x => x.Character!).HasForeignKey(x => x.CharacterId).OnDelete(DeleteBehavior.Cascade);
+
+        var s = modelBuilder.Entity<Skill>();
+        s.HasKey(x => x.SkillId);
+        s.Property(x => x.Key).HasMaxLength(64).IsRequired();
+        s.Property(x => x.Name).HasMaxLength(120).IsRequired();
+        s.HasIndex(x => x.Key).IsUnique();
+        s.HasIndex(x => x.DisplayOrder);
+
+        var csk = modelBuilder.Entity<CharacterSkill>();
+        csk.HasKey(x => x.CharacterSkillId);
+        csk.HasIndex(x => new { x.CharacterId, x.SkillId }).IsUnique();
+        csk.HasOne(x => x.Skill).WithMany(x => x.CharacterSkills).HasForeignKey(x => x.SkillId).OnDelete(DeleteBehavior.Cascade);
 
         var cp = modelBuilder.Entity<Campaign>();
         cp.HasKey(x => x.CampaignId);
