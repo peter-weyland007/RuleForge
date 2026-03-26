@@ -103,9 +103,15 @@
                     <MudNumericField T="int?" @bind-Value="form.ArmorClass" Label="AC" Variant="Variant.Outlined" />
                 </MudItem>
                 <MudItem xs="12" md="3">
+                    <MudTextField @bind-Value="form.ArmorClassNotes" Label="AC Notes" Placeholder="e.g., leather armor, shield" Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12" md="2">
                     <MudNumericField T="int?" @bind-Value="form.HitPoints" Label="HP" Variant="Variant.Outlined" />
                 </MudItem>
-                <MudItem xs="12" md="3">
+                <MudItem xs="12" md="2">
+                    <MudTextField @bind-Value="form.HitDice" Label="Hit Dice" Placeholder="e.g., 2d6" Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12" md="2">
                     <MudNumericField T="int?" @bind-Value="form.InitiativeModifier" Label="Initiative Mod" Variant="Variant.Outlined" />
                 </MudItem>
                 <MudItem xs="12" md="3">
@@ -322,7 +328,9 @@
                 CreatureTypeId = row.CreatureTypeId,
                 CreatureSubtypeIds = row.CreatureSubtypeIds?.ToList() ?? new(),
                 ArmorClass = row.ArmorClass,
+                ArmorClassNotes = row.ArmorClassNotes,
                 HitPoints = row.HitPoints,
+                HitDice = row.HitDice,
                 InitiativeModifier = row.InitiativeModifier,
                 Speed = row.Speed,
                 WalkSpeed = row.WalkSpeed,
@@ -454,7 +462,9 @@
                 creatureTypeId = form.CreatureTypeId,
                 creatureSubtypeIds = form.CreatureSubtypeIds,
                 armorClass = form.ArmorClass,
+                armorClassNotes = form.ArmorClassNotes,
                 hitPoints = form.HitPoints,
+                hitDice = form.HitDice,
                 initiativeModifier = form.InitiativeModifier,
                 speed = form.Speed,
                 walkSpeed = form.WalkSpeed,
@@ -580,7 +590,9 @@
         public int? CreatureTypeId { get; set; }
         public List<int> CreatureSubtypeIds { get; set; } = new();
         public int? ArmorClass { get; set; }
+        public string? ArmorClassNotes { get; set; }
         public int? HitPoints { get; set; }
+        public string? HitDice { get; set; }
         public int? InitiativeModifier { get; set; }
         public string? Speed { get; set; }
         public int? WalkSpeed { get; set; }
@@ -631,7 +643,9 @@
         List<int>? CreatureSubtypeIds,
         List<string>? CreatureSubtypes,
         int? ArmorClass,
+        string? ArmorClassNotes,
         int? HitPoints,
+        string? HitDice,
         int? InitiativeModifier,
         string? Speed,
         int? WalkSpeed,

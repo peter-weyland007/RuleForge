@@ -322,8 +322,8 @@
 
                         <div class="rf-statblock-body">
                             <div>
-                                <div class="rf-statblock-line"><strong>Armor Class</strong> @(selectedCreature.ArmorClass?.ToString() ?? "—")</div>
-                                <div class="rf-statblock-line"><strong>Hit Points</strong> @(selectedCreature.HitPoints?.ToString() ?? "—")</div>
+                                <div class="rf-statblock-line"><strong>Armor Class</strong> @FormatArmorClass(selectedCreature)</div>
+                                <div class="rf-statblock-line"><strong>Hit Points</strong> @FormatHitPoints(selectedCreature)</div>
                                 <div class="rf-statblock-line"><strong>Speed</strong> @FormatSpeed(selectedCreature)</div>
                                 <div class="rf-statblock-divider"></div>
 
@@ -663,6 +663,18 @@
         return query;
     }
 
+    private static string FormatArmorClass(CreatureRow row)
+    {
+        var value = row.ArmorClass?.ToString() ?? "—";
+        return string.IsNullOrWhiteSpace(row.ArmorClassNotes) ? value : $"{value} ({row.ArmorClassNotes.Trim()})";
+    }
+
+    private static string FormatHitPoints(CreatureRow row)
+    {
+        var value = row.HitPoints?.ToString() ?? "—";
+        return string.IsNullOrWhiteSpace(row.HitDice) ? value : $"{value} ({row.HitDice.Trim()})";
+    }
+
     private static int AbilityMod(int? score) => score.HasValue ? (int)Math.Floor((score.Value - 10) / 2.0) : 0;
     private static string ModLabel(int? score) => $"{(AbilityMod(score) >= 0 ? "+" : string.Empty)}{AbilityMod(score)}";
     private static string AbilityScoreDisplay(int? score) => score.HasValue ? $"{score.Value} ({ModLabel(score)})" : "—";
@@ -775,7 +787,9 @@
         List<int>? CreatureSubtypeIds,
         List<string>? CreatureSubtypes,
         int? ArmorClass,
+        string? ArmorClassNotes,
         int? HitPoints,
+        string? HitDice,
         int? InitiativeModifier,
         string? Speed,
         int? WalkSpeed,

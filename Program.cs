@@ -345,7 +345,9 @@ using (var scope = app.Services.CreateScope())
             "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"CreatureSubtype\" text NULL;",
             "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"CreatureTypeId\" integer NULL;",
             "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"ArmorClass\" integer NULL;",
+            "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"ArmorClassNotes\" text NULL;",
             "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"HitPoints\" integer NULL;",
+            "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"HitDice\" text NULL;",
             "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"InitiativeModifier\" integer NULL;",
             "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"Speed\" text NULL;",
             "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"WalkSpeed\" integer NULL;",
@@ -567,7 +569,9 @@ using (var scope = app.Services.CreateScope())
             CreatureSubtype TEXT NULL,
             CreatureTypeId INTEGER NULL,
             ArmorClass INTEGER NULL,
+            ArmorClassNotes TEXT NULL,
             HitPoints INTEGER NULL,
+            HitDice TEXT NULL,
             InitiativeModifier INTEGER NULL,
             Speed TEXT NULL,
             WalkSpeed INTEGER NULL,
@@ -653,6 +657,8 @@ using (var scope = app.Services.CreateScope())
         "ALTER TABLE Creatures ADD COLUMN CreatureType TEXT NULL;",
         "ALTER TABLE Creatures ADD COLUMN CreatureSubtype TEXT NULL;",
         "ALTER TABLE Creatures ADD COLUMN CreatureTypeId INTEGER NULL;",
+        "ALTER TABLE Creatures ADD COLUMN ArmorClassNotes TEXT NULL;",
+        "ALTER TABLE Creatures ADD COLUMN HitDice TEXT NULL;",
         "ALTER TABLE Creatures ADD COLUMN PassivePerception INTEGER NULL;",
         "ALTER TABLE Creatures ADD COLUMN BlindsightRange INTEGER NULL;",
         "ALTER TABLE Creatures ADD COLUMN DarkvisionRange INTEGER NULL;",
@@ -1628,7 +1634,9 @@ app.MapPost("/api/creatures", async (UpsertCreatureRequest req, HttpContext http
         IsSystem = req.IsSystem && IsAdmin(http),
         OwnerAppUserId = userId.Value,
         ArmorClass = req.ArmorClass,
+        ArmorClassNotes = NormalizeCreatureArmorClassNotes(req.ArmorClassNotes),
         HitPoints = req.HitPoints,
+        HitDice = NormalizeCreatureHitDice(req.HitDice),
         InitiativeModifier = req.InitiativeModifier,
         WalkSpeed = req.WalkSpeed,
         FlySpeed = req.FlySpeed,
@@ -1696,7 +1704,9 @@ app.MapPut("/api/creatures/{id:int}", async (int id, UpsertCreatureRequest req, 
     row.IsSystem = req.IsSystem && IsAdmin(http);
     row.OwnerAppUserId = requestedOwnerId.Value;
     row.ArmorClass = req.ArmorClass;
+    row.ArmorClassNotes = NormalizeCreatureArmorClassNotes(req.ArmorClassNotes);
     row.HitPoints = req.HitPoints;
+    row.HitDice = NormalizeCreatureHitDice(req.HitDice);
     row.InitiativeModifier = req.InitiativeModifier;
     row.WalkSpeed = req.WalkSpeed;
     row.FlySpeed = req.FlySpeed;
@@ -1805,7 +1815,9 @@ app.MapPost("/api/creatures/{id:int}/clone", async (int id, HttpContext http, Ap
         IsSystem = false,
         OwnerAppUserId = userId.Value,
         ArmorClass = row.ArmorClass,
+        ArmorClassNotes = row.ArmorClassNotes,
         HitPoints = row.HitPoints,
+        HitDice = row.HitDice,
         InitiativeModifier = row.InitiativeModifier,
         WalkSpeed = row.WalkSpeed,
         FlySpeed = row.FlySpeed,
@@ -3485,7 +3497,9 @@ static CreatureResponse ToCreatureResponse(Creature row, string? ownerUsername, 
         CreatureSubtypeIds = row.CreatureSubtypeLinks.OrderBy(x => x.SortOrder).Select(x => x.CreatureSubtypeId).Distinct().ToList(),
         CreatureSubtypes = subtypeNames,
         ArmorClass = row.ArmorClass,
+        ArmorClassNotes = row.ArmorClassNotes,
         HitPoints = row.HitPoints,
+        HitDice = row.HitDice,
         InitiativeModifier = row.InitiativeModifier,
         Speed = FormatCreatureSpeed(row.WalkSpeed, row.FlySpeed, row.SwimSpeed, row.ClimbSpeed, row.BurrowSpeed, row.Speed),
         WalkSpeed = row.WalkSpeed,
@@ -3664,6 +3678,18 @@ static async Task EnsureCreatureTaxonomyAsync(AppDbContext db)
             db.CreatureCreatureSubtypes.Add(new CreatureCreatureSubtype { CreatureId = creature.CreatureId, CreatureSubtypeId = subtype.CreatureSubtypeId, SortOrder = 0 });
     }
     await db.SaveChangesAsync();
+}
+
+static string? NormalizeCreatureArmorClassNotes(string? value)
+{
+    var text = value?.Trim();
+    return string.IsNullOrWhiteSpace(text) ? null : text;
+}
+
+static string? NormalizeCreatureHitDice(string? value)
+{
+    var text = value?.Trim();
+    return string.IsNullOrWhiteSpace(text) ? null : text;
 }
 
 static string? NormalizeCreatureLanguages(string? languages)

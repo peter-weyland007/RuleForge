@@ -16,7 +16,9 @@ public sealed class Creature
     public List<CreatureCreatureSubtype> CreatureSubtypeLinks { get; set; } = new();
 
     public int? ArmorClass { get; set; }
+    public string? ArmorClassNotes { get; set; }
     public int? HitPoints { get; set; }
+    public string? HitDice { get; set; }
     public int? InitiativeModifier { get; set; }
     public string? Speed { get; set; }
     public int? WalkSpeed { get; set; }

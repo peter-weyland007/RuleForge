@@ -80,6 +80,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         cr.Property(x => x.Size).HasMaxLength(24);
         cr.Property(x => x.CreatureType).HasMaxLength(40);
         cr.Property(x => x.CreatureSubtype).HasMaxLength(80);
+        cr.Property(x => x.ArmorClassNotes).HasMaxLength(120);
+        cr.Property(x => x.HitDice).HasMaxLength(40);
         cr.Property(x => x.Speed).HasMaxLength(80);
         cr.Property(x => x.WalkSpeed);
         cr.Property(x => x.FlySpeed);

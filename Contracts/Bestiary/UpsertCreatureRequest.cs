@@ -23,7 +23,15 @@ public sealed class UpsertCreatureRequest
     public List<int> CreatureSubtypeIds { get; set; } = new();
 
     public int? ArmorClass { get; set; }
+
+    [StringLength(120)]
+    public string? ArmorClassNotes { get; set; }
+
     public int? HitPoints { get; set; }
+
+    [StringLength(40)]
+    public string? HitDice { get; set; }
+
     public int? InitiativeModifier { get; set; }
 
     [StringLength(80)]
