@@ -361,6 +361,24 @@
                                         <div class="rf-entry"><strong>@action.Name.</strong> @action.Description</div>
                                     }
                                 }
+
+                                @if (selectedCreature.BonusActions?.Any() == true)
+                                {
+                                    <div class="rf-section-title">Bonus Actions</div>
+                                    @foreach (var bonusAction in selectedCreature.BonusActions.OrderBy(x => x.SortOrder))
+                                    {
+                                        <div class="rf-entry"><strong>@bonusAction.Name.</strong> @bonusAction.Description</div>
+                                    }
+                                }
+
+                                @if (selectedCreature.Reactions?.Any() == true)
+                                {
+                                    <div class="rf-section-title">Reactions</div>
+                                    @foreach (var reaction in selectedCreature.Reactions.OrderBy(x => x.SortOrder))
+                                    {
+                                        <div class="rf-entry"><strong>@reaction.Name.</strong> @reaction.Description</div>
+                                    }
+                                }
                             </div>
                         </div>
                     </div>
@@ -813,6 +831,8 @@
         bool UnderstandsButCannotSpeak,
         List<CreatureEntryRow>? Traits,
         List<CreatureEntryRow>? Actions,
+        List<CreatureEntryRow>? BonusActions,
+        List<CreatureEntryRow>? Reactions,
         int? Strength,
         int? Dexterity,
         int? Constitution,

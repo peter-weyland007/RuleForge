@@ -25,6 +25,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<CreatureCreatureSubtype> CreatureCreatureSubtypes => Set<CreatureCreatureSubtype>();
     public DbSet<CreatureTrait> CreatureTraits => Set<CreatureTrait>();
     public DbSet<CreatureAction> CreatureActions => Set<CreatureAction>();
+    public DbSet<CreatureBonusAction> CreatureBonusActions => Set<CreatureBonusAction>();
+    public DbSet<CreatureReaction> CreatureReactions => Set<CreatureReaction>();
     public DbSet<CreatureShare> CreatureShares => Set<CreatureShare>();
     public DbSet<Encounter> Encounters => Set<Encounter>();
     public DbSet<EncounterParticipant> EncounterParticipants => Set<EncounterParticipant>();
@@ -92,8 +94,12 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         cr.Property(x => x.ChallengeRating).HasMaxLength(32);
         cr.Property(x => x.Traits).HasMaxLength(8000);
         cr.Property(x => x.Actions).HasMaxLength(8000);
+        cr.Property(x => x.BonusActions).HasMaxLength(8000);
+        cr.Property(x => x.Reactions).HasMaxLength(8000);
         cr.HasMany(x => x.TraitList).WithOne(x => x.Creature!).HasForeignKey(x => x.CreatureId).OnDelete(DeleteBehavior.Cascade);
         cr.HasMany(x => x.ActionList).WithOne(x => x.Creature!).HasForeignKey(x => x.CreatureId).OnDelete(DeleteBehavior.Cascade);
+        cr.HasMany(x => x.BonusActionList).WithOne(x => x.Creature!).HasForeignKey(x => x.CreatureId).OnDelete(DeleteBehavior.Cascade);
+        cr.HasMany(x => x.ReactionList).WithOne(x => x.Creature!).HasForeignKey(x => x.CreatureId).OnDelete(DeleteBehavior.Cascade);
         cr.HasOne(x => x.Type).WithMany(x => x.Creatures).HasForeignKey(x => x.CreatureTypeId).OnDelete(DeleteBehavior.SetNull);
         cr.HasMany(x => x.CreatureSubtypeLinks).WithOne(x => x.Creature!).HasForeignKey(x => x.CreatureId).OnDelete(DeleteBehavior.Cascade);
         cr.Property(x => x.Strength);

@@ -41,6 +41,8 @@ public sealed class CreatureResponse
     public bool UnderstandsButCannotSpeak { get; set; }
     public List<CreatureEntryDto> Traits { get; set; } = new();
     public List<CreatureEntryDto> Actions { get; set; } = new();
+    public List<CreatureEntryDto> BonusActions { get; set; } = new();
+    public List<CreatureEntryDto> Reactions { get; set; } = new();
 
     public int? Strength { get; set; }
     public int? Dexterity { get; set; }

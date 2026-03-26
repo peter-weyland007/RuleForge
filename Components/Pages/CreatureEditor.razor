@@ -195,6 +195,44 @@
                 <MudButton Variant="Variant.Outlined" Color="Color.Info" StartIcon="@Icons.Material.Filled.Add" OnClick="AddAction">Add Action</MudButton>
             </MudStack>
 
+            <MudText Typo="Typo.subtitle2" Class="mt-2">Bonus Actions</MudText>
+            <MudStack Spacing="2">
+                @for (var i = 0; i < form.BonusActions.Count; i++)
+                {
+                    var bonusActionIndex = i;
+                    <MudPaper Class="pa-3" Outlined="true" Elevation="0">
+                        <MudStack Spacing="2">
+                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                <MudText Typo="Typo.subtitle2">Bonus Action @(bonusActionIndex + 1)</MudText>
+                                <MudButton Variant="Variant.Text" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="() => RemoveBonusAction(bonusActionIndex)">Remove</MudButton>
+                            </MudStack>
+                            <MudTextField @bind-Value="form.BonusActions[bonusActionIndex].Name" Label="Bonus Action Name" Placeholder="e.g., Teleport" Variant="Variant.Outlined" />
+                            <MudTextField @bind-Value="form.BonusActions[bonusActionIndex].Description" Label="Bonus Action Description" Placeholder="Describe the bonus action..." Variant="Variant.Outlined" Lines="4" />
+                        </MudStack>
+                    </MudPaper>
+                }
+                <MudButton Variant="Variant.Outlined" Color="Color.Info" StartIcon="@Icons.Material.Filled.Add" OnClick="AddBonusAction">Add Bonus Action</MudButton>
+            </MudStack>
+
+            <MudText Typo="Typo.subtitle2" Class="mt-2">Reactions</MudText>
+            <MudStack Spacing="2">
+                @for (var i = 0; i < form.Reactions.Count; i++)
+                {
+                    var reactionIndex = i;
+                    <MudPaper Class="pa-3" Outlined="true" Elevation="0">
+                        <MudStack Spacing="2">
+                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                <MudText Typo="Typo.subtitle2">Reaction @(reactionIndex + 1)</MudText>
+                                <MudButton Variant="Variant.Text" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="() => RemoveReaction(reactionIndex)">Remove</MudButton>
+                            </MudStack>
+                            <MudTextField @bind-Value="form.Reactions[reactionIndex].Name" Label="Reaction Name" Placeholder="e.g., Parry" Variant="Variant.Outlined" />
+                            <MudTextField @bind-Value="form.Reactions[reactionIndex].Description" Label="Reaction Description" Placeholder="Describe the reaction..." Variant="Variant.Outlined" Lines="4" />
+                        </MudStack>
+                    </MudPaper>
+                }
+                <MudButton Variant="Variant.Outlined" Color="Color.Info" StartIcon="@Icons.Material.Filled.Add" OnClick="AddReaction">Add Reaction</MudButton>
+            </MudStack>
+
             <MudText Typo="Typo.subtitle2" Class="mt-2">Notes</MudText>
             <MudTextField @bind-Value="form.Description" Label="Description" Placeholder="Lore, behavior, abilities, hooks..." Variant="Variant.Outlined" Lines="4" />
             <MudSelect T="string" SelectedValues="selectedLanguages" SelectedValuesChanged="OnLanguagesChanged" Label="Languages" Variant="Variant.Outlined" MultiSelection="true" MultiSelectionTextFunc="LanguageSummaryText">
@@ -301,6 +339,8 @@
         selectedSubtypeIds = new HashSet<int>();
         AddTrait();
         AddAction();
+        AddBonusAction();
+        AddReaction();
         canEditOwnerField = isAdmin;
     }
 
@@ -352,6 +392,8 @@
                 UnderstandsButCannotSpeak = row.UnderstandsButCannotSpeak,
                 Traits = row.Traits?.Select(x => new CreatureEntryForm { Name = x.Name, Description = x.Description, SortOrder = x.SortOrder }).ToList() ?? new(),
                 Actions = row.Actions?.Select(x => new CreatureEntryForm { Name = x.Name, Description = x.Description, SortOrder = x.SortOrder }).ToList() ?? new(),
+                BonusActions = row.BonusActions?.Select(x => new CreatureEntryForm { Name = x.Name, Description = x.Description, SortOrder = x.SortOrder }).ToList() ?? new(),
+                Reactions = row.Reactions?.Select(x => new CreatureEntryForm { Name = x.Name, Description = x.Description, SortOrder = x.SortOrder }).ToList() ?? new(),
                 Strength = row.Strength,
                 Dexterity = row.Dexterity,
                 Constitution = row.Constitution,
@@ -365,6 +407,8 @@
             selectedSubtypeIds = form.CreatureSubtypeIds.ToHashSet();
             if (form.Traits.Count == 0) AddTrait();
             if (form.Actions.Count == 0) AddAction();
+            if (form.BonusActions.Count == 0) AddBonusAction();
+            if (form.Reactions.Count == 0) AddReaction();
             canEditOwnerField = isAdmin || (currentUserId.HasValue && row.OwnerAppUserId == currentUserId.Value);
         }
         catch (Exception ex)
@@ -447,6 +491,20 @@
         form.Actions.RemoveAt(index);
     }
 
+    private void AddBonusAction() => form.BonusActions.Add(new CreatureEntryForm { SortOrder = form.BonusActions.Count });
+    private void RemoveBonusAction(int index)
+    {
+        if (index < 0 || index >= form.BonusActions.Count) return;
+        form.BonusActions.RemoveAt(index);
+    }
+
+    private void AddReaction() => form.Reactions.Add(new CreatureEntryForm { SortOrder = form.Reactions.Count });
+    private void RemoveReaction(int index)
+    {
+        if (index < 0 || index >= form.Reactions.Count) return;
+        form.Reactions.RemoveAt(index);
+    }
+
     private async Task Save()
     {
         if (isSaving) return;
@@ -487,6 +545,8 @@
                 understandsButCannotSpeak = form.UnderstandsButCannotSpeak,
                 traits = form.Traits.Select((x, i) => new { name = x.Name, description = x.Description, sortOrder = i }).ToList(),
                 actions = form.Actions.Select((x, i) => new { name = x.Name, description = x.Description, sortOrder = i }).ToList(),
+                bonusActions = form.BonusActions.Select((x, i) => new { name = x.Name, description = x.Description, sortOrder = i }).ToList(),
+                reactions = form.Reactions.Select((x, i) => new { name = x.Name, description = x.Description, sortOrder = i }).ToList(),
                 strength = form.Strength,
                 dexterity = form.Dexterity,
                 constitution = form.Constitution,
@@ -616,6 +676,8 @@
         public bool UnderstandsButCannotSpeak { get; set; }
         public List<CreatureEntryForm> Traits { get; set; } = new();
         public List<CreatureEntryForm> Actions { get; set; } = new();
+        public List<CreatureEntryForm> BonusActions { get; set; } = new();
+        public List<CreatureEntryForm> Reactions { get; set; } = new();
         public int? Strength { get; set; }
         public int? Dexterity { get; set; }
         public int? Constitution { get; set; }
@@ -670,6 +732,8 @@
         bool UnderstandsButCannotSpeak,
         List<CreatureEntryRow>? Traits,
         List<CreatureEntryRow>? Actions,
+        List<CreatureEntryRow>? BonusActions,
+        List<CreatureEntryRow>? Reactions,
         int? Strength,
         int? Dexterity,
         int? Constitution,
