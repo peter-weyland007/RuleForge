@@ -112,7 +112,7 @@
                     <MudTextField @bind-Value="form.HitDice" Label="Hit Dice" Placeholder="e.g., 2d6" Variant="Variant.Outlined" />
                 </MudItem>
                 <MudItem xs="12" md="2">
-                    <MudNumericField T="int?" @bind-Value="form.InitiativeModifier" Label="Initiative Mod" Variant="Variant.Outlined" />
+                    <MudNumericField T="int?" @bind-Value="form.InitiativeModifier" Label="Initiative Override" HelperText='@(form.InitiativeModifier.HasValue ? "Override will be used." : $"Blank uses calculated DEX modifier: {ModLabel(form.Dexterity)}")' Variant="Variant.Outlined" />
                 </MudItem>
                 <MudItem xs="12" md="3">
                     <MudNumericField T="int?" @bind-Value="form.PassivePerception" Label="Passive Perception" Variant="Variant.Outlined" />

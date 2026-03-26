@@ -259,7 +259,7 @@
             <MudTd>@(context.ChallengeRating ?? "—")</MudTd>
             <MudTd>@(context.ArmorClass?.ToString() ?? "—")</MudTd>
             <MudTd>@(context.HitPoints?.ToString() ?? "—")</MudTd>
-            <MudTd>@(context.InitiativeModifier?.ToString() ?? "—")</MudTd>
+            <MudTd>@FormatInitiative(context)</MudTd>
             <MudTd>@(context.ExperiencePoints?.ToString() ?? "—")</MudTd>
             <MudTd Style="text-align: right; white-space: nowrap;">
                 <MudIconButton Icon="@Icons.Material.Filled.Visibility" Color="Color.Default" Size="Size.Small" OnClick="() => OpenStatblock(context.CreatureId)" />
@@ -337,7 +337,7 @@
                                 </div>
 
                                 <div class="rf-statblock-divider"></div>
-                                <div class="rf-statblock-line"><strong>Initiative</strong> @(selectedCreature.InitiativeModifier is int init ? $"{(init >= 0 ? "+" : string.Empty)}{init}" : "—")</div>
+                                <div class="rf-statblock-line"><strong>Initiative</strong> @FormatInitiative(selectedCreature)</div>
                                 <div class="rf-statblock-line"><strong>Senses</strong> @FormatSenses(selectedCreature)</div>
                                 <div class="rf-statblock-line"><strong>Passive Perception</strong> @(selectedCreature.PassivePerception?.ToString() ?? "—")</div>
                                 <div class="rf-statblock-line"><strong>Languages</strong> @FormatLanguages(selectedCreature)</div>
@@ -697,6 +697,11 @@
     private static int AbilityMod(int? score) => score.HasValue ? (int)Math.Floor((score.Value - 10) / 2.0) : 0;
     private static string ModLabel(int? score) => $"{(AbilityMod(score) >= 0 ? "+" : string.Empty)}{AbilityMod(score)}";
     private static string AbilityScoreDisplay(int? score) => score.HasValue ? $"{score.Value} ({ModLabel(score)})" : "—";
+    private static string FormatInitiative(CreatureRow row)
+    {
+        var value = row.InitiativeModifier ?? (row.Dexterity.HasValue ? AbilityMod(row.Dexterity) : (int?)null);
+        return value.HasValue ? $"{(value.Value >= 0 ? "+" : string.Empty)}{value.Value}" : "—";
+    }
 
     private static string StatblockSubtitle(CreatureRow row)
     {
