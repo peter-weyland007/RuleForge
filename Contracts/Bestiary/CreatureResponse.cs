@@ -13,6 +13,9 @@ public sealed class CreatureResponse
     public string? Size { get; set; }
     public string? CreatureType { get; set; }
     public string? CreatureSubtype { get; set; }
+    public int? CreatureTypeId { get; set; }
+    public List<int> CreatureSubtypeIds { get; set; } = new();
+    public List<string> CreatureSubtypes { get; set; } = new();
 
     public int? ArmorClass { get; set; }
     public int? HitPoints { get; set; }

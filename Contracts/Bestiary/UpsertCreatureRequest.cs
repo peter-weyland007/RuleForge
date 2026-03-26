@@ -19,6 +19,9 @@ public sealed class UpsertCreatureRequest
     [StringLength(80)]
     public string? CreatureSubtype { get; set; }
 
+    public int? CreatureTypeId { get; set; }
+    public List<int> CreatureSubtypeIds { get; set; } = new();
+
     public int? ArmorClass { get; set; }
     public int? HitPoints { get; set; }
     public int? InitiativeModifier { get; set; }

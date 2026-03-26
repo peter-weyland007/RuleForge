@@ -16,20 +16,6 @@
     [
         "Tiny", "Small", "Medium", "Large", "Huge", "Gargantuan"
     ];
-
-    private static readonly string[] CreatureTypeOptions =
-    [
-        "aberration", "beast", "celestial", "construct", "dragon", "elemental", "fey", "fiend",
-        "giant", "humanoid", "monstrosity", "ooze", "plant", "undead"
-    ];
-
-    private static readonly string[] CreatureSubtypeOptions =
-    [
-        "angel", "any race", "aquatic", "archon", "devil", "demon", "dragonborn", "dwarf", "elf",
-        "gith", "gnoll", "gnome", "goblinoid", "halfling", "human", "kenku", "kobold", "lizardfolk",
-        "lycanthrope", "mind flayer", "orc", "sahuagin", "shapechanger", "skeleton", "spirit", "titan",
-        "vampire", "warforged", "yuan-ti", "zombie"
-    ];
 }
 
 <style>
@@ -83,29 +69,25 @@
                     <MudSelect T="string" @bind-Value="form.Size" Label="Size" Variant="Variant.Outlined">
                         @foreach (var size in SizeOptions)
                         {
-                            <MudSelectItem T="string" Value="size">@size</MudSelectItem>
+                            <MudSelectItem T="string" Value="@size">@size</MudSelectItem>
                         }
                     </MudSelect>
                 </MudItem>
                 <MudItem xs="12" md="3">
-                    <MudSelect T="string" @bind-Value="form.CreatureType" Label="Type" Variant="Variant.Outlined">
-                        @foreach (var creatureType in CreatureTypeOptions)
+                    <MudSelect T="int?" Value="form.CreatureTypeId" ValueChanged="OnCreatureTypeChanged" Label="Type" Variant="Variant.Outlined">
+                        @foreach (var creatureType in creatureTypes)
                         {
-                            <MudSelectItem T="string" Value="creatureType">@creatureType</MudSelectItem>
+                            <MudSelectItem T="int?" Value="creatureType.CreatureTypeId">@creatureType.Name</MudSelectItem>
                         }
                     </MudSelect>
                 </MudItem>
                 <MudItem xs="12" md="6">
-                    <MudAutocomplete T="string"
-                                     @bind-Value="form.CreatureSubtype"
-                                     Label="Subtype"
-                                     Placeholder="e.g., goblinoid"
-                                     Variant="Variant.Outlined"
-                                     SearchFunc="SearchSubtypeOptions"
-                                     CoerceText="true"
-                                     CoerceValue="true"
-                                     Clearable="true"
-                                     ResetValueOnEmptyText="true" />
+                    <MudSelect T="int" SelectedValues="selectedSubtypeIds" SelectedValuesChanged="OnSubtypeSelectionChanged" MultiSelection="true" Label="Subtypes" Variant="Variant.Outlined">
+                        @foreach (var subtype in AvailableSubtypeOptions())
+                        {
+                            <MudSelectItem T="int" Value="subtype.CreatureSubtypeId">@subtype.Name</MudSelectItem>
+                        }
+                    </MudSelect>
                 </MudItem>
                 <MudItem xs="12" md="3">
                     <MudTextField @bind-Value="form.ChallengeRating" Label="CR" Placeholder="e.g., 5, 1/2, 21" Variant="Variant.Outlined" />
@@ -246,6 +228,9 @@
     private readonly List<UserOption> ownerOptions = new();
     private UserOption? selectedOwnerOption;
     private HashSet<string> selectedLanguages = new(StringComparer.OrdinalIgnoreCase);
+    private HashSet<int> selectedSubtypeIds = new();
+    private List<CreatureTypeOption> creatureTypes = new();
+    private List<CreatureSubtypeOption> untypedSubtypeOptions = new();
     private CreatureForm form = new();
     private bool _loaded;
 
@@ -263,6 +248,7 @@
         currentUserId = int.TryParse(idStr, out var idv) ? idv : null;
 
         await LoadOwnerOptions();
+        await LoadCreatureTaxonomy();
 
         if (IsEdit)
             await LoadCreature(CreatureId!.Value);
@@ -286,11 +272,26 @@
         }
     }
 
+    private async Task LoadCreatureTaxonomy()
+    {
+        try
+        {
+            var taxonomyRes = await JS.InvokeAsync<ApiResult<CreatureTaxonomyResponse>>("ruleforgeApi.get", "/api/creature-taxonomy");
+            creatureTypes = taxonomyRes.Ok ? (taxonomyRes.Data?.Types ?? new()) : new();
+            untypedSubtypeOptions = taxonomyRes.Ok ? (taxonomyRes.Data?.UntypedSubtypes ?? new()) : new();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+    }
+
     private void PrepareNewForm()
     {
         form = new CreatureForm { OwnerAppUserId = currentUserId };
         selectedOwnerOption = ownerOptions.FirstOrDefault(x => x.AppUserId == currentUserId);
         selectedLanguages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        selectedSubtypeIds = new HashSet<int>();
         AddTrait();
         AddAction();
         canEditOwnerField = isAdmin;
@@ -318,6 +319,8 @@
                 Size = row.Size,
                 CreatureType = row.CreatureType,
                 CreatureSubtype = row.CreatureSubtype,
+                CreatureTypeId = row.CreatureTypeId,
+                CreatureSubtypeIds = row.CreatureSubtypeIds?.ToList() ?? new(),
                 ArmorClass = row.ArmorClass,
                 HitPoints = row.HitPoints,
                 InitiativeModifier = row.InitiativeModifier,
@@ -349,6 +352,7 @@
             ParseLegacySpeedIntoForm(form);
             selectedOwnerOption = ownerOptions.FirstOrDefault(x => x.AppUserId == form.OwnerAppUserId);
             selectedLanguages = ParseLanguages(form.Languages);
+            selectedSubtypeIds = form.CreatureSubtypeIds.ToHashSet();
             if (form.Traits.Count == 0) AddTrait();
             if (form.Actions.Count == 0) AddAction();
             canEditOwnerField = isAdmin || (currentUserId.HasValue && row.OwnerAppUserId == currentUserId.Value);
@@ -384,13 +388,27 @@
         .Where(x => !string.IsNullOrWhiteSpace(x))
         .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-    private Task<IEnumerable<string>> SearchSubtypeOptions(string? value, CancellationToken token)
+    private IEnumerable<CreatureSubtypeOption> AvailableSubtypeOptions()
     {
-        IEnumerable<string> items = CreatureSubtypeOptions;
-        if (!string.IsNullOrWhiteSpace(value))
-            items = items.Where(x => x.Contains(value, StringComparison.OrdinalIgnoreCase));
+        var type = creatureTypes.FirstOrDefault(x => x.CreatureTypeId == form.CreatureTypeId);
+        return (type?.Subtypes ?? new()).Concat(untypedSubtypeOptions).OrderBy(x => x.Name);
+    }
 
-        return Task.FromResult(items.OrderBy(x => x).AsEnumerable());
+    private void OnCreatureTypeChanged(int? value)
+    {
+        form.CreatureTypeId = value;
+        var type = creatureTypes.FirstOrDefault(x => x.CreatureTypeId == value);
+        form.CreatureType = type?.Key;
+        selectedSubtypeIds.RemoveWhere(id => !AvailableSubtypeOptions().Any(x => x.CreatureSubtypeId == id));
+        form.CreatureSubtypeIds = selectedSubtypeIds.ToList();
+    }
+
+    private void OnSubtypeSelectionChanged(IEnumerable<int> values)
+    {
+        selectedSubtypeIds = values.ToHashSet();
+        form.CreatureSubtypeIds = selectedSubtypeIds.OrderBy(x => x).ToList();
+        var selectedNames = AvailableSubtypeOptions().Where(x => selectedSubtypeIds.Contains(x.CreatureSubtypeId)).Select(x => x.Key).ToList();
+        form.CreatureSubtype = selectedNames.FirstOrDefault();
     }
 
     private void AddTrait() => form.Traits.Add(new CreatureEntryForm { SortOrder = form.Traits.Count });
@@ -421,6 +439,8 @@
                 size = form.Size,
                 creatureType = form.CreatureType,
                 creatureSubtype = form.CreatureSubtype,
+                creatureTypeId = form.CreatureTypeId,
+                creatureSubtypeIds = form.CreatureSubtypeIds,
                 armorClass = form.ArmorClass,
                 hitPoints = form.HitPoints,
                 initiativeModifier = form.InitiativeModifier,
@@ -545,6 +565,8 @@
         public string? Size { get; set; }
         public string? CreatureType { get; set; }
         public string? CreatureSubtype { get; set; }
+        public int? CreatureTypeId { get; set; }
+        public List<int> CreatureSubtypeIds { get; set; } = new();
         public int? ArmorClass { get; set; }
         public int? HitPoints { get; set; }
         public int? InitiativeModifier { get; set; }
@@ -582,6 +604,9 @@
     }
 
     private record UserOption(int AppUserId, string Username);
+    private sealed record CreatureTaxonomyResponse(List<CreatureTypeOption> Types, List<CreatureSubtypeOption> UntypedSubtypes);
+    private sealed record CreatureTypeOption(int CreatureTypeId, string Key, string Name, List<CreatureSubtypeOption> Subtypes);
+    private sealed record CreatureSubtypeOption(int CreatureSubtypeId, string Key, string Name);
     private sealed record CreatureEntryRow(string Name, string? Description, int SortOrder);
     private sealed record CreatureRow(
         int CreatureId,
@@ -590,6 +615,9 @@
         string? Size,
         string? CreatureType,
         string? CreatureSubtype,
+        int? CreatureTypeId,
+        List<int>? CreatureSubtypeIds,
+        List<string>? CreatureSubtypes,
         int? ArmorClass,
         int? HitPoints,
         int? InitiativeModifier,

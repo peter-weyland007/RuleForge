@@ -20,6 +20,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<Campaign> Campaigns => Set<Campaign>();
     public DbSet<CampaignShare> CampaignShares => Set<CampaignShare>();
     public DbSet<Creature> Creatures => Set<Creature>();
+    public DbSet<CreatureType> CreatureTypes => Set<CreatureType>();
+    public DbSet<CreatureSubtype> CreatureSubtypes => Set<CreatureSubtype>();
+    public DbSet<CreatureCreatureSubtype> CreatureCreatureSubtypes => Set<CreatureCreatureSubtype>();
     public DbSet<CreatureTrait> CreatureTraits => Set<CreatureTrait>();
     public DbSet<CreatureAction> CreatureActions => Set<CreatureAction>();
     public DbSet<CreatureShare> CreatureShares => Set<CreatureShare>();
@@ -74,6 +77,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         cr.HasKey(x => x.CreatureId);
         cr.Property(x => x.Name).HasMaxLength(120).IsRequired();
         cr.Property(x => x.Description).HasMaxLength(4000);
+        cr.Property(x => x.Size).HasMaxLength(24);
+        cr.Property(x => x.CreatureType).HasMaxLength(40);
+        cr.Property(x => x.CreatureSubtype).HasMaxLength(80);
         cr.Property(x => x.Speed).HasMaxLength(80);
         cr.Property(x => x.WalkSpeed);
         cr.Property(x => x.FlySpeed);
@@ -85,6 +91,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         cr.Property(x => x.Actions).HasMaxLength(8000);
         cr.HasMany(x => x.TraitList).WithOne(x => x.Creature!).HasForeignKey(x => x.CreatureId).OnDelete(DeleteBehavior.Cascade);
         cr.HasMany(x => x.ActionList).WithOne(x => x.Creature!).HasForeignKey(x => x.CreatureId).OnDelete(DeleteBehavior.Cascade);
+        cr.HasOne(x => x.Type).WithMany(x => x.Creatures).HasForeignKey(x => x.CreatureTypeId).OnDelete(DeleteBehavior.SetNull);
+        cr.HasMany(x => x.CreatureSubtypeLinks).WithOne(x => x.Creature!).HasForeignKey(x => x.CreatureId).OnDelete(DeleteBehavior.Cascade);
         cr.Property(x => x.Strength);
         cr.Property(x => x.Dexterity);
         cr.Property(x => x.Constitution);
@@ -92,6 +100,30 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         cr.Property(x => x.Wisdom);
         cr.Property(x => x.Charisma);
         cr.HasIndex(x => x.Name);
+        cr.HasIndex(x => x.CreatureTypeId);
+        cr.HasIndex(x => x.CreatureType);
+        cr.HasIndex(x => x.CreatureSubtype);
+
+        var ct = modelBuilder.Entity<CreatureType>();
+        ct.HasKey(x => x.CreatureTypeId);
+        ct.Property(x => x.Key).HasMaxLength(40).IsRequired();
+        ct.Property(x => x.Name).HasMaxLength(80).IsRequired();
+        ct.HasIndex(x => x.Key).IsUnique();
+        ct.HasIndex(x => x.DisplayOrder);
+
+        var cst = modelBuilder.Entity<CreatureSubtype>();
+        cst.HasKey(x => x.CreatureSubtypeId);
+        cst.Property(x => x.Key).HasMaxLength(80).IsRequired();
+        cst.Property(x => x.Name).HasMaxLength(120).IsRequired();
+        cst.HasIndex(x => x.Key).IsUnique();
+        cst.HasIndex(x => new { x.CreatureTypeId, x.DisplayOrder });
+        cst.HasOne(x => x.CreatureType).WithMany(x => x.Subtypes).HasForeignKey(x => x.CreatureTypeId).OnDelete(DeleteBehavior.SetNull);
+
+        var ccst = modelBuilder.Entity<CreatureCreatureSubtype>();
+        ccst.HasKey(x => x.CreatureCreatureSubtypeId);
+        ccst.HasIndex(x => new { x.CreatureId, x.CreatureSubtypeId }).IsUnique();
+        ccst.HasIndex(x => new { x.CreatureSubtypeId, x.SortOrder });
+        ccst.HasOne(x => x.CreatureSubtype).WithMany(x => x.CreatureLinks).HasForeignKey(x => x.CreatureSubtypeId).OnDelete(DeleteBehavior.Cascade);
 
         var e = modelBuilder.Entity<Encounter>();
         e.HasKey(x => x.EncounterId);

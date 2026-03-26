@@ -216,12 +216,33 @@
         }
     </MudStack>
 
+    <MudGrid>
+        <MudItem xs="12" md="4">
+            <MudSelect T="string" @bind-Value="typeFilter" Label="Type Filter" Variant="Variant.Outlined">
+                <MudSelectItem T="string" Value="@string.Empty">All types</MudSelectItem>
+                @foreach (var type in rows.Select(x => x.CreatureType).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().OrderBy(x => x))
+                {
+                    <MudSelectItem T="string" Value="@type">@type</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudSelect T="string" @bind-Value="subtypeFilter" Label="Subtype Filter" Variant="Variant.Outlined">
+                <MudSelectItem T="string" Value="@string.Empty">All subtypes</MudSelectItem>
+                @foreach (var subtype in rows.SelectMany(x => x.CreatureSubtypes ?? new()).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().OrderBy(x => x))
+                {
+                    <MudSelectItem T="string" Value="@subtype">@subtype</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+    </MudGrid>
+
     @if (isAdmin)
     {
         <MudSwitch T="bool" Value="showAllAdmin" ValueChanged="OnShowAllChanged" Color="Color.Info" Label="Show All (Admin)" />
     }
 
-    <MudTable Items="rows" Dense="true" Hover="true" Outlined="true" Elevation="0">
+    <MudTable Items="FilteredRows()" Dense="true" Hover="true" Outlined="true" Elevation="0">
         <HeaderContent>
             <MudTh>Name</MudTh>
             <MudTh>Owner</MudTh>
@@ -370,6 +391,8 @@
     private bool isAdmin;
     private bool showAllAdmin;
     private CreatureScopeFilter scopeFilter = CreatureScopeFilter.All;
+    private string typeFilter = string.Empty;
+    private string subtypeFilter = string.Empty;
     private string? currentUsername;
     private int? currentUserId;
     private string ShowAllQuery => (isAdmin && showAllAdmin) ? "?showAll=true" : string.Empty;
@@ -630,6 +653,15 @@
         };
     }
 
+    private IEnumerable<CreatureRow> FilteredRows()
+    {
+        var query = rows.AsEnumerable();
+        if (!string.IsNullOrWhiteSpace(typeFilter))
+            query = query.Where(x => string.Equals(x.CreatureType, typeFilter, StringComparison.OrdinalIgnoreCase));
+        if (!string.IsNullOrWhiteSpace(subtypeFilter))
+            query = query.Where(x => (x.CreatureSubtypes ?? new()).Any(s => string.Equals(s, subtypeFilter, StringComparison.OrdinalIgnoreCase)) || string.Equals(x.CreatureSubtype, subtypeFilter, StringComparison.OrdinalIgnoreCase));
+        return query;
+    }
 
     private static int AbilityMod(int? score) => score.HasValue ? (int)Math.Floor((score.Value - 10) / 2.0) : 0;
     private static string ModLabel(int? score) => $"{(AbilityMod(score) >= 0 ? "+" : string.Empty)}{AbilityMod(score)}";
@@ -642,8 +674,12 @@
         if (!string.IsNullOrWhiteSpace(row.CreatureType))
         {
             var type = row.CreatureType.Trim().ToLowerInvariant();
-            if (!string.IsNullOrWhiteSpace(row.CreatureSubtype))
-                parts.Add($"{type} ({row.CreatureSubtype.Trim().ToLowerInvariant()})");
+            var subtypes = (row.CreatureSubtypes ?? new()).Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim().ToLowerInvariant()).ToList();
+            if (subtypes.Count == 0 && !string.IsNullOrWhiteSpace(row.CreatureSubtype))
+                subtypes.Add(row.CreatureSubtype.Trim().ToLowerInvariant());
+
+            if (subtypes.Count > 0)
+                parts.Add($"{type} ({string.Join(", ", subtypes)})");
             else
                 parts.Add(type);
         }
@@ -735,6 +771,9 @@
         string? Size,
         string? CreatureType,
         string? CreatureSubtype,
+        int? CreatureTypeId,
+        List<int>? CreatureSubtypeIds,
+        List<string>? CreatureSubtypes,
         int? ArmorClass,
         int? HitPoints,
         int? InitiativeModifier,
