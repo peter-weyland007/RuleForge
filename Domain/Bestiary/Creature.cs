@@ -12,9 +12,20 @@ public sealed class Creature
     public int? HitPoints { get; set; }
     public int? InitiativeModifier { get; set; }
     public string? Speed { get; set; }
+    public int? WalkSpeed { get; set; }
+    public int? FlySpeed { get; set; }
+    public int? SwimSpeed { get; set; }
+    public int? ClimbSpeed { get; set; }
+    public int? BurrowSpeed { get; set; }
     public string? ChallengeRating { get; set; }
     public int? ExperiencePoints { get; set; }
     public int? PassivePerception { get; set; }
+    public string? Languages { get; set; }
+    public bool UnderstandsButCannotSpeak { get; set; }
+    public string? Traits { get; set; }
+    public string? Actions { get; set; }
+    public List<CreatureTrait> TraitList { get; set; } = new();
+    public List<CreatureAction> ActionList { get; set; } = new();
 
     public int? Strength { get; set; }
     public int? Dexterity { get; set; }

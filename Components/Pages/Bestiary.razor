@@ -1,7 +1,190 @@
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
 @page "/bestiary"
-@attribute [Authorize]
+
+<style>
+    .movement-grid {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 16px;
+    }
+
+    .rf-statblock {
+        background:
+            radial-gradient(circle at top left, rgba(255,255,255,0.65), transparent 28%),
+            radial-gradient(circle at bottom right, rgba(120,72,28,0.08), transparent 30%),
+            linear-gradient(180deg, #f8f1dd 0%, #f3e7c7 100%);
+        border: 2px solid #2f2418;
+        box-shadow: inset 0 0 0 1px rgba(117, 73, 34, 0.22);
+        padding: 18px;
+        color: #2a2018;
+        font-family: Georgia, "Times New Roman", serif;
+    }
+
+    .rf-statblock-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: flex-start;
+        border-bottom: 4px solid #9f2d20;
+        padding-bottom: 10px;
+        margin-bottom: 14px;
+    }
+
+    .rf-statblock-name {
+        font-size: 2rem;
+        font-weight: 700;
+        letter-spacing: 0.03em;
+        color: #8b2f1c;
+        text-transform: uppercase;
+        line-height: 1;
+    }
+
+    .rf-statblock-subtitle {
+        font-style: italic;
+        margin-top: 6px;
+        font-size: 1rem;
+    }
+
+    .rf-statblock-meta {
+        text-align: right;
+        font-size: 1rem;
+        white-space: nowrap;
+    }
+
+    .rf-statblock-body {
+        display: grid;
+        grid-template-columns: minmax(260px, 0.95fr) minmax(320px, 1.05fr);
+        gap: 18px;
+    }
+
+    .rf-statblock-divider {
+        border-top: 3px solid #9f2d20;
+        margin: 10px 0 12px;
+    }
+
+    .rf-statblock-line {
+        margin: 3px 0;
+        font-size: 1.02rem;
+    }
+
+    .rf-statblock-line strong {
+        color: #5e180f;
+    }
+
+    .rf-ability-grid {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 8px;
+        text-align: center;
+    }
+
+    .rf-ability-cell {
+        padding: 6px 2px;
+    }
+
+    .rf-ability-label {
+        font-weight: 700;
+        color: #5e180f;
+        letter-spacing: 0.04em;
+    }
+
+    .rf-section-title {
+        color: #8b2f1c;
+        font-size: 1.15rem;
+        font-weight: 700;
+        border-bottom: 1px solid rgba(139, 47, 28, 0.55);
+        padding-bottom: 4px;
+        margin-bottom: 10px;
+    }
+
+    .rf-entry {
+        margin-bottom: 12px;
+        line-height: 1.5;
+        font-size: 1rem;
+    }
+
+    .rf-entry strong {
+        font-style: italic;
+        color: #2a2018;
+    }
+
+    .rf-description-block {
+        margin-top: 18px;
+    }
+
+    .rf-description-title {
+        font-size: 1.6rem;
+        font-weight: 700;
+        margin-bottom: 10px;
+        color: #201712;
+    }
+
+    .rf-modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(20, 16, 12, 0.52);
+        z-index: 1400;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+    }
+
+    .rf-modal-shell {
+        width: min(1120px, 100%);
+        max-height: calc(100vh - 48px);
+        overflow: auto;
+        background: #fff;
+        border-radius: 6px;
+        box-shadow: 0 16px 48px rgba(0, 0, 0, 0.28);
+        padding: 24px;
+    }
+
+    .rf-modal-titlebar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        margin-bottom: 18px;
+    }
+
+    .rf-modal-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-top: 20px;
+    }
+
+    @@media (max-width: 1100px) {
+        .movement-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .rf-statblock-body {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    @@media (max-width: 700px) {
+        .movement-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .rf-statblock-header {
+            flex-direction: column;
+        }
+
+        .rf-statblock-meta {
+            text-align: left;
+            white-space: normal;
+        }
+
+        .rf-ability-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+    }
+</style>
 @inject IHttpClientFactory HttpFactory
 @inject NavigationManager Nav
 @inject IJSRuntime JS
@@ -15,7 +198,10 @@
             <MudText Typo="Typo.h4">Bestiary</MudText>
             <MudText Typo="Typo.body2" Color="Color.Secondary">Manage creatures for your worlds and encounters.</MudText>
         </MudStack>
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreate">Add Creature</MudButton>
+        @if (isAuthenticated)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreate">Add Creature</MudButton>
+        }
     </MudStack>
 
     <ApiErrorAlert Message="@error" />
@@ -23,13 +209,22 @@
     <MudStack Row="true" Spacing="1">
         <MudChip T="string" Color="@(scopeFilter==CreatureScopeFilter.All ? Color.Primary : Color.Default)" Variant="Variant.Outlined" OnClick="() => SetScope(CreatureScopeFilter.All)">All</MudChip>
         <MudChip T="string" Color="@(scopeFilter==CreatureScopeFilter.Official ? Color.Primary : Color.Default)" Variant="Variant.Outlined" OnClick="() => SetScope(CreatureScopeFilter.Official)">Official</MudChip>
-        <MudChip T="string" Color="@(scopeFilter==CreatureScopeFilter.MyVault ? Color.Primary : Color.Default)" Variant="Variant.Outlined" OnClick="() => SetScope(CreatureScopeFilter.MyVault)">My Vault</MudChip>
-        <MudChip T="string" Color="@(scopeFilter==CreatureScopeFilter.Shared ? Color.Primary : Color.Default)" Variant="Variant.Outlined" OnClick="() => SetScope(CreatureScopeFilter.Shared)">Shared</MudChip>
+        @if (isAuthenticated)
+        {
+            <MudChip T="string" Color="@(scopeFilter==CreatureScopeFilter.MyVault ? Color.Primary : Color.Default)" Variant="Variant.Outlined" OnClick="() => SetScope(CreatureScopeFilter.MyVault)">My Vault</MudChip>
+            <MudChip T="string" Color="@(scopeFilter==CreatureScopeFilter.Shared ? Color.Primary : Color.Default)" Variant="Variant.Outlined" OnClick="() => SetScope(CreatureScopeFilter.Shared)">Shared</MudChip>
+        }
     </MudStack>
+
+    @if (isAdmin)
+    {
+        <MudSwitch T="bool" Value="showAllAdmin" ValueChanged="OnShowAllChanged" Color="Color.Info" Label="Show All (Admin)" />
+    }
 
     <MudTable Items="rows" Dense="true" Hover="true" Outlined="true" Elevation="0">
         <HeaderContent>
             <MudTh>Name</MudTh>
+            <MudTh>Owner</MudTh>
             <MudTh>CR</MudTh>
             <MudTh>AC</MudTh>
             <MudTh>HP</MudTh>
@@ -39,16 +234,18 @@
         </HeaderContent>
         <RowTemplate>
             <MudTd>@context.Name</MudTd>
+            <MudTd>@DisplayOwner(context)</MudTd>
             <MudTd>@(context.ChallengeRating ?? "—")</MudTd>
             <MudTd>@(context.ArmorClass?.ToString() ?? "—")</MudTd>
             <MudTd>@(context.HitPoints?.ToString() ?? "—")</MudTd>
             <MudTd>@(context.InitiativeModifier?.ToString() ?? "—")</MudTd>
             <MudTd>@(context.ExperiencePoints?.ToString() ?? "—")</MudTd>
             <MudTd Style="text-align: right; white-space: nowrap;">
+                <MudIconButton Icon="@Icons.Material.Filled.Visibility" Color="Color.Default" Size="Size.Small" OnClick="() => OpenStatblock(context.CreatureId)" />
                 <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" Disabled="@(!CanEdit(context))" OnClick="() => OpenEdit(context.CreatureId)" />
                 <MudIconButton Icon="@Icons.Material.Filled.GroupAdd" Color="Color.Info" Size="Size.Small" Disabled="@(!CanShare(context))" OnClick="() => OpenShare(context.CreatureId)" />
                 <MudIconButton Icon="@Icons.Material.Filled.Public" Color="Color.Success" Size="Size.Small" Disabled="@(!CanPublish(context))" OnClick="() => PublishCreature(context.CreatureId, context.Name)" />
-                <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Color="Color.Warning" Size="Size.Small" OnClick="() => CloneCreatureToVault(context.CreatureId)" />
+                <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Color="Color.Warning" Size="Size.Small" Disabled="@(!isAuthenticated)" OnClick="() => CloneCreatureToVault(context.CreatureId)" />
                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" Disabled="@(!CanDelete(context))" OnClick="() => Delete(context.CreatureId)" />
             </MudTd>
         </RowTemplate>
@@ -57,96 +254,131 @@
         </NoRecordsContent>
     </MudTable>
 
-    @if (isCreate)
+    @if (isShare)
     {
         <MudPaper Class="pa-4" Outlined="true" Elevation="0">
             <MudStack Spacing="2">
-                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-                    <MudText Typo="Typo.h6">@(form.CreatureId.HasValue ? "Edit Creature" : "Create Creature")</MudText>
-                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Text">Bestiary</MudChip>
-                </MudStack>
-
-                <MudDivider />
-
-                <MudText Typo="Typo.subtitle2">Identity</MudText>
-                <MudGrid>
-                    <MudItem xs="12" md="6">
-                        <MudTextField @bind-Value="form.Name" Label="Name" Placeholder="e.g., Ancient Red Dragon" Variant="Variant.Outlined" Required="true" />
-                    </MudItem>
-                    <MudItem xs="12" md="3">
-                        <MudTextField @bind-Value="form.ChallengeRating" Label="CR" Placeholder="e.g., 5, 1/2, 21" Variant="Variant.Outlined" />
-                    </MudItem>
-                    <MudItem xs="12" md="3">
-                        <MudNumericField T="int?" @bind-Value="form.ExperiencePoints" Label="XP" Variant="Variant.Outlined" Min="0" />
-                    </MudItem>
-                </MudGrid>
-
-                <MudText Typo="Typo.subtitle2" Class="mt-2">Combat Stats</MudText>
-                <MudGrid>
-                    <MudItem xs="12" md="3">
-                        <MudNumericField T="int?" @bind-Value="form.ArmorClass" Label="AC" Variant="Variant.Outlined" />
-                    </MudItem>
-                    <MudItem xs="12" md="3">
-                        <MudNumericField T="int?" @bind-Value="form.HitPoints" Label="HP" Variant="Variant.Outlined" />
-                    </MudItem>
-                    <MudItem xs="12" md="3">
-                        <MudNumericField T="int?" @bind-Value="form.InitiativeModifier" Label="Initiative Mod" Variant="Variant.Outlined" />
-                    </MudItem>
-                    <MudItem xs="12" md="3">
-                        <MudNumericField T="int?" @bind-Value="form.PassivePerception" Label="Passive Perception" Variant="Variant.Outlined" />
-                    </MudItem>
-                </MudGrid>
-
-                <MudTextField @bind-Value="form.Speed" Label="Speed" Placeholder="e.g., 30 ft., fly 60 ft." Variant="Variant.Outlined" />
-
-                <MudText Typo="Typo.subtitle2" Class="mt-2">Ability Scores</MudText>
-                <MudGrid>
-                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Strength" Label='@($"STR ({ModLabel(form.Strength)})")' Variant="Variant.Outlined" /></MudItem>
-                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Dexterity" Label='@($"DEX ({ModLabel(form.Dexterity)})")' Variant="Variant.Outlined" /></MudItem>
-                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Constitution" Label='@($"CON ({ModLabel(form.Constitution)})")' Variant="Variant.Outlined" /></MudItem>
-                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Intelligence" Label='@($"INT ({ModLabel(form.Intelligence)})")' Variant="Variant.Outlined" /></MudItem>
-                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Wisdom" Label='@($"WIS ({ModLabel(form.Wisdom)})")' Variant="Variant.Outlined" /></MudItem>
-                    <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Charisma" Label='@($"CHA ({ModLabel(form.Charisma)})")' Variant="Variant.Outlined" /></MudItem>
-                </MudGrid>
-
-                <MudText Typo="Typo.subtitle2" Class="mt-2">Notes</MudText>
-                <MudTextField @bind-Value="form.Description" Label="Description" Placeholder="Lore, behavior, abilities, hooks..." Variant="Variant.Outlined" Lines="4" />
-                <MudSelect T="int?" @bind-Value="form.OwnerAppUserId" Label="Owner" Variant="Variant.Outlined" Disabled="@(!canEditOwnerField || !ownerOptions.Any())">
-                    @foreach (var user in ownerOptions)
+                <MudText Typo="Typo.h6">Share Creature</MudText>
+                <MudSelect T="int?" @bind-Value="shareUserId" Label="Friend" Variant="Variant.Outlined">
+                    @foreach (var f in friends)
                     {
-                        <MudSelectItem T="int?" Value="user.AppUserId">@user.Username</MudSelectItem>
+                        <MudSelectItem T="int?" Value="f.AppUserId">@f.Username</MudSelectItem>
                     }
                 </MudSelect>
-                @if (!canEditOwnerField && form.CreatureId.HasValue)
-                {
-                    <MudText Typo="Typo.caption" Color="Color.Secondary">Only the current owner or an admin can transfer creature ownership.</MudText>
-                }
-
-                <MudStack Row="true" Spacing="1" Class="mt-3">
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="Save" Disabled="@isSaving">@(isSaving ? "Saving..." : "Save")</MudButton>
-                    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Close" OnClick="CloseCreate">Cancel</MudButton>
+                <MudSelect T="int" @bind-Value="sharePermission" Label="Permission" Variant="Variant.Outlined">
+                    <MudSelectItem Value="0">View</MudSelectItem>
+                    <MudSelectItem Value="1">Edit</MudSelectItem>
+                </MudSelect>
+                <MudStack Row="true" Spacing="1">
+                    <MudButton Variant="Variant.Filled" Color="Color.Info" OnClick="SaveShare">Share</MudButton>
+                    <MudButton Variant="Variant.Outlined" OnClick="() => isShare = false">Cancel</MudButton>
                 </MudStack>
             </MudStack>
         </MudPaper>
     }
+
+    @if (isStatblock && selectedCreature is not null)
+    {
+        <div class="rf-modal-backdrop" @onclick="CloseStatblock">
+            <div class="rf-modal-shell" @onclick:stopPropagation="true">
+                <div class="rf-modal-titlebar">
+                    <MudText Typo="Typo.h5">@selectedCreature.Name</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Text">Statblock</MudChip>
+                </div>
+
+                <div id="creature-statblock-print">
+                    <div class="rf-statblock">
+                        <div class="rf-statblock-header">
+                            <div>
+                                <div class="rf-statblock-name">@selectedCreature.Name</div>
+                                <div class="rf-statblock-subtitle">@StatblockSubtitle(selectedCreature)</div>
+                            </div>
+                            <div class="rf-statblock-meta">
+                                <div><strong>Challenge</strong> @(selectedCreature.ChallengeRating ?? "—") @(selectedCreature.ExperiencePoints is int xp ? $"({xp} XP)" : string.Empty)</div>
+                                <div><strong>Proficiency Bonus</strong> @FormatProficiencyBonus(selectedCreature.ChallengeRating)</div>
+                            </div>
+                        </div>
+
+                        <div class="rf-statblock-body">
+                            <div>
+                                <div class="rf-statblock-line"><strong>Armor Class</strong> @(selectedCreature.ArmorClass?.ToString() ?? "—")</div>
+                                <div class="rf-statblock-line"><strong>Hit Points</strong> @(selectedCreature.HitPoints?.ToString() ?? "—")</div>
+                                <div class="rf-statblock-line"><strong>Speed</strong> @FormatSpeed(selectedCreature)</div>
+                                <div class="rf-statblock-divider"></div>
+
+                                <div class="rf-ability-grid">
+                                    <div class="rf-ability-cell"><div class="rf-ability-label">STR</div><div>@AbilityScoreDisplay(selectedCreature.Strength)</div></div>
+                                    <div class="rf-ability-cell"><div class="rf-ability-label">DEX</div><div>@AbilityScoreDisplay(selectedCreature.Dexterity)</div></div>
+                                    <div class="rf-ability-cell"><div class="rf-ability-label">CON</div><div>@AbilityScoreDisplay(selectedCreature.Constitution)</div></div>
+                                    <div class="rf-ability-cell"><div class="rf-ability-label">INT</div><div>@AbilityScoreDisplay(selectedCreature.Intelligence)</div></div>
+                                    <div class="rf-ability-cell"><div class="rf-ability-label">WIS</div><div>@AbilityScoreDisplay(selectedCreature.Wisdom)</div></div>
+                                    <div class="rf-ability-cell"><div class="rf-ability-label">CHA</div><div>@AbilityScoreDisplay(selectedCreature.Charisma)</div></div>
+                                </div>
+
+                                <div class="rf-statblock-divider"></div>
+                                <div class="rf-statblock-line"><strong>Initiative</strong> @(selectedCreature.InitiativeModifier is int init ? $"{(init >= 0 ? "+" : string.Empty)}{init}" : "—")</div>
+                                <div class="rf-statblock-line"><strong>Passive Perception</strong> @(selectedCreature.PassivePerception?.ToString() ?? "—")</div>
+                                <div class="rf-statblock-line"><strong>Languages</strong> @FormatLanguages(selectedCreature)</div>
+                            </div>
+
+                            <div>
+                                @if (selectedCreature.Traits?.Any() == true)
+                                {
+                                    <div class="rf-section-title">Traits</div>
+                                    @foreach (var trait in selectedCreature.Traits.OrderBy(x => x.SortOrder))
+                                    {
+                                        <div class="rf-entry"><strong>@trait.Name.</strong> @trait.Description</div>
+                                    }
+                                }
+
+                                @if (selectedCreature.Actions?.Any() == true)
+                                {
+                                    <div class="rf-section-title">Actions</div>
+                                    @foreach (var action in selectedCreature.Actions.OrderBy(x => x.SortOrder))
+                                    {
+                                        <div class="rf-entry"><strong>@action.Name.</strong> @action.Description</div>
+                                    }
+                                }
+                            </div>
+                        </div>
+                    </div>
+
+                    @if (!string.IsNullOrWhiteSpace(selectedCreature.Description))
+                    {
+                        <div class="rf-description-block">
+                            <div class="rf-description-title">Description</div>
+                            <MudText Typo="Typo.body1">@selectedCreature.Description</MudText>
+                        </div>
+                    }
+                </div>
+
+                <div class="rf-modal-actions">
+                    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Print" OnClick="PrintStatblock">Print</MudButton>
+                    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Close" OnClick="CloseStatblock">Close</MudButton>
+                </div>
+            </div>
+        </div>
+    }
+
 </MudStack>
 
 @code {
     private List<CreatureRow> rows = new();
     private string? error;
-    private bool isSaving;
+    private bool isAuthenticated;
     private bool isAdmin;
+    private bool showAllAdmin;
     private CreatureScopeFilter scopeFilter = CreatureScopeFilter.All;
     private string? currentUsername;
+    private int? currentUserId;
+    private string ShowAllQuery => (isAdmin && showAllAdmin) ? "?showAll=true" : string.Empty;
     private bool isShare;
     private int? shareCreatureId;
     private int? shareUserId;
     private int sharePermission;
     private List<FriendUser> friends = new();
-    private List<UserOption> ownerOptions = new();
-    private bool isCreate;
-    private bool canEditOwnerField;
-    private CreatureForm form = new();
+    private bool isStatblock;
+    private CreatureRow? selectedCreature;
 
     private bool _loaded;
 
@@ -155,6 +387,7 @@
         if (!firstRender || _loaded) return;
         _loaded = true;
         var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        isAuthenticated = auth.User.Identity?.IsAuthenticated == true;
         isAdmin = auth.User.IsInRole("Admin");
         currentUsername = auth.User.Identity?.Name;
         var idStr = auth.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
@@ -170,18 +403,33 @@
         StateHasChanged();
     }
 
+    private async Task OnShowAllChanged(bool value)
+    {
+        showAllAdmin = value;
+        await Load();
+        StateHasChanged();
+    }
+
     private async Task Load()
     {
         try
         {
             error = null;
-            var r = await JS.InvokeAsync<ApiResult<List<CreatureRow>>>("ruleforgeApi.get", "/api/creatures");
+            var r = await JS.InvokeAsync<ApiResult<List<CreatureRow>>>("ruleforgeApi.get", "/api/creatures" + ShowAllQuery);
             if (!r.Ok) { error = ApiErrorMessage(r, "Failed to load creatures."); rows = new(); return; }
             rows = ApplyScope(r.Data ?? new());
-            var fr = await JS.InvokeAsync<ApiResult<FriendsOverview>>("ruleforgeApi.get", "/api/friends");
-            var usersRes = await JS.InvokeAsync<ApiResult<List<UserOption>>>("ruleforgeApi.get", "/api/users");
-            friends = fr.Data?.Friends ?? new();
-            ownerOptions = (usersRes.Ok ? usersRes.Data : null) ?? new();
+
+            if (isAuthenticated)
+            {
+                var fr = await JS.InvokeAsync<ApiResult<FriendsOverview>>("ruleforgeApi.get", "/api/friends");
+                friends = fr.Data?.Friends ?? new();
+            }
+            else
+            {
+                friends = new();
+                if (scopeFilter is CreatureScopeFilter.MyVault or CreatureScopeFilter.Shared)
+                    scopeFilter = CreatureScopeFilter.Official;
+            }
         }
         catch (Exception ex)
         {
@@ -192,17 +440,15 @@
 
     private void OpenCreate()
     {
-        form = new CreatureForm { OwnerAppUserId = currentUserId };
-        canEditOwnerField = isAdmin;
-        isCreate = true;
+        Nav.NavigateTo("/bestiary/creatures/new");
     }
 
-    private async Task OpenEdit(int creatureId)
+    private async Task OpenStatblock(int creatureId)
     {
         try
         {
             error = null;
-            var res = await JS.InvokeAsync<ApiResult<CreatureRow>>("ruleforgeApi.get", $"/api/creatures/{creatureId}");
+            var res = await JS.InvokeAsync<ApiResult<CreatureRow>>("ruleforgeApi.get", $"/api/creatures/{creatureId}{ShowAllQuery}");
             var row = res.Data;
             if (!res.Ok || row is null)
             {
@@ -210,28 +456,8 @@
                 return;
             }
 
-            form = new CreatureForm
-            {
-                CreatureId = row.CreatureId,
-                OwnerAppUserId = row.OwnerAppUserId,
-                Name = row.Name,
-                Description = row.Description,
-                ArmorClass = row.ArmorClass,
-                HitPoints = row.HitPoints,
-                InitiativeModifier = row.InitiativeModifier,
-                Speed = row.Speed,
-                ChallengeRating = row.ChallengeRating,
-                ExperiencePoints = row.ExperiencePoints,
-                PassivePerception = row.PassivePerception,
-                Strength = row.Strength,
-                Dexterity = row.Dexterity,
-                Constitution = row.Constitution,
-                Intelligence = row.Intelligence,
-                Wisdom = row.Wisdom,
-                Charisma = row.Charisma
-            };
-            canEditOwnerField = isAdmin || (currentUserId.HasValue && row.OwnerAppUserId == currentUserId.Value);
-            isCreate = true;
+            selectedCreature = row;
+            isStatblock = true;
         }
         catch (Exception ex)
         {
@@ -239,18 +465,30 @@
         }
     }
 
+    private Task OpenEdit(int creatureId)
+    {
+        Nav.NavigateTo($"/bestiary/creatures/{creatureId}/edit");
+        return Task.CompletedTask;
+    }
+
+    private static string DisplayOwner(CreatureRow row)
+    {
+        if (row.IsSystem || row.OwnerIsAdmin) return "System";
+        return string.IsNullOrWhiteSpace(row.OwnerUsername) ? "—" : row.OwnerUsername;
+    }
+
     private bool CanEdit(CreatureRow row)
     {
         if (isAdmin) return true;
-        if (row.IsSystem) return false;
-        return true;
+        return row.UserCanEdit;
     }
 
     private bool CanShare(CreatureRow row)
     {
+        if (row.IsSystem) return isAdmin;
         if (isAdmin) return true;
-        if (row.IsSystem) return false;
-        return true;
+        if (string.IsNullOrWhiteSpace(currentUsername)) return false;
+        return string.Equals(row.OwnerUsername, currentUsername, StringComparison.OrdinalIgnoreCase);
     }
 
     private void OpenShare(int id)
@@ -264,7 +502,7 @@
     private async Task SaveShare()
     {
         if (!shareCreatureId.HasValue || !shareUserId.HasValue) { error = "Pick a friend to share with."; return; }
-        var res = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.post", $"/api/creatures/{shareCreatureId.Value}/share", new { userId = shareUserId.Value, permission = sharePermission });
+        var res = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.post", $"/api/creatures/{shareCreatureId.Value}/share{ShowAllQuery}", new { userId = shareUserId.Value, permission = sharePermission });
         if (!res.Ok) { error = ApiErrorMessage(res, "Share failed."); return; }
         isShare = false;
     }
@@ -278,7 +516,9 @@
     private bool CanDelete(CreatureRow row)
     {
         if (isAdmin) return true;
-        return !row.IsSystem;
+        if (row.IsSystem) return false;
+        if (string.IsNullOrWhiteSpace(currentUsername)) return false;
+        return string.Equals(row.OwnerUsername, currentUsername, StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task CloneCreatureToVault(int id)
@@ -307,7 +547,7 @@
             if (!ok) return;
 
             error = null;
-            var res = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.delete", $"/api/creatures/{creatureId}");
+            var res = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.delete", $"/api/creatures/{creatureId}{ShowAllQuery}");
             if (!res.Ok)
             {
                 error = ApiErrorMessage(res, "Delete failed.");
@@ -322,54 +562,22 @@
         }
     }
 
-    private void CloseCreate() => isCreate = false;
-
-    private async Task Save()
+    private async Task PrintStatblock()
     {
-        if (isSaving) return;
-        isSaving = true;
         try
         {
-            error = null;
-            var req = new
-            {
-                name = form.Name,
-                description = form.Description,
-                armorClass = form.ArmorClass,
-                hitPoints = form.HitPoints,
-                initiativeModifier = form.InitiativeModifier,
-                speed = form.Speed,
-                challengeRating = form.ChallengeRating,
-                experiencePoints = form.ExperiencePoints,
-                passivePerception = form.PassivePerception,
-                strength = form.Strength,
-                dexterity = form.Dexterity,
-                constitution = form.Constitution,
-                intelligence = form.Intelligence,
-                wisdom = form.Wisdom,
-                charisma = form.Charisma,
-                ownerAppUserId = form.OwnerAppUserId
-            };
-
-            ApiResult<object> res;
-            if (form.CreatureId.HasValue)
-                res = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.put", $"/api/creatures/{form.CreatureId.Value}", req);
-            else
-                res = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.post", "/api/creatures", req);
-
-            if (!res.Ok)
-            {
-                error = ApiErrorMessage(res, "Save failed.");
-                return;
-            }
-
-            isCreate = false;
-            await Load();
+            await JS.InvokeVoidAsync("ruleforgePrintElement", "creature-statblock-print", selectedCreature?.Name ?? "Creature Statblock");
         }
         catch (Exception ex)
         {
             error = ex.Message;
         }
+    }
+
+    private void CloseStatblock()
+    {
+        isStatblock = false;
+        selectedCreature = null;
     }
 
     private static string ApiErrorMessage<T>(ApiResult<T> res, string fallback)
@@ -415,44 +623,84 @@
         return scopeFilter switch
         {
             CreatureScopeFilter.Official => src.Where(x => x.IsSystem).ToList(),
-            CreatureScopeFilter.MyVault => src.Where(x => !x.IsSystem && x.OwnerAppUserId.HasValue && x.OwnerAppUserId == currentUserId).ToList(),
-            CreatureScopeFilter.Shared => src.Where(x => !x.IsSystem && (!x.OwnerAppUserId.HasValue || x.OwnerAppUserId != currentUserId)).ToList(),
+            CreatureScopeFilter.MyVault => src.Where(x => !x.IsSystem && x.OwnerAppUserId.HasValue && currentUserId.HasValue && x.OwnerAppUserId == currentUserId.Value).ToList(),
+            CreatureScopeFilter.Shared => src.Where(x => !x.IsSystem && (!currentUserId.HasValue || x.OwnerAppUserId != currentUserId.Value)).ToList(),
             _ => src
         };
     }
 
-    private int? currentUserId;
 
     private static int AbilityMod(int? score) => score.HasValue ? (int)Math.Floor((score.Value - 10) / 2.0) : 0;
     private static string ModLabel(int? score) => $"{(AbilityMod(score) >= 0 ? "+" : string.Empty)}{AbilityMod(score)}";
-    private static string AbilityLabel(string abbr, int? score) => $"{abbr} ({ModLabel(score)})";
+    private static string AbilityScoreDisplay(int? score) => score.HasValue ? $"{score.Value} ({ModLabel(score)})" : "—";
 
-    private sealed class CreatureForm
+    private static string StatblockSubtitle(CreatureRow row)
     {
-        public int? CreatureId { get; set; }
-        public int? OwnerAppUserId { get; set; }
-        public string Name { get; set; } = string.Empty;
-        public string? Description { get; set; }
-        public int? ArmorClass { get; set; }
-        public int? HitPoints { get; set; }
-        public int? InitiativeModifier { get; set; }
-        public string? Speed { get; set; }
-        public string? ChallengeRating { get; set; }
-        public int? ExperiencePoints { get; set; }
-        public int? PassivePerception { get; set; }
-        public int? Strength { get; set; }
-        public int? Dexterity { get; set; }
-        public int? Constitution { get; set; }
-        public int? Intelligence { get; set; }
-        public int? Wisdom { get; set; }
-        public int? Charisma { get; set; }
+        return row.IsSystem ? "Official creature" : "Custom creature";
+    }
+
+    private static string FormatProficiencyBonus(string? challengeRating)
+    {
+        var bonus = ProficiencyBonusFromChallenge(challengeRating);
+        return bonus.HasValue ? $"+{bonus.Value}" : "—";
+    }
+
+    private static int? ProficiencyBonusFromChallenge(string? challengeRating)
+    {
+        if (string.IsNullOrWhiteSpace(challengeRating)) return null;
+        var cr = challengeRating.Trim();
+        double value;
+        if (cr.Contains('/'))
+        {
+            var parts = cr.Split('/', 2, StringSplitOptions.TrimEntries);
+            if (parts.Length != 2 || !double.TryParse(parts[0], out var num) || !double.TryParse(parts[1], out var den) || den == 0)
+                return null;
+            value = num / den;
+        }
+        else if (!double.TryParse(cr, out value))
+        {
+            return null;
+        }
+
+        if (value <= 4) return 2;
+        if (value <= 8) return 3;
+        if (value <= 12) return 4;
+        if (value <= 16) return 5;
+        if (value <= 20) return 6;
+        if (value <= 24) return 7;
+        if (value <= 28) return 8;
+        if (value <= 30) return 9;
+        return null;
+    }
+
+    private static string FormatSpeed(CreatureRow row)
+    {
+        var parts = new List<string>();
+        if (row.WalkSpeed.HasValue) parts.Add($"{row.WalkSpeed.Value} ft.");
+        if (row.FlySpeed.HasValue) parts.Add($"fly {row.FlySpeed.Value} ft.");
+        if (row.SwimSpeed.HasValue) parts.Add($"swim {row.SwimSpeed.Value} ft.");
+        if (row.ClimbSpeed.HasValue) parts.Add($"climb {row.ClimbSpeed.Value} ft.");
+        if (row.BurrowSpeed.HasValue) parts.Add($"burrow {row.BurrowSpeed.Value} ft.");
+        if (parts.Count > 0) return string.Join(", ", parts);
+        return string.IsNullOrWhiteSpace(row.Speed) ? "—" : row.Speed!;
+    }
+
+    private static string FormatLanguages(CreatureRow row)
+    {
+        if (string.IsNullOrWhiteSpace(row.Languages))
+            return row.UnderstandsButCannotSpeak ? "Understands languages but can't speak" : "—";
+
+        return row.UnderstandsButCannotSpeak
+            ? $"{row.Languages}; understands but can't speak"
+            : row.Languages;
     }
 
     private enum CreatureScopeFilter { All, Official, MyVault, Shared }
 
     private record FriendUser(int AppUserId, string Username, string Email);
     private record FriendsOverview(List<FriendUser> Friends);
-    private record UserOption(int AppUserId, string Username);
+
+    private sealed record CreatureEntryRow(string Name, string? Description, int SortOrder);
 
     private sealed record CreatureRow(
         int CreatureId,
@@ -462,13 +710,27 @@
         int? HitPoints,
         int? InitiativeModifier,
         string? Speed,
+        int? WalkSpeed,
+        int? FlySpeed,
+        int? SwimSpeed,
+        int? ClimbSpeed,
+        int? BurrowSpeed,
         string? ChallengeRating,
         int? ExperiencePoints,
         int? PassivePerception,
+        string? Languages,
+        bool UnderstandsButCannotSpeak,
+        List<CreatureEntryRow>? Traits,
+        List<CreatureEntryRow>? Actions,
         int? Strength,
         int? Dexterity,
         int? Constitution,
         int? Intelligence,
         int? Wisdom,
-        int? Charisma, bool IsSystem, int? OwnerAppUserId);
+        int? Charisma,
+        bool IsSystem,
+        int? OwnerAppUserId,
+        string? OwnerUsername,
+        bool OwnerIsAdmin,
+        bool UserCanEdit);
 }

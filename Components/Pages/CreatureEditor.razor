@@ -1,0 +1,518 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@page "/bestiary/creatures/new"
+@page "/bestiary/creatures/{CreatureId:int}/edit"
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+@inject AuthenticationStateProvider AuthStateProvider
+
+@code {
+    private static readonly string[] LanguageOptions =
+    [
+        "Abyssal", "Celestial", "Common", "Deep Speech", "Draconic", "Druidic", "Dwarvish", "Elvish",
+        "Giant", "Gnomish", "Goblin", "Halfling", "Infernal", "Orc", "Primordial", "Sylvan", "Undercommon"
+    ];
+}
+
+<style>
+    .movement-grid {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 16px;
+    }
+
+    @@media (max-width: 1100px) {
+        .movement-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+    }
+
+    @@media (max-width: 700px) {
+        .movement-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+
+<PageTitle>@(IsEdit ? "Edit Creature" : "Create Creature")</PageTitle>
+
+<MudStack Spacing="3">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+        <MudStack Spacing="0">
+            <MudText Typo="Typo.h4">@(IsEdit ? "Edit Creature" : "Create Creature")</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Create and manage bestiary entries on their own page.</MudText>
+        </MudStack>
+        <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.ArrowBack" Href="/bestiary">Back to Bestiary</MudButton>
+    </MudStack>
+
+    <ApiErrorAlert Message="@error" />
+
+    <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+        <MudStack Spacing="2">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                <MudText Typo="Typo.h6">@(IsEdit ? "Edit Creature" : "Create Creature")</MudText>
+                <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Text">Bestiary</MudChip>
+            </MudStack>
+
+            <MudDivider />
+
+            <MudText Typo="Typo.subtitle2">Identity</MudText>
+            <MudGrid>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="form.Name" Label="Name" Placeholder="e.g., Ancient Red Dragon" Variant="Variant.Outlined" Required="true" />
+                </MudItem>
+                <MudItem xs="12" md="3">
+                    <MudTextField @bind-Value="form.ChallengeRating" Label="CR" Placeholder="e.g., 5, 1/2, 21" Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12" md="3">
+                    <MudNumericField T="int?" @bind-Value="form.ExperiencePoints" Label="XP" Variant="Variant.Outlined" Min="0" />
+                </MudItem>
+            </MudGrid>
+
+            <MudText Typo="Typo.subtitle2" Class="mt-2">Combat Stats</MudText>
+            <MudGrid>
+                <MudItem xs="12" md="3">
+                    <MudNumericField T="int?" @bind-Value="form.ArmorClass" Label="AC" Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12" md="3">
+                    <MudNumericField T="int?" @bind-Value="form.HitPoints" Label="HP" Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12" md="3">
+                    <MudNumericField T="int?" @bind-Value="form.InitiativeModifier" Label="Initiative Mod" Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12" md="3">
+                    <MudNumericField T="int?" @bind-Value="form.PassivePerception" Label="Passive Perception" Variant="Variant.Outlined" />
+                </MudItem>
+            </MudGrid>
+
+            <MudText Typo="Typo.subtitle2" Class="mt-2">Movement</MudText>
+            <div class="movement-grid">
+                <MudNumericField T="int?" @bind-Value="form.WalkSpeed" Label="Walk" Variant="Variant.Outlined" Adornment="Adornment.End" AdornmentText="ft" />
+                <MudNumericField T="int?" @bind-Value="form.FlySpeed" Label="Fly" Variant="Variant.Outlined" Adornment="Adornment.End" AdornmentText="ft" />
+                <MudNumericField T="int?" @bind-Value="form.SwimSpeed" Label="Swim" Variant="Variant.Outlined" Adornment="Adornment.End" AdornmentText="ft" />
+                <MudNumericField T="int?" @bind-Value="form.ClimbSpeed" Label="Climb" Variant="Variant.Outlined" Adornment="Adornment.End" AdornmentText="ft" />
+                <MudNumericField T="int?" @bind-Value="form.BurrowSpeed" Label="Burrow" Variant="Variant.Outlined" Adornment="Adornment.End" AdornmentText="ft" />
+            </div>
+
+            <MudText Typo="Typo.subtitle2" Class="mt-2">Ability Scores</MudText>
+            <MudGrid>
+                <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Strength" Label='@($"STR ({ModLabel(form.Strength)})")' Variant="Variant.Outlined" /></MudItem>
+                <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Dexterity" Label='@($"DEX ({ModLabel(form.Dexterity)})")' Variant="Variant.Outlined" /></MudItem>
+                <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Constitution" Label='@($"CON ({ModLabel(form.Constitution)})")' Variant="Variant.Outlined" /></MudItem>
+                <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Intelligence" Label='@($"INT ({ModLabel(form.Intelligence)})")' Variant="Variant.Outlined" /></MudItem>
+                <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Wisdom" Label='@($"WIS ({ModLabel(form.Wisdom)})")' Variant="Variant.Outlined" /></MudItem>
+                <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Charisma" Label='@($"CHA ({ModLabel(form.Charisma)})")' Variant="Variant.Outlined" /></MudItem>
+            </MudGrid>
+
+            <MudText Typo="Typo.subtitle2" Class="mt-2">Traits</MudText>
+            <MudStack Spacing="2">
+                @for (var i = 0; i < form.Traits.Count; i++)
+                {
+                    var traitIndex = i;
+                    <MudPaper Class="pa-3" Outlined="true" Elevation="0">
+                        <MudStack Spacing="2">
+                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                <MudText Typo="Typo.subtitle2">Trait @(traitIndex + 1)</MudText>
+                                <MudButton Variant="Variant.Text" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="() => RemoveTrait(traitIndex)">Remove</MudButton>
+                            </MudStack>
+                            <MudTextField @bind-Value="form.Traits[traitIndex].Name" Label="Trait Name" Placeholder="e.g., Keen Smell" Variant="Variant.Outlined" />
+                            <MudTextField @bind-Value="form.Traits[traitIndex].Description" Label="Trait Description" Placeholder="Describe the trait..." Variant="Variant.Outlined" Lines="4" />
+                        </MudStack>
+                    </MudPaper>
+                }
+                <MudButton Variant="Variant.Outlined" Color="Color.Info" StartIcon="@Icons.Material.Filled.Add" OnClick="AddTrait">Add Trait</MudButton>
+            </MudStack>
+
+            <MudText Typo="Typo.subtitle2" Class="mt-2">Actions</MudText>
+            <MudStack Spacing="2">
+                @for (var i = 0; i < form.Actions.Count; i++)
+                {
+                    var actionIndex = i;
+                    <MudPaper Class="pa-3" Outlined="true" Elevation="0">
+                        <MudStack Spacing="2">
+                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                <MudText Typo="Typo.subtitle2">Action @(actionIndex + 1)</MudText>
+                                <MudButton Variant="Variant.Text" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="() => RemoveAction(actionIndex)">Remove</MudButton>
+                            </MudStack>
+                            <MudTextField @bind-Value="form.Actions[actionIndex].Name" Label="Action Name" Placeholder="e.g., Bite" Variant="Variant.Outlined" />
+                            <MudTextField @bind-Value="form.Actions[actionIndex].Description" Label="Action Description" Placeholder="Describe the action..." Variant="Variant.Outlined" Lines="4" />
+                        </MudStack>
+                    </MudPaper>
+                }
+                <MudButton Variant="Variant.Outlined" Color="Color.Info" StartIcon="@Icons.Material.Filled.Add" OnClick="AddAction">Add Action</MudButton>
+            </MudStack>
+
+            <MudText Typo="Typo.subtitle2" Class="mt-2">Notes</MudText>
+            <MudTextField @bind-Value="form.Description" Label="Description" Placeholder="Lore, behavior, abilities, hooks..." Variant="Variant.Outlined" Lines="4" />
+            <MudSelect T="string" SelectedValues="selectedLanguages" SelectedValuesChanged="OnLanguagesChanged" Label="Languages" Variant="Variant.Outlined" MultiSelection="true" MultiSelectionTextFunc="LanguageSummaryText">
+                @foreach (var language in LanguageOptions)
+                {
+                    <MudSelectItem T="string" Value="language">@language</MudSelectItem>
+                }
+            </MudSelect>
+            <MudCheckBox @bind-Value="form.UnderstandsButCannotSpeak" Label="Understands selected languages but can't speak" Color="Color.Primary" />
+            <MudSelect T="UserOption" Value="selectedOwnerOption" ValueChanged="OnOwnerChanged" Label="Owner" Variant="Variant.Outlined" Disabled="@(!canEditOwnerField || !ownerOptions.Any())" ToStringFunc="OwnerOptionLabel">
+                @foreach (var user in ownerOptions)
+                {
+                    <MudSelectItem T="UserOption" Value="user">@user.Username</MudSelectItem>
+                }
+            </MudSelect>
+            @if (!canEditOwnerField && form.CreatureId.HasValue)
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Only the current owner or an admin can transfer creature ownership.</MudText>
+            }
+
+            <MudStack Row="true" Spacing="1" Class="mt-3">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="Save" Disabled="@isSaving">@(isSaving ? "Saving..." : "Save")</MudButton>
+                <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Close" OnClick="Cancel">Cancel</MudButton>
+            </MudStack>
+        </MudStack>
+    </MudPaper>
+</MudStack>
+
+@code {
+    [Parameter] public int? CreatureId { get; set; }
+
+    private string? error;
+    private bool isSaving;
+    private bool isAdmin;
+    private int? currentUserId;
+    private bool canEditOwnerField;
+    private readonly List<UserOption> ownerOptions = new();
+    private UserOption? selectedOwnerOption;
+    private HashSet<string> selectedLanguages = new(StringComparer.OrdinalIgnoreCase);
+    private CreatureForm form = new();
+    private bool _loaded;
+
+    private bool IsEdit => CreatureId.HasValue;
+    private string ShowAllQuery => isAdmin ? "?showAll=true" : string.Empty;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _loaded) return;
+        _loaded = true;
+
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        isAdmin = auth.User.IsInRole("Admin");
+        var idStr = auth.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        currentUserId = int.TryParse(idStr, out var idv) ? idv : null;
+
+        await LoadOwnerOptions();
+
+        if (IsEdit)
+            await LoadCreature(CreatureId!.Value);
+        else
+            PrepareNewForm();
+
+        StateHasChanged();
+    }
+
+    private async Task LoadOwnerOptions()
+    {
+        try
+        {
+            var usersRes = await JS.InvokeAsync<ApiResult<List<UserOption>>>("ruleforgeApi.get", "/api/users");
+            ownerOptions.Clear();
+            ownerOptions.AddRange((usersRes.Ok ? usersRes.Data : null) ?? new List<UserOption>());
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+    }
+
+    private void PrepareNewForm()
+    {
+        form = new CreatureForm { OwnerAppUserId = currentUserId };
+        selectedOwnerOption = ownerOptions.FirstOrDefault(x => x.AppUserId == currentUserId);
+        selectedLanguages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        AddTrait();
+        AddAction();
+        canEditOwnerField = isAdmin;
+    }
+
+    private async Task LoadCreature(int creatureId)
+    {
+        try
+        {
+            error = null;
+            var res = await JS.InvokeAsync<ApiResult<CreatureRow>>("ruleforgeApi.get", $"/api/creatures/{creatureId}{ShowAllQuery}");
+            var row = res.Data;
+            if (!res.Ok || row is null)
+            {
+                error = string.IsNullOrWhiteSpace(res.Text) ? "Creature not found." : res.Text;
+                return;
+            }
+
+            form = new CreatureForm
+            {
+                CreatureId = row.CreatureId,
+                OwnerAppUserId = row.OwnerAppUserId,
+                Name = row.Name,
+                Description = row.Description,
+                ArmorClass = row.ArmorClass,
+                HitPoints = row.HitPoints,
+                InitiativeModifier = row.InitiativeModifier,
+                Speed = row.Speed,
+                WalkSpeed = row.WalkSpeed,
+                FlySpeed = row.FlySpeed,
+                SwimSpeed = row.SwimSpeed,
+                ClimbSpeed = row.ClimbSpeed,
+                BurrowSpeed = row.BurrowSpeed,
+                ChallengeRating = row.ChallengeRating,
+                ExperiencePoints = row.ExperiencePoints,
+                PassivePerception = row.PassivePerception,
+                Languages = row.Languages,
+                UnderstandsButCannotSpeak = row.UnderstandsButCannotSpeak,
+                Traits = row.Traits?.Select(x => new CreatureEntryForm { Name = x.Name, Description = x.Description, SortOrder = x.SortOrder }).ToList() ?? new(),
+                Actions = row.Actions?.Select(x => new CreatureEntryForm { Name = x.Name, Description = x.Description, SortOrder = x.SortOrder }).ToList() ?? new(),
+                Strength = row.Strength,
+                Dexterity = row.Dexterity,
+                Constitution = row.Constitution,
+                Intelligence = row.Intelligence,
+                Wisdom = row.Wisdom,
+                Charisma = row.Charisma
+            };
+            ParseLegacySpeedIntoForm(form);
+            selectedOwnerOption = ownerOptions.FirstOrDefault(x => x.AppUserId == form.OwnerAppUserId);
+            selectedLanguages = ParseLanguages(form.Languages);
+            if (form.Traits.Count == 0) AddTrait();
+            if (form.Actions.Count == 0) AddAction();
+            canEditOwnerField = isAdmin || (currentUserId.HasValue && row.OwnerAppUserId == currentUserId.Value);
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+    }
+
+    private void Cancel() => Nav.NavigateTo("/bestiary");
+
+    private void OnOwnerChanged(UserOption? value)
+    {
+        selectedOwnerOption = value;
+        form.OwnerAppUserId = value?.AppUserId;
+    }
+
+    private void OnLanguagesChanged(IEnumerable<string?> values)
+    {
+        selectedLanguages = values
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        form.Languages = string.Join(", ", selectedLanguages.OrderBy(x => x));
+    }
+
+    private static string OwnerOptionLabel(UserOption? value) => value?.Username ?? string.Empty;
+    private static string LanguageSummaryText(IReadOnlyList<string> values) => values.Count == 0 ? "None" : string.Join(", ", values.OrderBy(x => x));
+    private static HashSet<string> ParseLanguages(string? languages) => (languages ?? string.Empty)
+        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .Where(x => !string.IsNullOrWhiteSpace(x))
+        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    private void AddTrait() => form.Traits.Add(new CreatureEntryForm { SortOrder = form.Traits.Count });
+    private void RemoveTrait(int index)
+    {
+        if (index < 0 || index >= form.Traits.Count) return;
+        form.Traits.RemoveAt(index);
+    }
+
+    private void AddAction() => form.Actions.Add(new CreatureEntryForm { SortOrder = form.Actions.Count });
+    private void RemoveAction(int index)
+    {
+        if (index < 0 || index >= form.Actions.Count) return;
+        form.Actions.RemoveAt(index);
+    }
+
+    private async Task Save()
+    {
+        if (isSaving) return;
+        isSaving = true;
+        try
+        {
+            error = null;
+            var req = new
+            {
+                name = form.Name,
+                description = form.Description,
+                armorClass = form.ArmorClass,
+                hitPoints = form.HitPoints,
+                initiativeModifier = form.InitiativeModifier,
+                speed = form.Speed,
+                walkSpeed = form.WalkSpeed,
+                flySpeed = form.FlySpeed,
+                swimSpeed = form.SwimSpeed,
+                climbSpeed = form.ClimbSpeed,
+                burrowSpeed = form.BurrowSpeed,
+                challengeRating = form.ChallengeRating,
+                experiencePoints = form.ExperiencePoints,
+                passivePerception = form.PassivePerception,
+                languages = string.Join(", ", selectedLanguages.OrderBy(x => x)),
+                understandsButCannotSpeak = form.UnderstandsButCannotSpeak,
+                traits = form.Traits.Select((x, i) => new { name = x.Name, description = x.Description, sortOrder = i }).ToList(),
+                actions = form.Actions.Select((x, i) => new { name = x.Name, description = x.Description, sortOrder = i }).ToList(),
+                strength = form.Strength,
+                dexterity = form.Dexterity,
+                constitution = form.Constitution,
+                intelligence = form.Intelligence,
+                wisdom = form.Wisdom,
+                charisma = form.Charisma,
+                ownerAppUserId = form.OwnerAppUserId
+            };
+
+            ApiResult<object> res;
+            if (form.CreatureId.HasValue)
+                res = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.put", $"/api/creatures/{form.CreatureId.Value}{ShowAllQuery}", req);
+            else
+                res = await JS.InvokeAsync<ApiResult<object>>("ruleforgeApi.post", "/api/creatures", req);
+
+            if (!res.Ok)
+            {
+                error = ApiErrorMessage(res, "Save failed.");
+                return;
+            }
+
+            Nav.NavigateTo("/bestiary");
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private static void ParseLegacySpeedIntoForm(CreatureForm form)
+    {
+        if (form.WalkSpeed.HasValue || form.FlySpeed.HasValue || form.SwimSpeed.HasValue || form.ClimbSpeed.HasValue || form.BurrowSpeed.HasValue) return;
+        if (string.IsNullOrWhiteSpace(form.Speed)) return;
+
+        foreach (System.Text.RegularExpressions.Match match in System.Text.RegularExpressions.Regex.Matches(form.Speed, @"(?:(walk|fly|swim|climb|burrow)\s*)?(\d+)\s*ft", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+        {
+            var kind = match.Groups[1].Value.Trim().ToLowerInvariant();
+            if (!int.TryParse(match.Groups[2].Value, out var value)) continue;
+            switch (kind)
+            {
+                case "fly": form.FlySpeed ??= value; break;
+                case "swim": form.SwimSpeed ??= value; break;
+                case "climb": form.ClimbSpeed ??= value; break;
+                case "burrow": form.BurrowSpeed ??= value; break;
+                default: form.WalkSpeed ??= value; break;
+            }
+        }
+    }
+
+    private static string ApiErrorMessage<T>(ApiResult<T> res, string fallback)
+    {
+        if (!string.IsNullOrWhiteSpace(res.Text)) return NormalizeErrorText(res.Text!);
+        var msg = ExtractMessage(res.Data);
+        if (!string.IsNullOrWhiteSpace(msg)) return msg!;
+        return res.Status > 0 ? $"{fallback} (HTTP {res.Status})" : fallback;
+    }
+
+    private static string NormalizeErrorText(string text)
+    {
+        var t = text.Trim();
+        if (t.Length >= 2 && t.StartsWith("\"") && t.EndsWith("\""))
+        {
+            try { return System.Text.Json.JsonSerializer.Deserialize<string>(t) ?? t.Trim(new char[] { '"' }); } catch { return t.Trim(new char[] { '"' }); }
+        }
+        return t;
+    }
+
+    private static string? ExtractMessage(object? data)
+    {
+        if (data is null) return null;
+        try
+        {
+            var json = System.Text.Json.JsonSerializer.Serialize(data);
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object) return null;
+            foreach (var key in new[] { "message", "Message", "title", "error", "detail" })
+            {
+                if (doc.RootElement.TryGetProperty(key, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String)
+                    return v.GetString();
+            }
+        }
+        catch { }
+        return null;
+    }
+
+    private static int AbilityMod(int? score) => score.HasValue ? (int)Math.Floor((score.Value - 10) / 2.0) : 0;
+    private static string ModLabel(int? score) => $"{(AbilityMod(score) >= 0 ? "+" : string.Empty)}{AbilityMod(score)}";
+
+    private sealed class ApiResult<T> { public bool Ok { get; set; } public int Status { get; set; } public T? Data { get; set; } public string? Text { get; set; } }
+
+    private sealed class CreatureForm
+    {
+        public int? CreatureId { get; set; }
+        public int? OwnerAppUserId { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public int? ArmorClass { get; set; }
+        public int? HitPoints { get; set; }
+        public int? InitiativeModifier { get; set; }
+        public string? Speed { get; set; }
+        public int? WalkSpeed { get; set; }
+        public int? FlySpeed { get; set; }
+        public int? SwimSpeed { get; set; }
+        public int? ClimbSpeed { get; set; }
+        public int? BurrowSpeed { get; set; }
+        public string? ChallengeRating { get; set; }
+        public int? ExperiencePoints { get; set; }
+        public int? PassivePerception { get; set; }
+        public string? Languages { get; set; }
+        public bool UnderstandsButCannotSpeak { get; set; }
+        public List<CreatureEntryForm> Traits { get; set; } = new();
+        public List<CreatureEntryForm> Actions { get; set; } = new();
+        public int? Strength { get; set; }
+        public int? Dexterity { get; set; }
+        public int? Constitution { get; set; }
+        public int? Intelligence { get; set; }
+        public int? Wisdom { get; set; }
+        public int? Charisma { get; set; }
+    }
+
+    private sealed class CreatureEntryForm
+    {
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public int SortOrder { get; set; }
+    }
+
+    private record UserOption(int AppUserId, string Username);
+    private sealed record CreatureEntryRow(string Name, string? Description, int SortOrder);
+    private sealed record CreatureRow(
+        int CreatureId,
+        string Name,
+        string? Description,
+        int? ArmorClass,
+        int? HitPoints,
+        int? InitiativeModifier,
+        string? Speed,
+        int? WalkSpeed,
+        int? FlySpeed,
+        int? SwimSpeed,
+        int? ClimbSpeed,
+        int? BurrowSpeed,
+        string? ChallengeRating,
+        int? ExperiencePoints,
+        int? PassivePerception,
+        string? Languages,
+        bool UnderstandsButCannotSpeak,
+        List<CreatureEntryRow>? Traits,
+        List<CreatureEntryRow>? Actions,
+        int? Strength,
+        int? Dexterity,
+        int? Constitution,
+        int? Intelligence,
+        int? Wisdom,
+        int? Charisma,
+        bool IsSystem,
+        int? OwnerAppUserId,
+        string? OwnerUsername,
+        bool OwnerIsAdmin,
+        bool UserCanEdit);
+}

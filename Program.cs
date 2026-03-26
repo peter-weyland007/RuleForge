@@ -340,6 +340,8 @@ using (var scope = app.Services.CreateScope())
             "ALTER TABLE \"Characters\" ADD COLUMN IF NOT EXISTS \"RaceName\" text NULL;",
             "ALTER TABLE \"Characters\" ADD COLUMN IF NOT EXISTS \"SubraceName\" text NULL;",
             "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"PassivePerception\" integer NULL;",
+            "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"Languages\" text NULL;",
+            "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"UnderstandsButCannotSpeak\" boolean NOT NULL DEFAULT false;",
             "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"Strength\" integer NULL;",
             "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"Dexterity\" integer NULL;",
             "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"Constitution\" integer NULL;",
@@ -523,14 +525,43 @@ using (var scope = app.Services.CreateScope())
             HitPoints INTEGER NULL,
             InitiativeModifier INTEGER NULL,
             Speed TEXT NULL,
+            WalkSpeed INTEGER NULL,
+            FlySpeed INTEGER NULL,
+            SwimSpeed INTEGER NULL,
+            ClimbSpeed INTEGER NULL,
+            BurrowSpeed INTEGER NULL,
             ChallengeRating TEXT NULL,
             ExperiencePoints INTEGER NULL,
             PassivePerception INTEGER NULL,
+            Languages TEXT NULL,
+            UnderstandsButCannotSpeak INTEGER NOT NULL DEFAULT 0,
+            Traits TEXT NULL,
+            Actions TEXT NULL,
             DateCreatedUtc TEXT NOT NULL,
             DateModifiedUtc TEXT NOT NULL,
             DateDeletedUtc TEXT NULL
         );
         CREATE INDEX IF NOT EXISTS IX_Creatures_Name ON Creatures (Name);
+
+        CREATE TABLE IF NOT EXISTS CreatureTraits (
+            CreatureTraitId INTEGER NOT NULL CONSTRAINT PK_CreatureTraits PRIMARY KEY AUTOINCREMENT,
+            CreatureId INTEGER NOT NULL,
+            Name TEXT NOT NULL,
+            Description TEXT NULL,
+            SortOrder INTEGER NOT NULL DEFAULT 0,
+            CONSTRAINT FK_CreatureTraits_Creatures_CreatureId FOREIGN KEY (CreatureId) REFERENCES Creatures (CreatureId) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS IX_CreatureTraits_CreatureId_SortOrder ON CreatureTraits (CreatureId, SortOrder);
+
+        CREATE TABLE IF NOT EXISTS CreatureActions (
+            CreatureActionId INTEGER NOT NULL CONSTRAINT PK_CreatureActions PRIMARY KEY AUTOINCREMENT,
+            CreatureId INTEGER NOT NULL,
+            Name TEXT NOT NULL,
+            Description TEXT NULL,
+            SortOrder INTEGER NOT NULL DEFAULT 0,
+            CONSTRAINT FK_CreatureActions_Creatures_CreatureId FOREIGN KEY (CreatureId) REFERENCES Creatures (CreatureId) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS IX_CreatureActions_CreatureId_SortOrder ON CreatureActions (CreatureId, SortOrder);
     """);
 
     TryExecuteSqlStatements(db,
@@ -538,6 +569,11 @@ using (var scope = app.Services.CreateScope())
         "ALTER TABLE Creatures ADD COLUMN HitPoints INTEGER NULL;",
         "ALTER TABLE Creatures ADD COLUMN InitiativeModifier INTEGER NULL;",
         "ALTER TABLE Creatures ADD COLUMN Speed TEXT NULL;",
+        "ALTER TABLE Creatures ADD COLUMN WalkSpeed INTEGER NULL;",
+        "ALTER TABLE Creatures ADD COLUMN FlySpeed INTEGER NULL;",
+        "ALTER TABLE Creatures ADD COLUMN SwimSpeed INTEGER NULL;",
+        "ALTER TABLE Creatures ADD COLUMN ClimbSpeed INTEGER NULL;",
+        "ALTER TABLE Creatures ADD COLUMN BurrowSpeed INTEGER NULL;",
         "ALTER TABLE Creatures ADD COLUMN ChallengeRating TEXT NULL;",
         "ALTER TABLE Creatures ADD COLUMN ExperiencePoints INTEGER NULL;",
         "ALTER TABLE Characters ADD COLUMN PartyId INTEGER NOT NULL DEFAULT 0;",
@@ -564,6 +600,10 @@ using (var scope = app.Services.CreateScope())
         "CREATE UNIQUE INDEX IF NOT EXISTS IX_Parties_CampaignId_Name ON Parties (CampaignId, Name);",
         "DROP INDEX IF EXISTS IX_Parties_Name;",
         "ALTER TABLE Creatures ADD COLUMN PassivePerception INTEGER NULL;",
+        "ALTER TABLE Creatures ADD COLUMN Languages TEXT NULL;",
+        "ALTER TABLE Creatures ADD COLUMN UnderstandsButCannotSpeak INTEGER NOT NULL DEFAULT 0;",
+        "ALTER TABLE Creatures ADD COLUMN Traits TEXT NULL;",
+        "ALTER TABLE Creatures ADD COLUMN Actions TEXT NULL;",
         "ALTER TABLE Creatures ADD COLUMN Strength INTEGER NULL;",
         "ALTER TABLE Creatures ADD COLUMN Dexterity INTEGER NULL;",
         "ALTER TABLE Creatures ADD COLUMN Constitution INTEGER NULL;",
@@ -1374,75 +1414,77 @@ app.MapDelete("/api/campaigns/{id:int}/share/{userId:int}", async (int id, int u
 
 app.MapGet("/api/creatures", async (HttpContext http, AppDbContext db, bool? showAll) =>
 {
-    var userId = GetUserId(http); if (userId is null) return Results.Unauthorized();
-    var includeAll = IsAdmin(http) && showAll == true;
-    var sharedIds = includeAll ? new List<int>() : await db.CreatureShares.Where(x => x.SharedWithUserId == userId.Value).Select(x => x.CreatureId).ToListAsync();
+    var userId = GetUserId(http);
+    var isAdmin = IsAdmin(http);
+    var includeAll = isAdmin && showAll == true;
+    var sharedPermissions = userId.HasValue && !includeAll
+        ? await db.CreatureShares
+            .Where(x => x.SharedWithUserId == userId.Value)
+            .ToDictionaryAsync(x => x.CreatureId, x => x.Permission)
+        : new Dictionary<int, SharePermission>();
+    var sharedIds = sharedPermissions.Keys.ToList();
 
     var rows = await db.Creatures
-        .Where(x => x.DateDeletedUtc == null && (includeAll || x.IsSystem || x.OwnerAppUserId == userId.Value || sharedIds.Contains(x.CreatureId)))
+        .Include(x => x.TraitList)
+        .Include(x => x.ActionList)
+        .Where(x => x.DateDeletedUtc == null && (includeAll || x.IsSystem || (userId.HasValue && (x.OwnerAppUserId == userId.Value || sharedIds.Contains(x.CreatureId)))))
         .OrderBy(x => x.Name)
-        .Select(x => new CreatureResponse
-        {
-            CreatureId = x.CreatureId,
-            IsSystem = x.IsSystem,
-            OwnerAppUserId = x.OwnerAppUserId,
-            OwnerUsername = db.Users.Where(u => u.AppUserId == x.OwnerAppUserId).Select(u => u.Username).FirstOrDefault(),
-            Name = x.Name,
-            Description = x.Description,
-            ArmorClass = x.ArmorClass,
-            HitPoints = x.HitPoints,
-            InitiativeModifier = x.InitiativeModifier,
-            Speed = x.Speed,
-            ChallengeRating = x.ChallengeRating,
-            ExperiencePoints = x.ExperiencePoints,
-            PassivePerception = x.PassivePerception,
-            Strength = x.Strength,
-            Dexterity = x.Dexterity,
-            Constitution = x.Constitution,
-            Intelligence = x.Intelligence,
-            Wisdom = x.Wisdom,
-            Charisma = x.Charisma
-        })
         .ToListAsync();
 
-    return Results.Ok(rows);
-}).RequireAuthorization();
+    var ownerIds = rows.Where(x => x.OwnerAppUserId.HasValue).Select(x => x.OwnerAppUserId!.Value).Distinct().ToList();
+    var ownerMap = await db.Users
+        .Where(u => ownerIds.Contains(u.AppUserId))
+        .Select(u => new { u.AppUserId, u.Username, OwnerIsAdmin = u.Role == AppRole.Admin })
+        .ToDictionaryAsync(u => u.AppUserId, u => new { u.Username, u.OwnerIsAdmin });
+
+    var result = rows.Select(row =>
+    {
+        var hasOwner = ownerMap.TryGetValue(row.OwnerAppUserId ?? 0, out var owner);
+        var canEdit = includeAll || isAdmin || (userId.HasValue && !row.IsSystem && row.OwnerAppUserId == userId.Value) || (sharedPermissions.TryGetValue(row.CreatureId, out var permission) && permission == SharePermission.Edit);
+        return ToCreatureResponse(row, hasOwner ? owner!.Username : null, hasOwner && owner!.OwnerIsAdmin, canEdit);
+    }).ToList();
+
+    return Results.Ok(result);
+});
 
 app.MapGet("/api/creatures/{id:int}", async (int id, HttpContext http, AppDbContext db, bool? showAll) =>
 {
-    var userId = GetUserId(http); if (userId is null) return Results.Unauthorized();
+    var userId = GetUserId(http);
     var isAdmin = IsAdmin(http);
     var includeAll = isAdmin && showAll == true;
 
-    var row = await db.Creatures.FirstOrDefaultAsync(x => x.CreatureId == id && x.DateDeletedUtc == null);
+    var row = await db.Creatures
+        .Include(x => x.TraitList)
+        .Include(x => x.ActionList)
+        .FirstOrDefaultAsync(x => x.CreatureId == id && x.DateDeletedUtc == null);
     if (row is null) return Results.NotFound();
 
-    var canView = isAdmin || includeAll || row.IsSystem || row.OwnerAppUserId == userId.Value || await db.CreatureShares.AnyAsync(x => x.CreatureId == id && x.SharedWithUserId == userId.Value);
+    SharePermission? sharePermission = null;
+    if (includeAll || isAdmin)
+    {
+        sharePermission = SharePermission.Edit;
+    }
+    else if (userId.HasValue)
+    {
+        sharePermission = await db.CreatureShares
+            .Where(x => x.CreatureId == id && x.SharedWithUserId == userId.Value)
+            .Select(x => (SharePermission?)x.Permission)
+            .FirstOrDefaultAsync();
+    }
+
+    var canView = isAdmin || includeAll || row.IsSystem || (userId.HasValue && row.OwnerAppUserId == userId.Value) || sharePermission.HasValue;
     if (!canView) return Results.Forbid();
 
-    return Results.Ok(new CreatureResponse
-    {
-        CreatureId = row.CreatureId,
-        IsSystem = row.IsSystem,
-        OwnerAppUserId = row.OwnerAppUserId,
-        OwnerUsername = await db.Users.Where(u => u.AppUserId == row.OwnerAppUserId).Select(u => u.Username).FirstOrDefaultAsync(),
-        Name = row.Name,
-        Description = row.Description,
-        ArmorClass = row.ArmorClass,
-        HitPoints = row.HitPoints,
-        InitiativeModifier = row.InitiativeModifier,
-        Speed = row.Speed,
-        ChallengeRating = row.ChallengeRating,
-        ExperiencePoints = row.ExperiencePoints,
-        PassivePerception = row.PassivePerception,
-        Strength = row.Strength,
-        Dexterity = row.Dexterity,
-        Constitution = row.Constitution,
-        Intelligence = row.Intelligence,
-        Wisdom = row.Wisdom,
-        Charisma = row.Charisma
-    });
-}).RequireAuthorization();
+    var owner = row.OwnerAppUserId.HasValue
+        ? await db.Users.Where(u => u.AppUserId == row.OwnerAppUserId.Value).Select(u => new { u.Username, OwnerIsAdmin = u.Role == AppRole.Admin }).FirstOrDefaultAsync()
+        : null;
+
+    return Results.Ok(ToCreatureResponse(
+        row,
+        owner?.Username,
+        owner?.OwnerIsAdmin == true,
+        isAdmin || includeAll || (userId.HasValue && !row.IsSystem && row.OwnerAppUserId == userId.Value) || sharePermission == SharePermission.Edit));
+});
 
 app.MapPost("/api/creatures", async (UpsertCreatureRequest req, HttpContext http, AppDbContext db) =>
 {
@@ -1458,10 +1500,19 @@ app.MapPost("/api/creatures", async (UpsertCreatureRequest req, HttpContext http
         ArmorClass = req.ArmorClass,
         HitPoints = req.HitPoints,
         InitiativeModifier = req.InitiativeModifier,
-        Speed = req.Speed,
+        WalkSpeed = req.WalkSpeed,
+        FlySpeed = req.FlySpeed,
+        SwimSpeed = req.SwimSpeed,
+        ClimbSpeed = req.ClimbSpeed,
+        BurrowSpeed = req.BurrowSpeed,
+        Speed = FormatCreatureSpeed(req.WalkSpeed, req.FlySpeed, req.SwimSpeed, req.ClimbSpeed, req.BurrowSpeed, req.Speed),
         ChallengeRating = req.ChallengeRating,
         ExperiencePoints = req.ExperiencePoints,
         PassivePerception = req.PassivePerception,
+        Languages = NormalizeCreatureLanguages(req.Languages),
+        UnderstandsButCannotSpeak = req.UnderstandsButCannotSpeak,
+        Traits = null,
+        Actions = null,
         Strength = req.Strength,
         Dexterity = req.Dexterity,
         Constitution = req.Constitution,
@@ -1471,6 +1522,8 @@ app.MapPost("/api/creatures", async (UpsertCreatureRequest req, HttpContext http
         DateCreatedUtc = DateTime.UtcNow,
         DateModifiedUtc = DateTime.UtcNow
     };
+
+    ApplyCreatureEntries(row, req);
 
     db.Creatures.Add(row);
     await db.SaveChangesAsync();
@@ -1482,7 +1535,10 @@ app.MapPut("/api/creatures/{id:int}", async (int id, UpsertCreatureRequest req, 
     var userId = GetUserId(http); if (userId is null) return Results.Unauthorized();
     if (string.IsNullOrWhiteSpace(req.Name)) return Results.BadRequest(new ApiError("CREATURE_NAME_REQUIRED", "Creature name is required.", http.TraceIdentifier));
 
-    var row = await db.Creatures.FirstOrDefaultAsync(x => x.CreatureId == id && x.DateDeletedUtc == null);
+    var row = await db.Creatures
+        .Include(x => x.TraitList)
+        .Include(x => x.ActionList)
+        .FirstOrDefaultAsync(x => x.CreatureId == id && x.DateDeletedUtc == null);
     if (row is null) return Results.NotFound();
 
     var canEdit = IsAdmin(http) || row.OwnerAppUserId == userId.Value || await db.CreatureShares.AnyAsync(x => x.CreatureId == id && x.SharedWithUserId == userId.Value && x.Permission == SharePermission.Edit);
@@ -1503,10 +1559,19 @@ app.MapPut("/api/creatures/{id:int}", async (int id, UpsertCreatureRequest req, 
     row.ArmorClass = req.ArmorClass;
     row.HitPoints = req.HitPoints;
     row.InitiativeModifier = req.InitiativeModifier;
-    row.Speed = req.Speed;
+    row.WalkSpeed = req.WalkSpeed;
+    row.FlySpeed = req.FlySpeed;
+    row.SwimSpeed = req.SwimSpeed;
+    row.ClimbSpeed = req.ClimbSpeed;
+    row.BurrowSpeed = req.BurrowSpeed;
+    row.Speed = FormatCreatureSpeed(req.WalkSpeed, req.FlySpeed, req.SwimSpeed, req.ClimbSpeed, req.BurrowSpeed, req.Speed);
     row.ChallengeRating = req.ChallengeRating;
     row.ExperiencePoints = req.ExperiencePoints;
     row.PassivePerception = req.PassivePerception;
+    row.Languages = NormalizeCreatureLanguages(req.Languages);
+    row.UnderstandsButCannotSpeak = req.UnderstandsButCannotSpeak;
+    row.Traits = null;
+    row.Actions = null;
     row.Strength = req.Strength;
     row.Dexterity = req.Dexterity;
     row.Constitution = req.Constitution;
@@ -1514,6 +1579,8 @@ app.MapPut("/api/creatures/{id:int}", async (int id, UpsertCreatureRequest req, 
     row.Wisdom = req.Wisdom;
     row.Charisma = req.Charisma;
     row.DateModifiedUtc = DateTime.UtcNow;
+
+    ApplyCreatureEntries(row, req);
 
     await db.SaveChangesAsync();
     return Results.Ok(new { row.CreatureId });
@@ -1571,7 +1638,10 @@ app.MapDelete("/api/creatures/{id:int}/share/{userId:int}", async (int id, int u
 app.MapPost("/api/creatures/{id:int}/clone", async (int id, HttpContext http, AppDbContext db) =>
 {
     var userId = GetUserId(http); if (userId is null) return Results.Unauthorized();
-    var row = await db.Creatures.FirstOrDefaultAsync(x => x.CreatureId == id && x.DateDeletedUtc == null);
+    var row = await db.Creatures
+        .Include(x => x.TraitList)
+        .Include(x => x.ActionList)
+        .FirstOrDefaultAsync(x => x.CreatureId == id && x.DateDeletedUtc == null);
     if (row is null) return Results.NotFound();
 
     var canView = row.IsSystem || row.OwnerAppUserId == userId.Value || IsAdmin(http) || await db.CreatureShares.AnyAsync(x => x.CreatureId == id && x.SharedWithUserId == userId.Value);
@@ -1586,10 +1656,19 @@ app.MapPost("/api/creatures/{id:int}/clone", async (int id, HttpContext http, Ap
         ArmorClass = row.ArmorClass,
         HitPoints = row.HitPoints,
         InitiativeModifier = row.InitiativeModifier,
+        WalkSpeed = row.WalkSpeed,
+        FlySpeed = row.FlySpeed,
+        SwimSpeed = row.SwimSpeed,
+        ClimbSpeed = row.ClimbSpeed,
+        BurrowSpeed = row.BurrowSpeed,
         Speed = row.Speed,
         ChallengeRating = row.ChallengeRating,
         ExperiencePoints = row.ExperiencePoints,
         PassivePerception = row.PassivePerception,
+        Languages = row.Languages,
+        UnderstandsButCannotSpeak = row.UnderstandsButCannotSpeak,
+        Traits = null,
+        Actions = null,
         Strength = row.Strength,
         Dexterity = row.Dexterity,
         Constitution = row.Constitution,
@@ -1599,6 +1678,11 @@ app.MapPost("/api/creatures/{id:int}/clone", async (int id, HttpContext http, Ap
         DateCreatedUtc = DateTime.UtcNow,
         DateModifiedUtc = DateTime.UtcNow
     };
+    foreach (var trait in row.TraitList.OrderBy(x => x.SortOrder))
+        clone.TraitList.Add(new CreatureTrait { Name = trait.Name, Description = trait.Description, SortOrder = trait.SortOrder });
+    foreach (var action in row.ActionList.OrderBy(x => x.SortOrder))
+        clone.ActionList.Add(new CreatureAction { Name = action.Name, Description = action.Description, SortOrder = action.SortOrder });
+
     db.Creatures.Add(clone);
     await db.SaveChangesAsync();
     return Results.Ok(new { clone.CreatureId });
@@ -2926,6 +3010,8 @@ app.MapPost("/api/marketplace/listings/{listingId:int}/import", async (int listi
             ChallengeRating = src.ChallengeRating,
             ExperiencePoints = src.ExperiencePoints,
             PassivePerception = src.PassivePerception,
+            Languages = src.Languages,
+            UnderstandsButCannotSpeak = src.UnderstandsButCannotSpeak,
             Strength = src.Strength,
             Dexterity = src.Dexterity,
             Constitution = src.Constitution,
@@ -3206,6 +3292,105 @@ static int? GetUserId(HttpContext http)
 }
 
 static bool IsAdmin(HttpContext http) => http.User.IsInRole("Admin");
+
+static string? FormatCreatureSpeed(int? walkSpeed, int? flySpeed, int? swimSpeed, int? climbSpeed, int? burrowSpeed, string? legacySpeed = null)
+{
+    List<string> parts = new();
+    if (walkSpeed.HasValue) parts.Add($"{walkSpeed.Value} ft.");
+    if (flySpeed.HasValue) parts.Add($"fly {flySpeed.Value} ft.");
+    if (swimSpeed.HasValue) parts.Add($"swim {swimSpeed.Value} ft.");
+    if (climbSpeed.HasValue) parts.Add($"climb {climbSpeed.Value} ft.");
+    if (burrowSpeed.HasValue) parts.Add($"burrow {burrowSpeed.Value} ft.");
+    if (parts.Count > 0) return string.Join(", ", parts);
+    return string.IsNullOrWhiteSpace(legacySpeed) ? null : legacySpeed.Trim();
+}
+
+static CreatureResponse ToCreatureResponse(Creature row, string? ownerUsername, bool ownerIsAdmin, bool userCanEdit)
+{
+    return new CreatureResponse
+    {
+        CreatureId = row.CreatureId,
+        IsSystem = row.IsSystem,
+        OwnerAppUserId = row.OwnerAppUserId,
+        OwnerUsername = ownerUsername,
+        OwnerIsAdmin = ownerIsAdmin,
+        UserCanEdit = userCanEdit,
+        Name = row.Name,
+        Description = row.Description,
+        ArmorClass = row.ArmorClass,
+        HitPoints = row.HitPoints,
+        InitiativeModifier = row.InitiativeModifier,
+        Speed = FormatCreatureSpeed(row.WalkSpeed, row.FlySpeed, row.SwimSpeed, row.ClimbSpeed, row.BurrowSpeed, row.Speed),
+        WalkSpeed = row.WalkSpeed,
+        FlySpeed = row.FlySpeed,
+        SwimSpeed = row.SwimSpeed,
+        ClimbSpeed = row.ClimbSpeed,
+        BurrowSpeed = row.BurrowSpeed,
+        ChallengeRating = row.ChallengeRating,
+        ExperiencePoints = row.ExperiencePoints,
+        PassivePerception = row.PassivePerception,
+        Languages = row.Languages,
+        UnderstandsButCannotSpeak = row.UnderstandsButCannotSpeak,
+        Traits = BuildCreatureEntryDtos(row.TraitList, row.Traits),
+        Actions = BuildCreatureEntryDtos(row.ActionList, row.Actions),
+        Strength = row.Strength,
+        Dexterity = row.Dexterity,
+        Constitution = row.Constitution,
+        Intelligence = row.Intelligence,
+        Wisdom = row.Wisdom,
+        Charisma = row.Charisma
+    };
+}
+
+static string? NormalizeCreatureLanguages(string? languages)
+{
+    var items = (languages ?? string.Empty)
+        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .Where(x => !string.IsNullOrWhiteSpace(x))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToList();
+
+    return items.Count == 0 ? null : string.Join(", ", items);
+}
+
+static List<CreatureEntryDto> BuildCreatureEntryDtos<T>(IEnumerable<T> rows, string? legacyText) where T : class
+{
+    var items = rows.Select(x => x switch
+    {
+        CreatureTrait trait => new CreatureEntryDto { Name = trait.Name, Description = trait.Description, SortOrder = trait.SortOrder },
+        CreatureAction action => new CreatureEntryDto { Name = action.Name, Description = action.Description, SortOrder = action.SortOrder },
+        _ => throw new InvalidOperationException("Unsupported creature entry type.")
+    }).OrderBy(x => x.SortOrder).ThenBy(x => x.Name).ToList();
+
+    if (items.Count == 0 && !string.IsNullOrWhiteSpace(legacyText))
+        items.Add(new CreatureEntryDto { Name = "Legacy", Description = legacyText.Trim(), SortOrder = 0 });
+
+    return items;
+}
+
+static void ApplyCreatureEntries(Creature row, UpsertCreatureRequest req)
+{
+    row.TraitList.Clear();
+    foreach (var entry in NormalizeCreatureEntries(req.Traits))
+        row.TraitList.Add(new CreatureTrait { Name = entry.Name, Description = entry.Description, SortOrder = entry.SortOrder });
+
+    row.ActionList.Clear();
+    foreach (var entry in NormalizeCreatureEntries(req.Actions))
+        row.ActionList.Add(new CreatureAction { Name = entry.Name, Description = entry.Description, SortOrder = entry.SortOrder });
+}
+
+static List<CreatureEntryDto> NormalizeCreatureEntries(IEnumerable<CreatureEntryDto>? entries)
+{
+    return (entries ?? Enumerable.Empty<CreatureEntryDto>())
+        .Where(x => !string.IsNullOrWhiteSpace(x.Name) || !string.IsNullOrWhiteSpace(x.Description))
+        .Select((x, index) => new CreatureEntryDto
+        {
+            Name = string.IsNullOrWhiteSpace(x.Name) ? $"Entry {index + 1}" : x.Name.Trim(),
+            Description = string.IsNullOrWhiteSpace(x.Description) ? null : x.Description.Trim(),
+            SortOrder = x.SortOrder == 0 ? index : x.SortOrder
+        })
+        .ToList();
+}
 
 static async Task<bool> CanAccessEncounter(HttpContext http, AppDbContext db, Encounter row, bool requireEdit)
 {

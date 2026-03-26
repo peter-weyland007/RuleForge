@@ -16,12 +16,24 @@ public sealed class UpsertCreatureRequest
 
     [StringLength(80)]
     public string? Speed { get; set; }
+    public int? WalkSpeed { get; set; }
+    public int? FlySpeed { get; set; }
+    public int? SwimSpeed { get; set; }
+    public int? ClimbSpeed { get; set; }
+    public int? BurrowSpeed { get; set; }
 
     [StringLength(32)]
     public string? ChallengeRating { get; set; }
 
     public int? ExperiencePoints { get; set; }
     public int? PassivePerception { get; set; }
+
+    [StringLength(250)]
+    public string? Languages { get; set; }
+    public bool UnderstandsButCannotSpeak { get; set; }
+
+    public List<CreatureEntryDto> Traits { get; set; } = new();
+    public List<CreatureEntryDto> Actions { get; set; } = new();
 
     public int? Strength { get; set; }
     public int? Dexterity { get; set; }

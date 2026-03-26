@@ -20,6 +20,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<Campaign> Campaigns => Set<Campaign>();
     public DbSet<CampaignShare> CampaignShares => Set<CampaignShare>();
     public DbSet<Creature> Creatures => Set<Creature>();
+    public DbSet<CreatureTrait> CreatureTraits => Set<CreatureTrait>();
+    public DbSet<CreatureAction> CreatureActions => Set<CreatureAction>();
     public DbSet<CreatureShare> CreatureShares => Set<CreatureShare>();
     public DbSet<Encounter> Encounters => Set<Encounter>();
     public DbSet<EncounterParticipant> EncounterParticipants => Set<EncounterParticipant>();
@@ -73,7 +75,16 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         cr.Property(x => x.Name).HasMaxLength(120).IsRequired();
         cr.Property(x => x.Description).HasMaxLength(4000);
         cr.Property(x => x.Speed).HasMaxLength(80);
+        cr.Property(x => x.WalkSpeed);
+        cr.Property(x => x.FlySpeed);
+        cr.Property(x => x.SwimSpeed);
+        cr.Property(x => x.ClimbSpeed);
+        cr.Property(x => x.BurrowSpeed);
         cr.Property(x => x.ChallengeRating).HasMaxLength(32);
+        cr.Property(x => x.Traits).HasMaxLength(8000);
+        cr.Property(x => x.Actions).HasMaxLength(8000);
+        cr.HasMany(x => x.TraitList).WithOne(x => x.Creature!).HasForeignKey(x => x.CreatureId).OnDelete(DeleteBehavior.Cascade);
+        cr.HasMany(x => x.ActionList).WithOne(x => x.Creature!).HasForeignKey(x => x.CreatureId).OnDelete(DeleteBehavior.Cascade);
         cr.Property(x => x.Strength);
         cr.Property(x => x.Dexterity);
         cr.Property(x => x.Constitution);
@@ -201,11 +212,21 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         ma.HasKey(x => x.MarketplaceAuditEventId);
         ma.HasIndex(x => new { x.MarketplaceListingId, x.DateUtc });
 
+        var crt = modelBuilder.Entity<CreatureTrait>();
+        crt.HasKey(x => x.CreatureTraitId);
+        crt.Property(x => x.Name).HasMaxLength(160).IsRequired();
+        crt.Property(x => x.Description).HasMaxLength(4000);
+        crt.HasIndex(x => new { x.CreatureId, x.SortOrder });
+
+        var cra = modelBuilder.Entity<CreatureAction>();
+        cra.HasKey(x => x.CreatureActionId);
+        cra.Property(x => x.Name).HasMaxLength(160).IsRequired();
+        cra.Property(x => x.Description).HasMaxLength(4000);
+        cra.HasIndex(x => new { x.CreatureId, x.SortOrder });
+
         var crs = modelBuilder.Entity<CreatureShare>();
         crs.HasKey(x => x.CreatureShareId);
         crs.HasIndex(x => new { x.CreatureId, x.SharedWithUserId }).IsUnique();
-
-
     }
 }
 
