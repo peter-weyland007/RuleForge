@@ -12,6 +12,7 @@ public sealed class CreatureResponse
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public string? Size { get; set; }
+    public string? Alignment { get; set; }
     public string? CreatureType { get; set; }
     public string? CreatureSubtype { get; set; }
     public int? CreatureTypeId { get; set; }

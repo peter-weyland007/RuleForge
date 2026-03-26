@@ -341,6 +341,7 @@ using (var scope = app.Services.CreateScope())
             "ALTER TABLE \"Characters\" ADD COLUMN IF NOT EXISTS \"RaceName\" text NULL;",
             "ALTER TABLE \"Characters\" ADD COLUMN IF NOT EXISTS \"SubraceName\" text NULL;",
             "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"Size\" text NULL;",
+            "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"Alignment\" text NULL;",
             "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"CreatureType\" text NULL;",
             "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"CreatureSubtype\" text NULL;",
             "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"CreatureTypeId\" integer NULL;",
@@ -572,6 +573,7 @@ using (var scope = app.Services.CreateScope())
             Name TEXT NOT NULL,
             Description TEXT NULL,
             Size TEXT NULL,
+            Alignment TEXT NULL,
             CreatureType TEXT NULL,
             CreatureSubtype TEXT NULL,
             CreatureTypeId INTEGER NULL,
@@ -684,6 +686,7 @@ using (var scope = app.Services.CreateScope())
         "CREATE UNIQUE INDEX IF NOT EXISTS IX_Parties_CampaignId_Name ON Parties (CampaignId, Name);",
         "DROP INDEX IF EXISTS IX_Parties_Name;",
         "ALTER TABLE Creatures ADD COLUMN Size TEXT NULL;",
+        "ALTER TABLE Creatures ADD COLUMN Alignment TEXT NULL;",
         "ALTER TABLE Creatures ADD COLUMN CreatureType TEXT NULL;",
         "ALTER TABLE Creatures ADD COLUMN CreatureSubtype TEXT NULL;",
         "ALTER TABLE Creatures ADD COLUMN CreatureTypeId INTEGER NULL;",
@@ -1672,6 +1675,7 @@ app.MapPost("/api/creatures", async (UpsertCreatureRequest req, HttpContext http
         Name = NormalizeCreatureTitle(req.Name),
         Description = string.IsNullOrWhiteSpace(req.Description) ? null : req.Description.Trim(),
         Size = NormalizeCreatureSize(req.Size),
+        Alignment = NormalizeCreatureAlignment(req.Alignment),
         IsSystem = req.IsSystem && IsAdmin(http),
         IsPublic = req.IsPublic,
         OwnerAppUserId = userId.Value,
@@ -1747,6 +1751,7 @@ app.MapPut("/api/creatures/{id:int}", async (int id, UpsertCreatureRequest req, 
     row.Name = NormalizeCreatureTitle(req.Name);
     row.Description = string.IsNullOrWhiteSpace(req.Description) ? null : req.Description.Trim();
     row.Size = NormalizeCreatureSize(req.Size);
+    row.Alignment = NormalizeCreatureAlignment(req.Alignment);
     row.IsSystem = req.IsSystem && IsAdmin(http);
     row.IsPublic = req.IsPublic;
     row.OwnerAppUserId = requestedOwnerId.Value;
@@ -3550,6 +3555,7 @@ static CreatureResponse ToCreatureResponse(Creature row, string? ownerUsername, 
         Name = row.Name,
         Description = row.Description,
         Size = row.Size,
+        Alignment = row.Alignment,
         CreatureTypeId = row.CreatureTypeId,
         CreatureType = row.Type?.Name ?? row.CreatureType,
         CreatureSubtype = subtypeNames.FirstOrDefault() ?? row.CreatureSubtype,
@@ -3608,6 +3614,17 @@ static string? NormalizeCreatureSize(string? value)
 {
     var text = value?.Trim();
     return string.IsNullOrWhiteSpace(text) ? null : CultureInfo.InvariantCulture.TextInfo.ToTitleCase(text.ToLowerInvariant());
+}
+
+static string? NormalizeCreatureAlignment(string? value)
+{
+    var text = value?.Trim();
+    if (string.IsNullOrWhiteSpace(text)) return null;
+
+    var textInfo = CultureInfo.InvariantCulture.TextInfo;
+    return string.Join(" ", text
+        .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+        .Select(part => textInfo.ToTitleCase(part.ToLowerInvariant())));
 }
 
 static string? NormalizeCreatureType(string? value)

@@ -720,8 +720,11 @@
                 parts.Add(type);
         }
 
+        if (!string.IsNullOrWhiteSpace(row.Alignment))
+            parts.Add(row.Alignment.Trim().ToLowerInvariant());
+
         if (parts.Count > 0)
-            return string.Join(" ", parts);
+            return string.Join(", ", parts);
 
         if (row.IsSystem) return "Official creature";
         if (row.IsPublic) return "Public creature";
@@ -807,6 +810,7 @@
         string Name,
         string? Description,
         string? Size,
+        string? Alignment,
         string? CreatureType,
         string? CreatureSubtype,
         int? CreatureTypeId,

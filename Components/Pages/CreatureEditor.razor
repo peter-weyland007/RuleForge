@@ -16,6 +16,14 @@
     [
         "Tiny", "Small", "Medium", "Large", "Huge", "Gargantuan"
     ];
+
+    private static readonly string[] AlignmentOptions =
+    [
+        "Lawful Good", "Neutral Good", "Chaotic Good",
+        "Lawful Neutral", "Neutral", "Chaotic Neutral",
+        "Lawful Evil", "Neutral Evil", "Chaotic Evil",
+        "Unaligned"
+    ];
 }
 
 <style>
@@ -70,6 +78,14 @@
                         @foreach (var size in SizeOptions)
                         {
                             <MudSelectItem T="string" Value="@size">@size</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="3">
+                    <MudSelect T="string" @bind-Value="form.Alignment" Label="Alignment" Variant="Variant.Outlined">
+                        @foreach (var alignment in AlignmentOptions)
+                        {
+                            <MudSelectItem T="string" Value="@alignment">@alignment</MudSelectItem>
                         }
                     </MudSelect>
                 </MudItem>
@@ -368,6 +384,7 @@
                 Name = row.Name,
                 Description = row.Description,
                 Size = row.Size,
+                Alignment = row.Alignment,
                 CreatureType = row.CreatureType,
                 CreatureSubtype = row.CreatureSubtype,
                 CreatureTypeId = row.CreatureTypeId,
@@ -522,6 +539,7 @@
                 name = form.Name,
                 description = form.Description,
                 size = form.Size,
+                alignment = form.Alignment,
                 creatureType = form.CreatureType,
                 creatureSubtype = form.CreatureSubtype,
                 creatureTypeId = form.CreatureTypeId,
@@ -654,6 +672,7 @@
         public string Name { get; set; } = string.Empty;
         public string? Description { get; set; }
         public string? Size { get; set; }
+        public string? Alignment { get; set; }
         public string? CreatureType { get; set; }
         public string? CreatureSubtype { get; set; }
         public int? CreatureTypeId { get; set; }
@@ -710,6 +729,7 @@
         string Name,
         string? Description,
         string? Size,
+        string? Alignment,
         string? CreatureType,
         string? CreatureSubtype,
         int? CreatureTypeId,

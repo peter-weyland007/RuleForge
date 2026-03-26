@@ -14,6 +14,9 @@ public sealed class UpsertCreatureRequest
     public string? Size { get; set; }
 
     [StringLength(40)]
+    public string? Alignment { get; set; }
+
+    [StringLength(40)]
     public string? CreatureType { get; set; }
 
     [StringLength(80)]

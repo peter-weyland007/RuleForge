@@ -10,6 +10,7 @@ public sealed class Creature
     public int? OwnerAppUserId { get; set; }
 
     public string? Size { get; set; }
+    public string? Alignment { get; set; }
     public string? CreatureType { get; set; }
     public string? CreatureSubtype { get; set; }
     public int? CreatureTypeId { get; set; }
