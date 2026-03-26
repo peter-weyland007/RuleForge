@@ -352,6 +352,11 @@ using (var scope = app.Services.CreateScope())
             "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"ChallengeRating\" text NULL;",
             "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"ExperiencePoints\" integer NULL;",
             "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"PassivePerception\" integer NULL;",
+            "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"BlindsightRange\" integer NULL;",
+            "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"DarkvisionRange\" integer NULL;",
+            "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"TremorsenseRange\" integer NULL;",
+            "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"TruesightRange\" integer NULL;",
+            "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"OtherSenses\" text NULL;",
             "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"Languages\" text NULL;",
             "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"UnderstandsButCannotSpeak\" boolean NOT NULL DEFAULT false;",
             "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"Traits\" text NULL;",
@@ -551,6 +556,11 @@ using (var scope = app.Services.CreateScope())
             ChallengeRating TEXT NULL,
             ExperiencePoints INTEGER NULL,
             PassivePerception INTEGER NULL,
+            BlindsightRange INTEGER NULL,
+            DarkvisionRange INTEGER NULL,
+            TremorsenseRange INTEGER NULL,
+            TruesightRange INTEGER NULL,
+            OtherSenses TEXT NULL,
             Languages TEXT NULL,
             UnderstandsButCannotSpeak INTEGER NOT NULL DEFAULT 0,
             Traits TEXT NULL,
@@ -618,6 +628,11 @@ using (var scope = app.Services.CreateScope())
         "CREATE UNIQUE INDEX IF NOT EXISTS IX_Parties_CampaignId_Name ON Parties (CampaignId, Name);",
         "DROP INDEX IF EXISTS IX_Parties_Name;",
         "ALTER TABLE Creatures ADD COLUMN PassivePerception INTEGER NULL;",
+        "ALTER TABLE Creatures ADD COLUMN BlindsightRange INTEGER NULL;",
+        "ALTER TABLE Creatures ADD COLUMN DarkvisionRange INTEGER NULL;",
+        "ALTER TABLE Creatures ADD COLUMN TremorsenseRange INTEGER NULL;",
+        "ALTER TABLE Creatures ADD COLUMN TruesightRange INTEGER NULL;",
+        "ALTER TABLE Creatures ADD COLUMN OtherSenses TEXT NULL;",
         "ALTER TABLE Creatures ADD COLUMN Languages TEXT NULL;",
         "ALTER TABLE Creatures ADD COLUMN UnderstandsButCannotSpeak INTEGER NOT NULL DEFAULT 0;",
         "ALTER TABLE Creatures ADD COLUMN Traits TEXT NULL;",
@@ -1527,6 +1542,11 @@ app.MapPost("/api/creatures", async (UpsertCreatureRequest req, HttpContext http
         ChallengeRating = req.ChallengeRating,
         ExperiencePoints = req.ExperiencePoints,
         PassivePerception = req.PassivePerception,
+        BlindsightRange = req.BlindsightRange,
+        DarkvisionRange = req.DarkvisionRange,
+        TremorsenseRange = req.TremorsenseRange,
+        TruesightRange = req.TruesightRange,
+        OtherSenses = NormalizeCreatureOtherSenses(req.OtherSenses),
         Languages = NormalizeCreatureLanguages(req.Languages),
         UnderstandsButCannotSpeak = req.UnderstandsButCannotSpeak,
         Traits = null,
@@ -1586,6 +1606,11 @@ app.MapPut("/api/creatures/{id:int}", async (int id, UpsertCreatureRequest req, 
     row.ChallengeRating = req.ChallengeRating;
     row.ExperiencePoints = req.ExperiencePoints;
     row.PassivePerception = req.PassivePerception;
+    row.BlindsightRange = req.BlindsightRange;
+    row.DarkvisionRange = req.DarkvisionRange;
+    row.TremorsenseRange = req.TremorsenseRange;
+    row.TruesightRange = req.TruesightRange;
+    row.OtherSenses = NormalizeCreatureOtherSenses(req.OtherSenses);
     row.Languages = NormalizeCreatureLanguages(req.Languages);
     row.UnderstandsButCannotSpeak = req.UnderstandsButCannotSpeak;
     row.Traits = null;
@@ -3347,6 +3372,11 @@ static CreatureResponse ToCreatureResponse(Creature row, string? ownerUsername, 
         ChallengeRating = row.ChallengeRating,
         ExperiencePoints = row.ExperiencePoints,
         PassivePerception = row.PassivePerception,
+        BlindsightRange = row.BlindsightRange,
+        DarkvisionRange = row.DarkvisionRange,
+        TremorsenseRange = row.TremorsenseRange,
+        TruesightRange = row.TruesightRange,
+        OtherSenses = row.OtherSenses,
         Languages = row.Languages,
         UnderstandsButCannotSpeak = row.UnderstandsButCannotSpeak,
         Traits = BuildCreatureEntryDtos(row.TraitList, row.Traits),
@@ -3384,6 +3414,12 @@ static string? NormalizeCreatureLanguages(string? languages)
         .ToList();
 
     return items.Count == 0 ? null : string.Join(", ", items);
+}
+
+static string? NormalizeCreatureOtherSenses(string? value)
+{
+    var text = value?.Trim();
+    return string.IsNullOrWhiteSpace(text) ? null : text;
 }
 
 static List<CreatureEntryDto> BuildCreatureEntryDtos<T>(IEnumerable<T> rows, string? legacyText) where T : class

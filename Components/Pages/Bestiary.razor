@@ -317,6 +317,7 @@
 
                                 <div class="rf-statblock-divider"></div>
                                 <div class="rf-statblock-line"><strong>Initiative</strong> @(selectedCreature.InitiativeModifier is int init ? $"{(init >= 0 ? "+" : string.Empty)}{init}" : "—")</div>
+                                <div class="rf-statblock-line"><strong>Senses</strong> @FormatSenses(selectedCreature)</div>
                                 <div class="rf-statblock-line"><strong>Passive Perception</strong> @(selectedCreature.PassivePerception?.ToString() ?? "—")</div>
                                 <div class="rf-statblock-line"><strong>Languages</strong> @FormatLanguages(selectedCreature)</div>
                             </div>
@@ -685,6 +686,17 @@
         return string.IsNullOrWhiteSpace(row.Speed) ? "—" : row.Speed!;
     }
 
+    private static string FormatSenses(CreatureRow row)
+    {
+        var parts = new List<string>();
+        if (row.BlindsightRange.HasValue) parts.Add($"blindsight {row.BlindsightRange.Value} ft.");
+        if (row.DarkvisionRange.HasValue) parts.Add($"darkvision {row.DarkvisionRange.Value} ft.");
+        if (row.TremorsenseRange.HasValue) parts.Add($"tremorsense {row.TremorsenseRange.Value} ft.");
+        if (row.TruesightRange.HasValue) parts.Add($"truesight {row.TruesightRange.Value} ft.");
+        if (!string.IsNullOrWhiteSpace(row.OtherSenses)) parts.Add(row.OtherSenses.Trim());
+        return parts.Count == 0 ? "—" : string.Join(", ", parts);
+    }
+
     private static string FormatLanguages(CreatureRow row)
     {
         if (string.IsNullOrWhiteSpace(row.Languages))
@@ -718,6 +730,11 @@
         string? ChallengeRating,
         int? ExperiencePoints,
         int? PassivePerception,
+        int? BlindsightRange,
+        int? DarkvisionRange,
+        int? TremorsenseRange,
+        int? TruesightRange,
+        string? OtherSenses,
         string? Languages,
         bool UnderstandsButCannotSpeak,
         List<CreatureEntryRow>? Traits,

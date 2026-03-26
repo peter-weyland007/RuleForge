@@ -20,6 +20,11 @@ public sealed class Creature
     public string? ChallengeRating { get; set; }
     public int? ExperiencePoints { get; set; }
     public int? PassivePerception { get; set; }
+    public int? BlindsightRange { get; set; }
+    public int? DarkvisionRange { get; set; }
+    public int? TremorsenseRange { get; set; }
+    public int? TruesightRange { get; set; }
+    public string? OtherSenses { get; set; }
     public string? Languages { get; set; }
     public bool UnderstandsButCannotSpeak { get; set; }
     public string? Traits { get; set; }

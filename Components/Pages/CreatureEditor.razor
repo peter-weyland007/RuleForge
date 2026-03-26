@@ -93,6 +93,25 @@
                 <MudNumericField T="int?" @bind-Value="form.BurrowSpeed" Label="Burrow" Variant="Variant.Outlined" Adornment="Adornment.End" AdornmentText="ft" />
             </div>
 
+            <MudText Typo="Typo.subtitle2" Class="mt-2">Senses</MudText>
+            <MudGrid>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudNumericField T="int?" @bind-Value="form.BlindsightRange" Label="Blindsight" Variant="Variant.Outlined" Min="0" Adornment="Adornment.End" AdornmentText="ft" />
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudNumericField T="int?" @bind-Value="form.DarkvisionRange" Label="Darkvision" Variant="Variant.Outlined" Min="0" Adornment="Adornment.End" AdornmentText="ft" />
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudNumericField T="int?" @bind-Value="form.TremorsenseRange" Label="Tremorsense" Variant="Variant.Outlined" Min="0" Adornment="Adornment.End" AdornmentText="ft" />
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudNumericField T="int?" @bind-Value="form.TruesightRange" Label="Truesight" Variant="Variant.Outlined" Min="0" Adornment="Adornment.End" AdornmentText="ft" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="form.OtherSenses" Label="Other Senses" Placeholder="e.g., keen smell, devil's sight" Variant="Variant.Outlined" />
+                </MudItem>
+            </MudGrid>
+
             <MudText Typo="Typo.subtitle2" Class="mt-2">Ability Scores</MudText>
             <MudGrid>
                 <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Strength" Label='@($"STR ({ModLabel(form.Strength)})")' Variant="Variant.Outlined" /></MudItem>
@@ -261,6 +280,11 @@
                 ChallengeRating = row.ChallengeRating,
                 ExperiencePoints = row.ExperiencePoints,
                 PassivePerception = row.PassivePerception,
+                BlindsightRange = row.BlindsightRange,
+                DarkvisionRange = row.DarkvisionRange,
+                TremorsenseRange = row.TremorsenseRange,
+                TruesightRange = row.TruesightRange,
+                OtherSenses = row.OtherSenses,
                 Languages = row.Languages,
                 UnderstandsButCannotSpeak = row.UnderstandsButCannotSpeak,
                 Traits = row.Traits?.Select(x => new CreatureEntryForm { Name = x.Name, Description = x.Description, SortOrder = x.SortOrder }).ToList() ?? new(),
@@ -347,6 +371,11 @@
                 challengeRating = form.ChallengeRating,
                 experiencePoints = form.ExperiencePoints,
                 passivePerception = form.PassivePerception,
+                blindsightRange = form.BlindsightRange,
+                darkvisionRange = form.DarkvisionRange,
+                tremorsenseRange = form.TremorsenseRange,
+                truesightRange = form.TruesightRange,
+                otherSenses = form.OtherSenses,
                 languages = string.Join(", ", selectedLanguages.OrderBy(x => x)),
                 understandsButCannotSpeak = form.UnderstandsButCannotSpeak,
                 traits = form.Traits.Select((x, i) => new { name = x.Name, description = x.Description, sortOrder = i }).ToList(),
@@ -463,6 +492,11 @@
         public string? ChallengeRating { get; set; }
         public int? ExperiencePoints { get; set; }
         public int? PassivePerception { get; set; }
+        public int? BlindsightRange { get; set; }
+        public int? DarkvisionRange { get; set; }
+        public int? TremorsenseRange { get; set; }
+        public int? TruesightRange { get; set; }
+        public string? OtherSenses { get; set; }
         public string? Languages { get; set; }
         public bool UnderstandsButCannotSpeak { get; set; }
         public List<CreatureEntryForm> Traits { get; set; } = new();
@@ -500,6 +534,11 @@
         string? ChallengeRating,
         int? ExperiencePoints,
         int? PassivePerception,
+        int? BlindsightRange,
+        int? DarkvisionRange,
+        int? TremorsenseRange,
+        int? TruesightRange,
+        string? OtherSenses,
         string? Languages,
         bool UnderstandsButCannotSpeak,
         List<CreatureEntryRow>? Traits,

@@ -27,6 +27,13 @@ public sealed class UpsertCreatureRequest
 
     public int? ExperiencePoints { get; set; }
     public int? PassivePerception { get; set; }
+    public int? BlindsightRange { get; set; }
+    public int? DarkvisionRange { get; set; }
+    public int? TremorsenseRange { get; set; }
+    public int? TruesightRange { get; set; }
+
+    [StringLength(250)]
+    public string? OtherSenses { get; set; }
 
     [StringLength(250)]
     public string? Languages { get; set; }
