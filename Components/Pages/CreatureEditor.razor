@@ -22,6 +22,14 @@
         "aberration", "beast", "celestial", "construct", "dragon", "elemental", "fey", "fiend",
         "giant", "humanoid", "monstrosity", "ooze", "plant", "undead"
     ];
+
+    private static readonly string[] CreatureSubtypeOptions =
+    [
+        "angel", "any race", "aquatic", "archon", "devil", "demon", "dragonborn", "dwarf", "elf",
+        "gith", "gnoll", "gnome", "goblinoid", "halfling", "human", "kenku", "kobold", "lizardfolk",
+        "lycanthrope", "mind flayer", "orc", "sahuagin", "shapechanger", "skeleton", "spirit", "titan",
+        "vampire", "warforged", "yuan-ti", "zombie"
+    ];
 }
 
 <style>
@@ -88,7 +96,16 @@
                     </MudSelect>
                 </MudItem>
                 <MudItem xs="12" md="6">
-                    <MudTextField @bind-Value="form.CreatureSubtype" Label="Subtype" Placeholder="e.g., goblinoid" Variant="Variant.Outlined" />
+                    <MudAutocomplete T="string"
+                                     @bind-Value="form.CreatureSubtype"
+                                     Label="Subtype"
+                                     Placeholder="e.g., goblinoid"
+                                     Variant="Variant.Outlined"
+                                     SearchFunc="SearchSubtypeOptions"
+                                     CoerceText="true"
+                                     CoerceValue="true"
+                                     Clearable="true"
+                                     ResetValueOnEmptyText="true" />
                 </MudItem>
                 <MudItem xs="12" md="3">
                     <MudTextField @bind-Value="form.ChallengeRating" Label="CR" Placeholder="e.g., 5, 1/2, 21" Variant="Variant.Outlined" />
@@ -366,6 +383,15 @@
         .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
         .Where(x => !string.IsNullOrWhiteSpace(x))
         .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    private Task<IEnumerable<string>> SearchSubtypeOptions(string? value, CancellationToken token)
+    {
+        IEnumerable<string> items = CreatureSubtypeOptions;
+        if (!string.IsNullOrWhiteSpace(value))
+            items = items.Where(x => x.Contains(value, StringComparison.OrdinalIgnoreCase));
+
+        return Task.FromResult(items.OrderBy(x => x).AsEnumerable());
+    }
 
     private void AddTrait() => form.Traits.Add(new CreatureEntryForm { SortOrder = form.Traits.Count });
     private void RemoveTrait(int index)
