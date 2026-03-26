@@ -77,6 +77,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         cr.HasKey(x => x.CreatureId);
         cr.Property(x => x.Name).HasMaxLength(120).IsRequired();
         cr.Property(x => x.Description).HasMaxLength(4000);
+        cr.Property(x => x.IsPublic).HasDefaultValue(false);
         cr.Property(x => x.Size).HasMaxLength(24);
         cr.Property(x => x.CreatureType).HasMaxLength(40);
         cr.Property(x => x.CreatureSubtype).HasMaxLength(80);

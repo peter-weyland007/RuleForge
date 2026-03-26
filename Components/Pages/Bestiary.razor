@@ -498,6 +498,7 @@
     private static string DisplayOwner(CreatureRow row)
     {
         if (row.IsSystem || row.OwnerIsAdmin) return "System";
+        if (row.IsPublic && !string.IsNullOrWhiteSpace(row.OwnerUsername)) return $"{row.OwnerUsername} • Public";
         return string.IsNullOrWhiteSpace(row.OwnerUsername) ? "—" : row.OwnerUsername;
     }
 
@@ -648,7 +649,7 @@
         {
             CreatureScopeFilter.Official => src.Where(x => x.IsSystem).ToList(),
             CreatureScopeFilter.MyVault => src.Where(x => !x.IsSystem && x.OwnerAppUserId.HasValue && currentUserId.HasValue && x.OwnerAppUserId == currentUserId.Value).ToList(),
-            CreatureScopeFilter.Shared => src.Where(x => !x.IsSystem && (!currentUserId.HasValue || x.OwnerAppUserId != currentUserId.Value)).ToList(),
+            CreatureScopeFilter.Shared => src.Where(x => !x.IsSystem && !x.IsPublic && (!currentUserId.HasValue || x.OwnerAppUserId != currentUserId.Value)).ToList(),
             _ => src
         };
     }
@@ -699,7 +700,9 @@
         if (parts.Count > 0)
             return string.Join(" ", parts);
 
-        return row.IsSystem ? "Official creature" : "Custom creature";
+        if (row.IsSystem) return "Official creature";
+        if (row.IsPublic) return "Public creature";
+        return "Private creature";
     }
 
     private static string FormatProficiencyBonus(string? challengeRating)
@@ -790,6 +793,7 @@
         string? ArmorClassNotes,
         int? HitPoints,
         string? HitDice,
+        bool IsPublic,
         int? InitiativeModifier,
         string? Speed,
         int? WalkSpeed,

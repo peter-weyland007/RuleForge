@@ -6,6 +6,7 @@ public sealed class Creature
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public bool IsSystem { get; set; }
+    public bool IsPublic { get; set; }
     public int? OwnerAppUserId { get; set; }
 
     public string? Size { get; set; }

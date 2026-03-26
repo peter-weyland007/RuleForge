@@ -344,6 +344,7 @@ using (var scope = app.Services.CreateScope())
             "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"CreatureType\" text NULL;",
             "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"CreatureSubtype\" text NULL;",
             "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"CreatureTypeId\" integer NULL;",
+            "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"IsPublic\" boolean NOT NULL DEFAULT false;",
             "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"ArmorClass\" integer NULL;",
             "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"ArmorClassNotes\" text NULL;",
             "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"HitPoints\" integer NULL;",
@@ -568,6 +569,7 @@ using (var scope = app.Services.CreateScope())
             CreatureType TEXT NULL,
             CreatureSubtype TEXT NULL,
             CreatureTypeId INTEGER NULL,
+            IsPublic INTEGER NOT NULL DEFAULT 0,
             ArmorClass INTEGER NULL,
             ArmorClassNotes TEXT NULL,
             HitPoints INTEGER NULL,
@@ -657,6 +659,7 @@ using (var scope = app.Services.CreateScope())
         "ALTER TABLE Creatures ADD COLUMN CreatureType TEXT NULL;",
         "ALTER TABLE Creatures ADD COLUMN CreatureSubtype TEXT NULL;",
         "ALTER TABLE Creatures ADD COLUMN CreatureTypeId INTEGER NULL;",
+        "ALTER TABLE Creatures ADD COLUMN IsPublic INTEGER NOT NULL DEFAULT 0;",
         "ALTER TABLE Creatures ADD COLUMN ArmorClassNotes TEXT NULL;",
         "ALTER TABLE Creatures ADD COLUMN HitDice TEXT NULL;",
         "ALTER TABLE Creatures ADD COLUMN PassivePerception INTEGER NULL;",
@@ -1560,7 +1563,7 @@ app.MapGet("/api/creatures", async (HttpContext http, AppDbContext db, bool? sho
         .Include(x => x.CreatureSubtypeLinks).ThenInclude(x => x.CreatureSubtype)
         .Include(x => x.TraitList)
         .Include(x => x.ActionList)
-        .Where(x => x.DateDeletedUtc == null && (includeAll || x.IsSystem || (userId.HasValue && (x.OwnerAppUserId == userId.Value || sharedIds.Contains(x.CreatureId)))))
+        .Where(x => x.DateDeletedUtc == null && (includeAll || x.IsSystem || x.IsPublic || (userId.HasValue && (x.OwnerAppUserId == userId.Value || sharedIds.Contains(x.CreatureId)))))
         .OrderBy(x => x.Name)
         .ToListAsync();
 
@@ -1607,7 +1610,7 @@ app.MapGet("/api/creatures/{id:int}", async (int id, HttpContext http, AppDbCont
             .FirstOrDefaultAsync();
     }
 
-    var canView = isAdmin || includeAll || row.IsSystem || (userId.HasValue && row.OwnerAppUserId == userId.Value) || sharePermission.HasValue;
+    var canView = isAdmin || includeAll || row.IsSystem || row.IsPublic || (userId.HasValue && row.OwnerAppUserId == userId.Value) || sharePermission.HasValue;
     if (!canView) return Results.Forbid();
 
     var owner = row.OwnerAppUserId.HasValue
@@ -1632,6 +1635,7 @@ app.MapPost("/api/creatures", async (UpsertCreatureRequest req, HttpContext http
         Description = string.IsNullOrWhiteSpace(req.Description) ? null : req.Description.Trim(),
         Size = NormalizeCreatureSize(req.Size),
         IsSystem = req.IsSystem && IsAdmin(http),
+        IsPublic = req.IsPublic,
         OwnerAppUserId = userId.Value,
         ArmorClass = req.ArmorClass,
         ArmorClassNotes = NormalizeCreatureArmorClassNotes(req.ArmorClassNotes),
@@ -1702,6 +1706,7 @@ app.MapPut("/api/creatures/{id:int}", async (int id, UpsertCreatureRequest req, 
     row.Description = string.IsNullOrWhiteSpace(req.Description) ? null : req.Description.Trim();
     row.Size = NormalizeCreatureSize(req.Size);
     row.IsSystem = req.IsSystem && IsAdmin(http);
+    row.IsPublic = req.IsPublic;
     row.OwnerAppUserId = requestedOwnerId.Value;
     row.ArmorClass = req.ArmorClass;
     row.ArmorClassNotes = NormalizeCreatureArmorClassNotes(req.ArmorClassNotes);
@@ -1813,6 +1818,7 @@ app.MapPost("/api/creatures/{id:int}/clone", async (int id, HttpContext http, Ap
         CreatureSubtype = row.CreatureSubtype,
         CreatureTypeId = row.CreatureTypeId,
         IsSystem = false,
+        IsPublic = false,
         OwnerAppUserId = userId.Value,
         ArmorClass = row.ArmorClass,
         ArmorClassNotes = row.ArmorClassNotes,
@@ -3484,6 +3490,7 @@ static CreatureResponse ToCreatureResponse(Creature row, string? ownerUsername, 
     {
         CreatureId = row.CreatureId,
         IsSystem = row.IsSystem,
+        IsPublic = row.IsPublic,
         OwnerAppUserId = row.OwnerAppUserId,
         OwnerUsername = ownerUsername,
         OwnerIsAdmin = ownerIsAdmin,

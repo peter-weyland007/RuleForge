@@ -4,6 +4,7 @@ public sealed class CreatureResponse
 {
     public int CreatureId { get; set; }
     public bool IsSystem { get; set; }
+    public bool IsPublic { get; set; }
     public int? OwnerAppUserId { get; set; }
     public string? OwnerUsername { get; set; }
     public bool OwnerIsAdmin { get; set; }

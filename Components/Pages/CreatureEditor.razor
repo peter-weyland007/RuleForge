@@ -204,6 +204,7 @@
                 }
             </MudSelect>
             <MudCheckBox @bind-Value="form.UnderstandsButCannotSpeak" Label="Understands selected languages but can't speak" Color="Color.Primary" />
+            <MudCheckBox @bind-Value="form.IsPublic" Label="Public creature (visible to all users)" Color="Color.Primary" />
             <MudSelect T="UserOption" Value="selectedOwnerOption" ValueChanged="OnOwnerChanged" Label="Owner" Variant="Variant.Outlined" Disabled="@(!canEditOwnerField || !ownerOptions.Any())" ToStringFunc="OwnerOptionLabel">
                 @foreach (var user in ownerOptions)
                 {
@@ -294,7 +295,7 @@
 
     private void PrepareNewForm()
     {
-        form = new CreatureForm { OwnerAppUserId = currentUserId };
+        form = new CreatureForm { OwnerAppUserId = currentUserId, IsPublic = false };
         selectedOwnerOption = ownerOptions.FirstOrDefault(x => x.AppUserId == currentUserId);
         selectedLanguages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         selectedSubtypeIds = new HashSet<int>();
@@ -331,6 +332,7 @@
                 ArmorClassNotes = row.ArmorClassNotes,
                 HitPoints = row.HitPoints,
                 HitDice = row.HitDice,
+                IsPublic = row.IsPublic,
                 InitiativeModifier = row.InitiativeModifier,
                 Speed = row.Speed,
                 WalkSpeed = row.WalkSpeed,
@@ -465,6 +467,7 @@
                 armorClassNotes = form.ArmorClassNotes,
                 hitPoints = form.HitPoints,
                 hitDice = form.HitDice,
+                isPublic = form.IsPublic,
                 initiativeModifier = form.InitiativeModifier,
                 speed = form.Speed,
                 walkSpeed = form.WalkSpeed,
@@ -593,6 +596,7 @@
         public string? ArmorClassNotes { get; set; }
         public int? HitPoints { get; set; }
         public string? HitDice { get; set; }
+        public bool IsPublic { get; set; }
         public int? InitiativeModifier { get; set; }
         public string? Speed { get; set; }
         public int? WalkSpeed { get; set; }
@@ -646,6 +650,7 @@
         string? ArmorClassNotes,
         int? HitPoints,
         string? HitDice,
+        bool IsPublic,
         int? InitiativeModifier,
         string? Speed,
         int? WalkSpeed,
