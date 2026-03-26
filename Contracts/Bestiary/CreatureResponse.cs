@@ -10,6 +10,9 @@ public sealed class CreatureResponse
     public bool UserCanEdit { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
+    public string? Size { get; set; }
+    public string? CreatureType { get; set; }
+    public string? CreatureSubtype { get; set; }
 
     public int? ArmorClass { get; set; }
     public int? HitPoints { get; set; }

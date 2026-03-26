@@ -340,6 +340,9 @@ using (var scope = app.Services.CreateScope())
             "ALTER TABLE \"Characters\" ADD COLUMN IF NOT EXISTS \"SubclassName\" text NULL;",
             "ALTER TABLE \"Characters\" ADD COLUMN IF NOT EXISTS \"RaceName\" text NULL;",
             "ALTER TABLE \"Characters\" ADD COLUMN IF NOT EXISTS \"SubraceName\" text NULL;",
+            "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"Size\" text NULL;",
+            "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"CreatureType\" text NULL;",
+            "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"CreatureSubtype\" text NULL;",
             "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"ArmorClass\" integer NULL;",
             "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"HitPoints\" integer NULL;",
             "ALTER TABLE \"Creatures\" ADD COLUMN IF NOT EXISTS \"InitiativeModifier\" integer NULL;",
@@ -544,6 +547,9 @@ using (var scope = app.Services.CreateScope())
             CreatureId INTEGER NOT NULL CONSTRAINT PK_Creatures PRIMARY KEY AUTOINCREMENT,
             Name TEXT NOT NULL,
             Description TEXT NULL,
+            Size TEXT NULL,
+            CreatureType TEXT NULL,
+            CreatureSubtype TEXT NULL,
             ArmorClass INTEGER NULL,
             HitPoints INTEGER NULL,
             InitiativeModifier INTEGER NULL,
@@ -627,6 +633,9 @@ using (var scope = app.Services.CreateScope())
         "CREATE INDEX IF NOT EXISTS IX_Parties_OwnerAppUserId ON Parties (OwnerAppUserId);",
         "CREATE UNIQUE INDEX IF NOT EXISTS IX_Parties_CampaignId_Name ON Parties (CampaignId, Name);",
         "DROP INDEX IF EXISTS IX_Parties_Name;",
+        "ALTER TABLE Creatures ADD COLUMN Size TEXT NULL;",
+        "ALTER TABLE Creatures ADD COLUMN CreatureType TEXT NULL;",
+        "ALTER TABLE Creatures ADD COLUMN CreatureSubtype TEXT NULL;",
         "ALTER TABLE Creatures ADD COLUMN PassivePerception INTEGER NULL;",
         "ALTER TABLE Creatures ADD COLUMN BlindsightRange INTEGER NULL;",
         "ALTER TABLE Creatures ADD COLUMN DarkvisionRange INTEGER NULL;",
@@ -1528,6 +1537,9 @@ app.MapPost("/api/creatures", async (UpsertCreatureRequest req, HttpContext http
     {
         Name = NormalizeCreatureTitle(req.Name),
         Description = string.IsNullOrWhiteSpace(req.Description) ? null : req.Description.Trim(),
+        Size = NormalizeCreatureSize(req.Size),
+        CreatureType = NormalizeCreatureType(req.CreatureType),
+        CreatureSubtype = NormalizeCreatureSubtype(req.CreatureSubtype),
         IsSystem = req.IsSystem && IsAdmin(http),
         OwnerAppUserId = userId.Value,
         ArmorClass = req.ArmorClass,
@@ -1592,6 +1604,9 @@ app.MapPut("/api/creatures/{id:int}", async (int id, UpsertCreatureRequest req, 
 
     row.Name = NormalizeCreatureTitle(req.Name);
     row.Description = string.IsNullOrWhiteSpace(req.Description) ? null : req.Description.Trim();
+    row.Size = NormalizeCreatureSize(req.Size);
+    row.CreatureType = NormalizeCreatureType(req.CreatureType);
+    row.CreatureSubtype = NormalizeCreatureSubtype(req.CreatureSubtype);
     row.IsSystem = req.IsSystem && IsAdmin(http);
     row.OwnerAppUserId = requestedOwnerId.Value;
     row.ArmorClass = req.ArmorClass;
@@ -3360,6 +3375,9 @@ static CreatureResponse ToCreatureResponse(Creature row, string? ownerUsername, 
         UserCanEdit = userCanEdit,
         Name = row.Name,
         Description = row.Description,
+        Size = row.Size,
+        CreatureType = row.CreatureType,
+        CreatureSubtype = row.CreatureSubtype,
         ArmorClass = row.ArmorClass,
         HitPoints = row.HitPoints,
         InitiativeModifier = row.InitiativeModifier,
@@ -3403,6 +3421,24 @@ static string NormalizeCreatureTitle(string value)
             .Select(part => string.IsNullOrWhiteSpace(part) ? part : textInfo.ToTitleCase(part.ToLowerInvariant()))));
 
     return string.Join(" ", words);
+}
+
+static string? NormalizeCreatureSize(string? value)
+{
+    var text = value?.Trim();
+    return string.IsNullOrWhiteSpace(text) ? null : CultureInfo.InvariantCulture.TextInfo.ToTitleCase(text.ToLowerInvariant());
+}
+
+static string? NormalizeCreatureType(string? value)
+{
+    var text = value?.Trim();
+    return string.IsNullOrWhiteSpace(text) ? null : text.ToLowerInvariant();
+}
+
+static string? NormalizeCreatureSubtype(string? value)
+{
+    var text = value?.Trim();
+    return string.IsNullOrWhiteSpace(text) ? null : text.ToLowerInvariant();
 }
 
 static string? NormalizeCreatureLanguages(string? languages)

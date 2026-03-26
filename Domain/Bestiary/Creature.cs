@@ -8,6 +8,10 @@ public sealed class Creature
     public bool IsSystem { get; set; }
     public int? OwnerAppUserId { get; set; }
 
+    public string? Size { get; set; }
+    public string? CreatureType { get; set; }
+    public string? CreatureSubtype { get; set; }
+
     public int? ArmorClass { get; set; }
     public int? HitPoints { get; set; }
     public int? InitiativeModifier { get; set; }

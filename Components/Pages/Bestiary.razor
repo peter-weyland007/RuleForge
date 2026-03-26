@@ -637,6 +637,20 @@
 
     private static string StatblockSubtitle(CreatureRow row)
     {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(row.Size)) parts.Add(row.Size.Trim());
+        if (!string.IsNullOrWhiteSpace(row.CreatureType))
+        {
+            var type = row.CreatureType.Trim().ToLowerInvariant();
+            if (!string.IsNullOrWhiteSpace(row.CreatureSubtype))
+                parts.Add($"{type} ({row.CreatureSubtype.Trim().ToLowerInvariant()})");
+            else
+                parts.Add(type);
+        }
+
+        if (parts.Count > 0)
+            return string.Join(" ", parts);
+
         return row.IsSystem ? "Official creature" : "Custom creature";
     }
 
@@ -718,6 +732,9 @@
         int CreatureId,
         string Name,
         string? Description,
+        string? Size,
+        string? CreatureType,
+        string? CreatureSubtype,
         int? ArmorClass,
         int? HitPoints,
         int? InitiativeModifier,

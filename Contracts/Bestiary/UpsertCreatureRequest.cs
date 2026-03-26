@@ -10,6 +10,15 @@ public sealed class UpsertCreatureRequest
     [StringLength(4000)]
     public string? Description { get; set; }
 
+    [StringLength(24)]
+    public string? Size { get; set; }
+
+    [StringLength(40)]
+    public string? CreatureType { get; set; }
+
+    [StringLength(80)]
+    public string? CreatureSubtype { get; set; }
+
     public int? ArmorClass { get; set; }
     public int? HitPoints { get; set; }
     public int? InitiativeModifier { get; set; }

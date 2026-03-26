@@ -11,6 +11,17 @@
         "Abyssal", "Celestial", "Common", "Deep Speech", "Draconic", "Druidic", "Dwarvish", "Elvish",
         "Giant", "Gnomish", "Goblin", "Halfling", "Infernal", "Orc", "Primordial", "Sylvan", "Undercommon"
     ];
+
+    private static readonly string[] SizeOptions =
+    [
+        "Tiny", "Small", "Medium", "Large", "Huge", "Gargantuan"
+    ];
+
+    private static readonly string[] CreatureTypeOptions =
+    [
+        "aberration", "beast", "celestial", "construct", "dragon", "elemental", "fey", "fiend",
+        "giant", "humanoid", "monstrosity", "ooze", "plant", "undead"
+    ];
 }
 
 <style>
@@ -59,6 +70,25 @@
             <MudGrid>
                 <MudItem xs="12" md="6">
                     <MudTextField @bind-Value="form.Name" Label="Name" Placeholder="e.g., Ancient Red Dragon" Variant="Variant.Outlined" Required="true" />
+                </MudItem>
+                <MudItem xs="12" md="3">
+                    <MudSelect T="string" @bind-Value="form.Size" Label="Size" Variant="Variant.Outlined">
+                        @foreach (var size in SizeOptions)
+                        {
+                            <MudSelectItem T="string" Value="size">@size</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="3">
+                    <MudSelect T="string" @bind-Value="form.CreatureType" Label="Type" Variant="Variant.Outlined">
+                        @foreach (var creatureType in CreatureTypeOptions)
+                        {
+                            <MudSelectItem T="string" Value="creatureType">@creatureType</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="form.CreatureSubtype" Label="Subtype" Placeholder="e.g., goblinoid" Variant="Variant.Outlined" />
                 </MudItem>
                 <MudItem xs="12" md="3">
                     <MudTextField @bind-Value="form.ChallengeRating" Label="CR" Placeholder="e.g., 5, 1/2, 21" Variant="Variant.Outlined" />
@@ -268,6 +298,9 @@
                 OwnerAppUserId = row.OwnerAppUserId,
                 Name = row.Name,
                 Description = row.Description,
+                Size = row.Size,
+                CreatureType = row.CreatureType,
+                CreatureSubtype = row.CreatureSubtype,
                 ArmorClass = row.ArmorClass,
                 HitPoints = row.HitPoints,
                 InitiativeModifier = row.InitiativeModifier,
@@ -359,6 +392,9 @@
             {
                 name = form.Name,
                 description = form.Description,
+                size = form.Size,
+                creatureType = form.CreatureType,
+                creatureSubtype = form.CreatureSubtype,
                 armorClass = form.ArmorClass,
                 hitPoints = form.HitPoints,
                 initiativeModifier = form.InitiativeModifier,
@@ -480,6 +516,9 @@
         public int? OwnerAppUserId { get; set; }
         public string Name { get; set; } = string.Empty;
         public string? Description { get; set; }
+        public string? Size { get; set; }
+        public string? CreatureType { get; set; }
+        public string? CreatureSubtype { get; set; }
         public int? ArmorClass { get; set; }
         public int? HitPoints { get; set; }
         public int? InitiativeModifier { get; set; }
@@ -522,6 +561,9 @@
         int CreatureId,
         string Name,
         string? Description,
+        string? Size,
+        string? CreatureType,
+        string? CreatureSubtype,
         int? ArmorClass,
         int? HitPoints,
         int? InitiativeModifier,
