@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication;
+using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -1493,7 +1494,7 @@ app.MapPost("/api/creatures", async (UpsertCreatureRequest req, HttpContext http
 
     var row = new Creature
     {
-        Name = req.Name.Trim(),
+        Name = NormalizeCreatureTitle(req.Name),
         Description = string.IsNullOrWhiteSpace(req.Description) ? null : req.Description.Trim(),
         IsSystem = req.IsSystem && IsAdmin(http),
         OwnerAppUserId = userId.Value,
@@ -1552,7 +1553,7 @@ app.MapPut("/api/creatures/{id:int}", async (int id, UpsertCreatureRequest req, 
     var ownerExists = await db.Users.AnyAsync(x => x.AppUserId == requestedOwnerId.Value && x.DateDeletedUtc == null);
     if (!ownerExists) return Results.BadRequest(new ApiError("CREATURE_OWNER_INVALID", "Selected owner was not found.", http.TraceIdentifier));
 
-    row.Name = req.Name.Trim();
+    row.Name = NormalizeCreatureTitle(req.Name);
     row.Description = string.IsNullOrWhiteSpace(req.Description) ? null : req.Description.Trim();
     row.IsSystem = req.IsSystem && IsAdmin(http);
     row.OwnerAppUserId = requestedOwnerId.Value;
@@ -3342,6 +3343,21 @@ static CreatureResponse ToCreatureResponse(Creature row, string? ownerUsername, 
     };
 }
 
+static string NormalizeCreatureTitle(string value)
+{
+    var trimmed = (value ?? string.Empty).Trim();
+    if (string.IsNullOrWhiteSpace(trimmed)) return string.Empty;
+
+    var textInfo = CultureInfo.InvariantCulture.TextInfo;
+    var words = trimmed
+        .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+        .Select(word => string.Join('-', word
+            .Split('-', StringSplitOptions.RemoveEmptyEntries)
+            .Select(part => string.IsNullOrWhiteSpace(part) ? part : textInfo.ToTitleCase(part.ToLowerInvariant()))));
+
+    return string.Join(" ", words);
+}
+
 static string? NormalizeCreatureLanguages(string? languages)
 {
     var items = (languages ?? string.Empty)
@@ -3385,7 +3401,7 @@ static List<CreatureEntryDto> NormalizeCreatureEntries(IEnumerable<CreatureEntry
         .Where(x => !string.IsNullOrWhiteSpace(x.Name) || !string.IsNullOrWhiteSpace(x.Description))
         .Select((x, index) => new CreatureEntryDto
         {
-            Name = string.IsNullOrWhiteSpace(x.Name) ? $"Entry {index + 1}" : x.Name.Trim(),
+            Name = string.IsNullOrWhiteSpace(x.Name) ? $"Entry {index + 1}" : NormalizeCreatureTitle(x.Name),
             Description = string.IsNullOrWhiteSpace(x.Description) ? null : x.Description.Trim(),
             SortOrder = x.SortOrder == 0 ? index : x.SortOrder
         })
