@@ -63,11 +63,88 @@
         <MudStack Spacing="2">
             <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
                 <MudText Typo="Typo.h6">@(IsEdit ? "Edit Creature" : "Create Creature")</MudText>
-                <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Text">Bestiary</MudChip>
+                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Text">Bestiary</MudChip>
+                    <MudToggleIconButton Toggled="@(editorLayout == CreatureEditorLayout.Stepper)"
+                                         ToggledChanged="OnLayoutToggleChanged"
+                                         Icon="@Icons.Material.Filled.ViewAgenda"
+                                         ToggledIcon="@Icons.Material.Filled.ViewCarousel"
+                                         Color="Color.Primary" />
+                </MudStack>
             </MudStack>
 
             <MudDivider />
 
+            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Layout</MudText>
+                <MudChip T="string" Color="@(editorLayout == CreatureEditorLayout.Flat ? Color.Primary : Color.Default)" Variant="Variant.Outlined" OnClick='() => SetEditorLayout(CreatureEditorLayout.Flat)'>Flat Form</MudChip>
+                <MudChip T="string" Color="@(editorLayout == CreatureEditorLayout.Stepper ? Color.Primary : Color.Default)" Variant="Variant.Outlined" OnClick='() => SetEditorLayout(CreatureEditorLayout.Stepper)'>Guided Stepper</MudChip>
+            </MudStack>
+
+            @if (editorLayout == CreatureEditorLayout.Flat)
+            {
+                <MudStack Spacing="3">
+                    @IdentitySection
+                    @CombatStatsSection
+                    @AbilityScoresSection
+                    @MovementSection
+                    @SensesSection
+                    @TraitsSection
+                    @ActionsSection
+                    @BonusActionsSection
+                    @ReactionsSection
+                    @NotesOwnershipSection
+                    @SaveActionsSection
+                </MudStack>
+            }
+            else
+            {
+                <MudStepper @bind-ActiveIndex="activeStepIndex" NonLinear="true">
+                    <MudStep Title="Identity">
+                        <MudStack Spacing="3">
+                            @IdentitySection
+                        </MudStack>
+                    </MudStep>
+                    <MudStep Title="Stats">
+                        <MudStack Spacing="3">
+                            @CombatStatsSection
+                            @AbilityScoresSection
+                            @MovementSection
+                        </MudStack>
+                    </MudStep>
+                    <MudStep Title="Senses">
+                        <MudStack Spacing="3">
+                            @SensesSection
+                        </MudStack>
+                    </MudStep>
+                    <MudStep Title="Features">
+                        <MudStack Spacing="3">
+                            @TraitsSection
+                        </MudStack>
+                    </MudStep>
+                    <MudStep Title="Actions">
+                        <MudStack Spacing="3">
+                            @ActionsSection
+                            @BonusActionsSection
+                            @ReactionsSection
+                        </MudStack>
+                    </MudStep>
+                    <MudStep Title="Review">
+                        <MudStack Spacing="3">
+                            @NotesOwnershipSection
+                            @ReviewSection
+                            @SaveActionsSection
+                        </MudStack>
+                    </MudStep>
+                </MudStepper>
+            }
+        </MudStack>
+    </MudPaper>
+</MudStack>
+
+@code {
+    private RenderFragment IdentitySection => @<text>
+        <MudStack Spacing="2">
             <MudText Typo="Typo.subtitle2">Identity</MudText>
             <MudGrid>
                 <MudItem xs="12" md="6">
@@ -112,8 +189,12 @@
                     <MudNumericField T="int?" @bind-Value="form.ExperiencePoints" Label="XP" Variant="Variant.Outlined" Min="0" />
                 </MudItem>
             </MudGrid>
+        </MudStack>
+    </text>;
 
-            <MudText Typo="Typo.subtitle2" Class="mt-2">Combat Stats</MudText>
+    private RenderFragment CombatStatsSection => @<text>
+        <MudStack Spacing="2">
+            <MudText Typo="Typo.subtitle2">Combat Stats</MudText>
             <MudGrid>
                 <MudItem xs="12" md="3">
                     <MudNumericField T="int?" @bind-Value="form.ArmorClass" Label="AC" Variant="Variant.Outlined" />
@@ -134,8 +215,26 @@
                     <MudNumericField T="int?" @bind-Value="form.PassivePerception" Label="Passive Perception" Variant="Variant.Outlined" />
                 </MudItem>
             </MudGrid>
+        </MudStack>
+    </text>;
 
-            <MudText Typo="Typo.subtitle2" Class="mt-2">Movement</MudText>
+    private RenderFragment AbilityScoresSection => @<text>
+        <MudStack Spacing="2">
+            <MudText Typo="Typo.subtitle2">Ability Scores</MudText>
+            <MudGrid>
+                <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Strength" Label='@($"STR ({ModLabel(form.Strength)})")' Variant="Variant.Outlined" /></MudItem>
+                <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Dexterity" Label='@($"DEX ({ModLabel(form.Dexterity)})")' Variant="Variant.Outlined" /></MudItem>
+                <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Constitution" Label='@($"CON ({ModLabel(form.Constitution)})")' Variant="Variant.Outlined" /></MudItem>
+                <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Intelligence" Label='@($"INT ({ModLabel(form.Intelligence)})")' Variant="Variant.Outlined" /></MudItem>
+                <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Wisdom" Label='@($"WIS ({ModLabel(form.Wisdom)})")' Variant="Variant.Outlined" /></MudItem>
+                <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Charisma" Label='@($"CHA ({ModLabel(form.Charisma)})")' Variant="Variant.Outlined" /></MudItem>
+            </MudGrid>
+        </MudStack>
+    </text>;
+
+    private RenderFragment MovementSection => @<text>
+        <MudStack Spacing="2">
+            <MudText Typo="Typo.subtitle2">Movement</MudText>
             <div class="movement-grid">
                 <MudNumericField T="int?" @bind-Value="form.WalkSpeed" Label="Walk" Variant="Variant.Outlined" Adornment="Adornment.End" AdornmentText="ft" />
                 <MudNumericField T="int?" @bind-Value="form.FlySpeed" Label="Fly" Variant="Variant.Outlined" Adornment="Adornment.End" AdornmentText="ft" />
@@ -143,8 +242,12 @@
                 <MudNumericField T="int?" @bind-Value="form.ClimbSpeed" Label="Climb" Variant="Variant.Outlined" Adornment="Adornment.End" AdornmentText="ft" />
                 <MudNumericField T="int?" @bind-Value="form.BurrowSpeed" Label="Burrow" Variant="Variant.Outlined" Adornment="Adornment.End" AdornmentText="ft" />
             </div>
+        </MudStack>
+    </text>;
 
-            <MudText Typo="Typo.subtitle2" Class="mt-2">Senses</MudText>
+    private RenderFragment SensesSection => @<text>
+        <MudStack Spacing="2">
+            <MudText Typo="Typo.subtitle2">Senses</MudText>
             <MudGrid>
                 <MudItem xs="12" sm="6" md="3">
                     <MudNumericField T="int?" @bind-Value="form.BlindsightRange" Label="Blindsight" Variant="Variant.Outlined" Min="0" Adornment="Adornment.End" AdornmentText="ft" />
@@ -162,18 +265,12 @@
                     <MudTextField @bind-Value="form.OtherSenses" Label="Other Senses" Placeholder="e.g., keen smell, devil's sight" Variant="Variant.Outlined" />
                 </MudItem>
             </MudGrid>
+        </MudStack>
+    </text>;
 
-            <MudText Typo="Typo.subtitle2" Class="mt-2">Ability Scores</MudText>
-            <MudGrid>
-                <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Strength" Label='@($"STR ({ModLabel(form.Strength)})")' Variant="Variant.Outlined" /></MudItem>
-                <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Dexterity" Label='@($"DEX ({ModLabel(form.Dexterity)})")' Variant="Variant.Outlined" /></MudItem>
-                <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Constitution" Label='@($"CON ({ModLabel(form.Constitution)})")' Variant="Variant.Outlined" /></MudItem>
-                <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Intelligence" Label='@($"INT ({ModLabel(form.Intelligence)})")' Variant="Variant.Outlined" /></MudItem>
-                <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Wisdom" Label='@($"WIS ({ModLabel(form.Wisdom)})")' Variant="Variant.Outlined" /></MudItem>
-                <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Charisma" Label='@($"CHA ({ModLabel(form.Charisma)})")' Variant="Variant.Outlined" /></MudItem>
-            </MudGrid>
-
-            <MudText Typo="Typo.subtitle2" Class="mt-2">Traits</MudText>
+    private RenderFragment TraitsSection => @<text>
+        <MudStack Spacing="2">
+            <MudText Typo="Typo.subtitle2">Traits</MudText>
             <MudStack Spacing="2">
                 @for (var i = 0; i < form.Traits.Count; i++)
                 {
@@ -191,8 +288,12 @@
                 }
                 <MudButton Variant="Variant.Outlined" Color="Color.Info" StartIcon="@Icons.Material.Filled.Add" OnClick="AddTrait">Add Trait</MudButton>
             </MudStack>
+        </MudStack>
+    </text>;
 
-            <MudText Typo="Typo.subtitle2" Class="mt-2">Actions</MudText>
+    private RenderFragment ActionsSection => @<text>
+        <MudStack Spacing="2">
+            <MudText Typo="Typo.subtitle2">Actions</MudText>
             <MudStack Spacing="2">
                 @for (var i = 0; i < form.Actions.Count; i++)
                 {
@@ -210,8 +311,12 @@
                 }
                 <MudButton Variant="Variant.Outlined" Color="Color.Info" StartIcon="@Icons.Material.Filled.Add" OnClick="AddAction">Add Action</MudButton>
             </MudStack>
+        </MudStack>
+    </text>;
 
-            <MudText Typo="Typo.subtitle2" Class="mt-2">Bonus Actions</MudText>
+    private RenderFragment BonusActionsSection => @<text>
+        <MudStack Spacing="2">
+            <MudText Typo="Typo.subtitle2">Bonus Actions</MudText>
             <MudStack Spacing="2">
                 @for (var i = 0; i < form.BonusActions.Count; i++)
                 {
@@ -229,8 +334,12 @@
                 }
                 <MudButton Variant="Variant.Outlined" Color="Color.Info" StartIcon="@Icons.Material.Filled.Add" OnClick="AddBonusAction">Add Bonus Action</MudButton>
             </MudStack>
+        </MudStack>
+    </text>;
 
-            <MudText Typo="Typo.subtitle2" Class="mt-2">Reactions</MudText>
+    private RenderFragment ReactionsSection => @<text>
+        <MudStack Spacing="2">
+            <MudText Typo="Typo.subtitle2">Reactions</MudText>
             <MudStack Spacing="2">
                 @for (var i = 0; i < form.Reactions.Count; i++)
                 {
@@ -248,8 +357,12 @@
                 }
                 <MudButton Variant="Variant.Outlined" Color="Color.Info" StartIcon="@Icons.Material.Filled.Add" OnClick="AddReaction">Add Reaction</MudButton>
             </MudStack>
+        </MudStack>
+    </text>;
 
-            <MudText Typo="Typo.subtitle2" Class="mt-2">Notes</MudText>
+    private RenderFragment NotesOwnershipSection => @<text>
+        <MudStack Spacing="2">
+            <MudText Typo="Typo.subtitle2">Notes & Ownership</MudText>
             <MudTextField @bind-Value="form.Description" Label="Description" Placeholder="Lore, behavior, abilities, hooks..." Variant="Variant.Outlined" Lines="4" />
             <MudSelect T="string" SelectedValues="selectedLanguages" SelectedValuesChanged="OnLanguagesChanged" Label="Languages" Variant="Variant.Outlined" MultiSelection="true" MultiSelectionTextFunc="LanguageSummaryText">
                 @foreach (var language in LanguageOptions)
@@ -273,19 +386,35 @@
             {
                 <MudText Typo="Typo.caption" Color="Color.Secondary">Only the current owner or an admin can transfer creature ownership.</MudText>
             }
-
-            <MudStack Row="true" Spacing="1" Class="mt-3">
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="Save" Disabled="@isSaving">@(isSaving ? "Saving..." : "Save")</MudButton>
-                <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Close" OnClick="Cancel">Cancel</MudButton>
-            </MudStack>
         </MudStack>
-    </MudPaper>
-</MudStack>
+    </text>;
 
-@code {
+    private RenderFragment ReviewSection => @<text>
+        <MudPaper Class="pa-3" Outlined="true" Elevation="0">
+            <MudStack Spacing="1">
+                <MudText Typo="Typo.subtitle2">Review</MudText>
+                <MudText Typo="Typo.body2"><strong>Name:</strong> @(string.IsNullOrWhiteSpace(form.Name) ? "—" : form.Name)</MudText>
+                <MudText Typo="Typo.body2"><strong>Identity:</strong> @ReviewIdentitySummary()</MudText>
+                <MudText Typo="Typo.body2"><strong>Combat:</strong> AC @(form.ArmorClass?.ToString() ?? "—"), HP @(form.HitPoints?.ToString() ?? "—"), CR @(form.ChallengeRating ?? "—")</MudText>
+                <MudText Typo="Typo.body2"><strong>Entries:</strong> @($"{form.Traits.Count} traits, {form.Actions.Count} actions, {form.BonusActions.Count} bonus actions, {form.Reactions.Count} reactions")</MudText>
+            </MudStack>
+        </MudPaper>
+    </text>;
+
+    private RenderFragment SaveActionsSection => @<text>
+        <MudStack Row="true" Spacing="1" Class="mt-3">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="Save" Disabled="@isSaving">@(isSaving ? "Saving..." : "Save")</MudButton>
+            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Close" OnClick="Cancel">Cancel</MudButton>
+        </MudStack>
+    </text>;
+
+
+
     [Parameter] public int? CreatureId { get; set; }
 
     private string? error;
+    private CreatureEditorLayout editorLayout = CreatureEditorLayout.Flat;
+    private int activeStepIndex;
     private bool isSaving;
     private bool isAdmin;
     private int? currentUserId;
@@ -440,6 +569,24 @@
     }
 
     private void Cancel() => Nav.NavigateTo("/bestiary");
+
+    private void SetEditorLayout(CreatureEditorLayout layout) => editorLayout = layout;
+
+    private void OnLayoutToggleChanged(bool toggled) => editorLayout = toggled ? CreatureEditorLayout.Stepper : CreatureEditorLayout.Flat;
+
+    private string ReviewIdentitySummary()
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(form.Size)) parts.Add(form.Size.Trim());
+        if (!string.IsNullOrWhiteSpace(form.CreatureType)) parts.Add(form.CreatureType.Trim());
+        if (selectedSubtypeIds.Count > 0)
+        {
+            var subtypeNames = AvailableSubtypeOptions().Where(x => selectedSubtypeIds.Contains(x.CreatureSubtypeId)).Select(x => x.Name).Distinct().OrderBy(x => x).ToList();
+            if (subtypeNames.Count > 0) parts.Add($"({string.Join(", ", subtypeNames)})");
+        }
+        if (!string.IsNullOrWhiteSpace(form.Alignment)) parts.Add(form.Alignment.Trim());
+        return parts.Count == 0 ? "—" : string.Join(", ", parts);
+    }
 
     private void OnOwnerChanged(UserOption? value)
     {
@@ -664,6 +811,12 @@
     private static string ModLabel(int? score) => $"{(AbilityMod(score) >= 0 ? "+" : string.Empty)}{AbilityMod(score)}";
 
     private sealed class ApiResult<T> { public bool Ok { get; set; } public int Status { get; set; } public T? Data { get; set; } public string? Text { get; set; } }
+
+    private enum CreatureEditorLayout
+    {
+        Flat,
+        Stepper
+    }
 
     private sealed class CreatureForm
     {
