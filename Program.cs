@@ -1006,6 +1006,8 @@ using (var scope = app.Services.CreateScope())
         db.SaveChanges();
     }
 
+    await EnsureSeedCreaturesAsync(db);
+
 }
 
 
@@ -3755,6 +3757,86 @@ static async Task EnsureCreatureTaxonomyAsync(AppDbContext db)
         if (normalizedSubtype is not null && subtypesByKey.TryGetValue(normalizedSubtype, out var subtype))
             db.CreatureCreatureSubtypes.Add(new CreatureCreatureSubtype { CreatureId = creature.CreatureId, CreatureSubtypeId = subtype.CreatureSubtypeId, SortOrder = 0 });
     }
+    await db.SaveChangesAsync();
+}
+
+static async Task EnsureSeedCreaturesAsync(AppDbContext db)
+{
+    var typeMap = await db.CreatureTypes.Where(x => x.IsActive).ToDictionaryAsync(x => x.Key, x => x);
+    var subtypeMap = await db.CreatureSubtypes.Where(x => x.IsActive).ToDictionaryAsync(x => x.Key, x => x);
+
+    var seeds = new[]
+    {
+        new { Name = "Goblin Raider", Size = "Small", Type = "humanoid", Subtype = (string?)"goblinoid", ChallengeRating = "1/4", ExperiencePoints = 50, ArmorClass = 15, HitPoints = 7, Dexterity = 14, Constitution = 10, Strength = 8, Intelligence = 10, Wisdom = 8, Charisma = 8 },
+        new { Name = "Dire Wolf", Size = "Large", Type = "beast", Subtype = (string?)null, ChallengeRating = "1", ExperiencePoints = 200, ArmorClass = 14, HitPoints = 37, Dexterity = 15, Constitution = 15, Strength = 17, Intelligence = 3, Wisdom = 12, Charisma = 7 },
+        new { Name = "Young Red Dragon", Size = "Large", Type = "dragon", Subtype = (string?)null, ChallengeRating = "10", ExperiencePoints = 5900, ArmorClass = 18, HitPoints = 178, Dexterity = 10, Constitution = 21, Strength = 23, Intelligence = 14, Wisdom = 11, Charisma = 19 },
+        new { Name = "Solar Witness", Size = "Large", Type = "celestial", Subtype = (string?)"angel", ChallengeRating = "21", ExperiencePoints = 33000, ArmorClass = 21, HitPoints = 243, Dexterity = 22, Constitution = 17, Strength = 26, Intelligence = 25, Wisdom = 25, Charisma = 30 }
+    };
+
+    foreach (var seed in seeds)
+    {
+        var row = await db.Creatures
+            .Include(x => x.CreatureSubtypeLinks)
+            .FirstOrDefaultAsync(x => x.DateDeletedUtc == null && x.Name == seed.Name && x.IsSystem);
+
+        if (row is null)
+        {
+            row = new Creature
+            {
+                Name = seed.Name,
+                Description = $"Built-in sample creature for Bestiary table testing: {seed.Name}.",
+                IsSystem = true,
+                Size = seed.Size,
+                CreatureType = seed.Type,
+                CreatureSubtype = seed.Subtype,
+                ChallengeRating = seed.ChallengeRating,
+                ExperiencePoints = seed.ExperiencePoints,
+                ArmorClass = seed.ArmorClass,
+                HitPoints = seed.HitPoints,
+                Strength = seed.Strength,
+                Dexterity = seed.Dexterity,
+                Constitution = seed.Constitution,
+                Intelligence = seed.Intelligence,
+                Wisdom = seed.Wisdom,
+                Charisma = seed.Charisma,
+                DateCreatedUtc = DateTime.UtcNow,
+                DateModifiedUtc = DateTime.UtcNow
+            };
+            db.Creatures.Add(row);
+        }
+        else
+        {
+            row.Size = seed.Size;
+            row.CreatureType = seed.Type;
+            row.CreatureSubtype = seed.Subtype;
+            row.ChallengeRating = seed.ChallengeRating;
+            row.ExperiencePoints = seed.ExperiencePoints;
+            row.ArmorClass = seed.ArmorClass;
+            row.HitPoints = seed.HitPoints;
+            row.Strength = seed.Strength;
+            row.Dexterity = seed.Dexterity;
+            row.Constitution = seed.Constitution;
+            row.Intelligence = seed.Intelligence;
+            row.Wisdom = seed.Wisdom;
+            row.Charisma = seed.Charisma;
+            row.DateModifiedUtc = DateTime.UtcNow;
+            row.CreatureSubtypeLinks.Clear();
+        }
+
+        if (typeMap.TryGetValue(seed.Type, out var type))
+            row.CreatureTypeId = type.CreatureTypeId;
+
+        if (!string.IsNullOrWhiteSpace(seed.Subtype) && subtypeMap.TryGetValue(seed.Subtype, out var subtype))
+        {
+            row.CreatureSubtypeLinks.Add(new CreatureCreatureSubtype
+            {
+                CreatureSubtype = subtype,
+                CreatureSubtypeId = subtype.CreatureSubtypeId,
+                SortOrder = 0
+            });
+        }
+    }
+
     await db.SaveChangesAsync();
 }
 

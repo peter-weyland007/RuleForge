@@ -118,7 +118,6 @@
                         <MudStack Spacing="3">
                             @IdentitySummarySection
                             @IdentitySection
-                            @StepperNavSection
                         </MudStack>
                     </MudStep>
                     <MudStep Title="Stats">
@@ -127,21 +126,18 @@
                             @CombatStatsSection
                             @AbilityScoresSection
                             @MovementSection
-                            @StepperNavSection
                         </MudStack>
                     </MudStep>
                     <MudStep Title="Senses">
                         <MudStack Spacing="3">
                             @SensesSummarySection
                             @SensesSection
-                            @StepperNavSection
                         </MudStack>
                     </MudStep>
                     <MudStep Title="Features">
                         <MudStack Spacing="3">
                             @FeaturesSummarySection
                             @TraitsSection
-                            @StepperNavSection
                         </MudStack>
                     </MudStep>
                     <MudStep Title="Actions">
@@ -150,7 +146,6 @@
                             @ActionsSection
                             @BonusActionsSection
                             @ReactionsSection
-                            @StepperNavSection
                         </MudStack>
                     </MudStep>
                     <MudStep Title="Review">
@@ -204,14 +199,6 @@
         </MudAlert>
     </text>;
 
-    private RenderFragment StepperNavSection => @<text>
-        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mt-2">
-            <MudButton Variant="Variant.Text" Disabled="@(activeStepIndex <= 0)" StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="GoPreviousStep">Previous</MudButton>
-            <MudText Typo="Typo.caption" Color="Color.Secondary">Step @(activeStepIndex + 1) of @StepTitles.Length</MudText>
-            <MudButton Variant="Variant.Text" Disabled="@(activeStepIndex >= StepTitles.Length - 1)" EndIcon="@Icons.Material.Filled.ArrowForward" OnClick="GoNextStep">Next</MudButton>
-        </MudStack>
-    </text>;
-
     private RenderFragment IdentitySection => @<text>
         <MudStack Spacing="2">
             <MudText Typo="Typo.subtitle2">Identity</MudText>
@@ -252,10 +239,10 @@
                     </MudSelect>
                 </MudItem>
                 <MudItem xs="12" md="3">
-                    <MudTextField @bind-Value="form.ChallengeRating" Label="CR" Placeholder="e.g., 5, 1/2, 21" Variant="Variant.Outlined" />
+                    <MudTextField @bind-Value="form.ChallengeRating" Label="Challenge Rating (CR)" Placeholder="e.g., 5, 1/2, 21" Variant="Variant.Outlined" />
                 </MudItem>
                 <MudItem xs="12" md="3">
-                    <MudNumericField T="int?" @bind-Value="form.ExperiencePoints" Label="XP" Variant="Variant.Outlined" Min="0" />
+                    <MudNumericField T="int?" @bind-Value="form.ExperiencePoints" Label="Experience Points (XP)" Variant="Variant.Outlined" Min="0" />
                 </MudItem>
             </MudGrid>
         </MudStack>
@@ -266,13 +253,13 @@
             <MudText Typo="Typo.subtitle2">Combat Stats</MudText>
             <MudGrid>
                 <MudItem xs="12" md="3">
-                    <MudNumericField T="int?" @bind-Value="form.ArmorClass" Label="AC" Variant="Variant.Outlined" />
+                    <MudNumericField T="int?" @bind-Value="form.ArmorClass" Label="Armor Class (AC)" Variant="Variant.Outlined" />
                 </MudItem>
                 <MudItem xs="12" md="3">
-                    <MudTextField @bind-Value="form.ArmorClassNotes" Label="AC Notes" Placeholder="e.g., leather armor, shield" Variant="Variant.Outlined" />
+                    <MudTextField @bind-Value="form.ArmorClassNotes" Label="Armor Class Notes" Placeholder="e.g., leather armor, shield" Variant="Variant.Outlined" />
                 </MudItem>
                 <MudItem xs="12" md="2">
-                    <MudNumericField T="int?" @bind-Value="form.HitPoints" Label="HP" Variant="Variant.Outlined" />
+                    <MudNumericField T="int?" @bind-Value="form.HitPoints" Label="Hit Points (HP)" Variant="Variant.Outlined" />
                 </MudItem>
                 <MudItem xs="12" md="2">
                     <MudTextField @bind-Value="form.HitDice" Label="Hit Dice" Placeholder="e.g., 2d6" Variant="Variant.Outlined" />
@@ -291,12 +278,12 @@
         <MudStack Spacing="2">
             <MudText Typo="Typo.subtitle2">Ability Scores</MudText>
             <MudGrid>
-                <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Strength" Label='@($"STR ({ModLabel(form.Strength)})")' Variant="Variant.Outlined" /></MudItem>
-                <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Dexterity" Label='@($"DEX ({ModLabel(form.Dexterity)})")' Variant="Variant.Outlined" /></MudItem>
-                <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Constitution" Label='@($"CON ({ModLabel(form.Constitution)})")' Variant="Variant.Outlined" /></MudItem>
-                <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Intelligence" Label='@($"INT ({ModLabel(form.Intelligence)})")' Variant="Variant.Outlined" /></MudItem>
-                <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Wisdom" Label='@($"WIS ({ModLabel(form.Wisdom)})")' Variant="Variant.Outlined" /></MudItem>
-                <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Charisma" Label='@($"CHA ({ModLabel(form.Charisma)})")' Variant="Variant.Outlined" /></MudItem>
+                <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Strength" Label='@($"Strength (STR {ModLabel(form.Strength)})")' Variant="Variant.Outlined" /></MudItem>
+                <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Dexterity" Label='@($"Dexterity (DEX {ModLabel(form.Dexterity)})")' Variant="Variant.Outlined" /></MudItem>
+                <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Constitution" Label='@($"Constitution (CON {ModLabel(form.Constitution)})")' Variant="Variant.Outlined" /></MudItem>
+                <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Intelligence" Label='@($"Intelligence (INT {ModLabel(form.Intelligence)})")' Variant="Variant.Outlined" /></MudItem>
+                <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Wisdom" Label='@($"Wisdom (WIS {ModLabel(form.Wisdom)})")' Variant="Variant.Outlined" /></MudItem>
+                <MudItem xs="6" md="2"><MudNumericField T="int?" @bind-Value="form.Charisma" Label='@($"Charisma (CHA {ModLabel(form.Charisma)})")' Variant="Variant.Outlined" /></MudItem>
             </MudGrid>
         </MudStack>
     </text>;
@@ -305,11 +292,11 @@
         <MudStack Spacing="2">
             <MudText Typo="Typo.subtitle2">Movement</MudText>
             <div class="movement-grid">
-                <MudNumericField T="int?" @bind-Value="form.WalkSpeed" Label="Walk" Variant="Variant.Outlined" Adornment="Adornment.End" AdornmentText="ft" />
-                <MudNumericField T="int?" @bind-Value="form.FlySpeed" Label="Fly" Variant="Variant.Outlined" Adornment="Adornment.End" AdornmentText="ft" />
-                <MudNumericField T="int?" @bind-Value="form.SwimSpeed" Label="Swim" Variant="Variant.Outlined" Adornment="Adornment.End" AdornmentText="ft" />
-                <MudNumericField T="int?" @bind-Value="form.ClimbSpeed" Label="Climb" Variant="Variant.Outlined" Adornment="Adornment.End" AdornmentText="ft" />
-                <MudNumericField T="int?" @bind-Value="form.BurrowSpeed" Label="Burrow" Variant="Variant.Outlined" Adornment="Adornment.End" AdornmentText="ft" />
+                <MudNumericField T="int?" @bind-Value="form.WalkSpeed" Label="Walk Speed" Variant="Variant.Outlined" Adornment="Adornment.End" AdornmentText="ft" />
+                <MudNumericField T="int?" @bind-Value="form.FlySpeed" Label="Fly Speed" Variant="Variant.Outlined" Adornment="Adornment.End" AdornmentText="ft" />
+                <MudNumericField T="int?" @bind-Value="form.SwimSpeed" Label="Swim Speed" Variant="Variant.Outlined" Adornment="Adornment.End" AdornmentText="ft" />
+                <MudNumericField T="int?" @bind-Value="form.ClimbSpeed" Label="Climb Speed" Variant="Variant.Outlined" Adornment="Adornment.End" AdornmentText="ft" />
+                <MudNumericField T="int?" @bind-Value="form.BurrowSpeed" Label="Burrow Speed" Variant="Variant.Outlined" Adornment="Adornment.End" AdornmentText="ft" />
             </div>
         </MudStack>
     </text>;

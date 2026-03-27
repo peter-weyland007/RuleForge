@@ -206,7 +206,7 @@
 
     <ApiErrorAlert Message="@error" />
 
-    <MudStack Row="true" Spacing="1">
+    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="flex-wrap">
         <MudChip T="string" Color="@(scopeFilter==CreatureScopeFilter.All ? Color.Primary : Color.Default)" Variant="Variant.Outlined" OnClick="() => SetScope(CreatureScopeFilter.All)">All</MudChip>
         <MudChip T="string" Color="@(scopeFilter==CreatureScopeFilter.Official ? Color.Primary : Color.Default)" Variant="Variant.Outlined" OnClick="() => SetScope(CreatureScopeFilter.Official)">Official</MudChip>
         @if (isAuthenticated)
@@ -214,9 +214,16 @@
             <MudChip T="string" Color="@(scopeFilter==CreatureScopeFilter.MyVault ? Color.Primary : Color.Default)" Variant="Variant.Outlined" OnClick="() => SetScope(CreatureScopeFilter.MyVault)">My Vault</MudChip>
             <MudChip T="string" Color="@(scopeFilter==CreatureScopeFilter.Shared ? Color.Primary : Color.Default)" Variant="Variant.Outlined" OnClick="() => SetScope(CreatureScopeFilter.Shared)">Shared</MudChip>
         }
+        @if (isAdmin)
+        {
+            <MudSwitch T="bool" Value="showAllAdmin" ValueChanged="OnShowAllChanged" Color="Color.Info" Label="Show All (Admin)" Class="ml-2" />
+        }
     </MudStack>
 
     <MudGrid>
+        <MudItem xs="12" md="4">
+            <MudTextField @bind-Value="searchText" Label="Search" Placeholder="Name, owner, type, subtype, CR..." Variant="Variant.Outlined" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Clearable="true" />
+        </MudItem>
         <MudItem xs="12" md="4">
             <MudSelect T="string" @bind-Value="typeFilter" Label="Type Filter" Variant="Variant.Outlined">
                 <MudSelectItem T="string" Value="@string.Empty">All types</MudSelectItem>
@@ -237,30 +244,23 @@
         </MudItem>
     </MudGrid>
 
-    @if (isAdmin)
-    {
-        <MudSwitch T="bool" Value="showAllAdmin" ValueChanged="OnShowAllChanged" Color="Color.Info" Label="Show All (Admin)" />
-    }
-
     <MudTable Items="FilteredRows()" Dense="true" Hover="true" Outlined="true" Elevation="0">
         <HeaderContent>
-            <MudTh>Name</MudTh>
-            <MudTh>Owner</MudTh>
-            <MudTh>CR</MudTh>
-            <MudTh>AC</MudTh>
-            <MudTh>HP</MudTh>
-            <MudTh>Init</MudTh>
-            <MudTh>XP</MudTh>
+            <MudTh><MudButton Variant="Variant.Text" Color="Color.Default" OnClick='() => SetSort(BestiarySortColumn.Name)'>Name @SortIndicator(BestiarySortColumn.Name)</MudButton></MudTh>
+            <MudTh Style="text-align: center;"><MudButton Variant="Variant.Text" Color="Color.Default" OnClick='() => SetSort(BestiarySortColumn.Owner)'>Owner @SortIndicator(BestiarySortColumn.Owner)</MudButton></MudTh>
+            <MudTh Style="text-align: center;"><MudButton Variant="Variant.Text" Color="Color.Default" OnClick='() => SetSort(BestiarySortColumn.ChallengeRating)'>CR @SortIndicator(BestiarySortColumn.ChallengeRating)</MudButton></MudTh>
+            <MudTh><MudButton Variant="Variant.Text" Color="Color.Default" OnClick='() => SetSort(BestiarySortColumn.TypeSubtype)'>Type/Subtype @SortIndicator(BestiarySortColumn.TypeSubtype)</MudButton></MudTh>
+            <MudTh Style="text-align: center;"><MudButton Variant="Variant.Text" Color="Color.Default" OnClick='() => SetSort(BestiarySortColumn.Size)'>Size @SortIndicator(BestiarySortColumn.Size)</MudButton></MudTh>
+            <MudTh Style="text-align: center;"><MudButton Variant="Variant.Text" Color="Color.Default" OnClick='() => SetSort(BestiarySortColumn.Source)'>Source @SortIndicator(BestiarySortColumn.Source)</MudButton></MudTh>
             <MudTh></MudTh>
         </HeaderContent>
         <RowTemplate>
             <MudTd>@context.Name</MudTd>
-            <MudTd>@DisplayOwner(context)</MudTd>
-            <MudTd>@(context.ChallengeRating ?? "—")</MudTd>
-            <MudTd>@(context.ArmorClass?.ToString() ?? "—")</MudTd>
-            <MudTd>@(context.HitPoints?.ToString() ?? "—")</MudTd>
-            <MudTd>@FormatInitiative(context)</MudTd>
-            <MudTd>@(context.ExperiencePoints?.ToString() ?? "—")</MudTd>
+            <MudTd Style="text-align: center;">@DisplayOwner(context)</MudTd>
+            <MudTd Style="text-align: center;">@(context.ChallengeRating ?? "—")</MudTd>
+            <MudTd>@FormatTypeSubtype(context)</MudTd>
+            <MudTd Style="text-align: center;">@(context.Size ?? "—")</MudTd>
+            <MudTd Style="text-align: center;">@DisplaySource(context)</MudTd>
             <MudTd Style="text-align: right; white-space: nowrap;">
                 <MudIconButton Icon="@Icons.Material.Filled.Visibility" Color="Color.Default" Size="Size.Small" OnClick="() => OpenStatblock(context.CreatureId)" />
                 <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" Disabled="@(!CanEdit(context))" OnClick="() => OpenEdit(context.CreatureId)" />
@@ -409,8 +409,11 @@
     private bool isAdmin;
     private bool showAllAdmin;
     private CreatureScopeFilter scopeFilter = CreatureScopeFilter.All;
+    private string searchText = string.Empty;
     private string typeFilter = string.Empty;
     private string subtypeFilter = string.Empty;
+    private BestiarySortColumn sortColumn = BestiarySortColumn.Name;
+    private bool sortDescending;
     private string? currentUsername;
     private int? currentUserId;
     private string ShowAllQuery => (isAdmin && showAllAdmin) ? "?showAll=true" : string.Empty;
@@ -518,6 +521,26 @@
         if (row.IsSystem || row.OwnerIsAdmin) return "System";
         if (row.IsPublic && !string.IsNullOrWhiteSpace(row.OwnerUsername)) return $"{row.OwnerUsername} • Public";
         return string.IsNullOrWhiteSpace(row.OwnerUsername) ? "—" : row.OwnerUsername;
+    }
+
+    private string DisplaySource(CreatureRow row)
+    {
+        if (row.IsSystem) return "Official";
+        if (currentUserId.HasValue && row.OwnerAppUserId == currentUserId.Value) return "My Vault";
+        if (row.IsPublic) return "Public";
+        return "Shared";
+    }
+
+    private static string FormatTypeSubtype(CreatureRow row)
+    {
+        var type = row.CreatureType?.Trim();
+        var subtype = (row.CreatureSubtypes ?? new()).FirstOrDefault(x => !string.IsNullOrWhiteSpace(x))?.Trim()
+            ?? row.CreatureSubtype?.Trim();
+
+        if (string.IsNullOrWhiteSpace(type) && string.IsNullOrWhiteSpace(subtype)) return "—";
+        if (string.IsNullOrWhiteSpace(subtype)) return type ?? "—";
+        if (string.IsNullOrWhiteSpace(type)) return subtype;
+        return $"{type}/{subtype}";
     }
 
     private bool CanEdit(CreatureRow row)
@@ -675,11 +698,85 @@
     private IEnumerable<CreatureRow> FilteredRows()
     {
         var query = rows.AsEnumerable();
+
+        if (!string.IsNullOrWhiteSpace(searchText))
+        {
+            var term = searchText.Trim();
+            query = query.Where(x => MatchesSearch(x, term));
+        }
+
         if (!string.IsNullOrWhiteSpace(typeFilter))
             query = query.Where(x => string.Equals(x.CreatureType, typeFilter, StringComparison.OrdinalIgnoreCase));
         if (!string.IsNullOrWhiteSpace(subtypeFilter))
             query = query.Where(x => (x.CreatureSubtypes ?? new()).Any(s => string.Equals(s, subtypeFilter, StringComparison.OrdinalIgnoreCase)) || string.Equals(x.CreatureSubtype, subtypeFilter, StringComparison.OrdinalIgnoreCase));
+
+        query = ApplySort(query);
         return query;
+    }
+
+    private void SetSort(BestiarySortColumn column)
+    {
+        if (sortColumn == column)
+            sortDescending = !sortDescending;
+        else
+        {
+            sortColumn = column;
+            sortDescending = false;
+        }
+    }
+
+    private string SortIndicator(BestiarySortColumn column)
+    {
+        if (sortColumn != column) return string.Empty;
+        return sortDescending ? "↓" : "↑";
+    }
+
+    private IEnumerable<CreatureRow> ApplySort(IEnumerable<CreatureRow> query)
+    {
+        Func<CreatureRow, object?> keySelector = sortColumn switch
+        {
+            BestiarySortColumn.Owner => x => DisplayOwner(x),
+            BestiarySortColumn.ChallengeRating => x => ChallengeRatingSortValue(x.ChallengeRating),
+            BestiarySortColumn.TypeSubtype => x => FormatTypeSubtype(x),
+            BestiarySortColumn.Size => x => x.Size ?? string.Empty,
+            BestiarySortColumn.Source => x => DisplaySource(x),
+            _ => x => x.Name
+        };
+
+        var ordered = sortDescending
+            ? query.OrderByDescending(keySelector).ThenBy(x => x.Name)
+            : query.OrderBy(keySelector).ThenBy(x => x.Name);
+
+        return ordered;
+    }
+
+    private static bool MatchesSearch(CreatureRow row, string term)
+    {
+        if (Contains(row.Name, term)) return true;
+        if (Contains(DisplayOwner(row), term)) return true;
+        if (Contains(row.CreatureType, term)) return true;
+        if (Contains(row.CreatureSubtype, term)) return true;
+        if ((row.CreatureSubtypes ?? new()).Any(x => Contains(x, term))) return true;
+        if (Contains(row.ChallengeRating, term)) return true;
+        if (Contains(row.Description, term)) return true;
+        if (row.ArmorClass?.ToString().Contains(term, StringComparison.OrdinalIgnoreCase) == true) return true;
+        if (row.HitPoints?.ToString().Contains(term, StringComparison.OrdinalIgnoreCase) == true) return true;
+        if (row.ExperiencePoints?.ToString().Contains(term, StringComparison.OrdinalIgnoreCase) == true) return true;
+        return false;
+    }
+
+    private static bool Contains(string? value, string term)
+        => !string.IsNullOrWhiteSpace(value) && value.Contains(term, StringComparison.OrdinalIgnoreCase);
+
+    private static decimal ChallengeRatingSortValue(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return decimal.MinValue;
+        var text = value.Trim();
+        if (decimal.TryParse(text, out var numeric)) return numeric;
+        var parts = text.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length == 2 && decimal.TryParse(parts[0], out var numerator) && decimal.TryParse(parts[1], out var denominator) && denominator != 0)
+            return numerator / denominator;
+        return decimal.MinValue;
     }
 
     private static string FormatArmorClass(CreatureRow row)
@@ -799,6 +896,7 @@
     }
 
     private enum CreatureScopeFilter { All, Official, MyVault, Shared }
+    private enum BestiarySortColumn { Name, Owner, ChallengeRating, TypeSubtype, Size, Source }
 
     private record FriendUser(int AppUserId, string Username, string Email);
     private record FriendsOverview(List<FriendUser> Friends);
