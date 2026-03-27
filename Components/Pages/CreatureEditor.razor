@@ -99,38 +99,63 @@
             }
             else
             {
+                <MudPaper Class="pa-3" Outlined="true" Elevation="0">
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.subtitle2">Guided editor</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Work step-by-step, or jump directly to any section. Your form data stays intact when switching layouts.</MudText>
+                        <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                            @for (var i = 0; i < StepTitles.Length; i++)
+                            {
+                                var stepIndex = i;
+                                <MudChip T="string" Variant="Variant.Outlined" Color="@(activeStepIndex == stepIndex ? Color.Primary : Color.Default)" OnClick="() => GoToStep(stepIndex)">@StepTitles[stepIndex]</MudChip>
+                            }
+                        </MudStack>
+                    </MudStack>
+                </MudPaper>
+
                 <MudStepper @bind-ActiveIndex="activeStepIndex" NonLinear="true">
                     <MudStep Title="Identity">
                         <MudStack Spacing="3">
+                            @IdentitySummarySection
                             @IdentitySection
+                            @StepperNavSection
                         </MudStack>
                     </MudStep>
                     <MudStep Title="Stats">
                         <MudStack Spacing="3">
+                            @StatsSummarySection
                             @CombatStatsSection
                             @AbilityScoresSection
                             @MovementSection
+                            @StepperNavSection
                         </MudStack>
                     </MudStep>
                     <MudStep Title="Senses">
                         <MudStack Spacing="3">
+                            @SensesSummarySection
                             @SensesSection
+                            @StepperNavSection
                         </MudStack>
                     </MudStep>
                     <MudStep Title="Features">
                         <MudStack Spacing="3">
+                            @FeaturesSummarySection
                             @TraitsSection
+                            @StepperNavSection
                         </MudStack>
                     </MudStep>
                     <MudStep Title="Actions">
                         <MudStack Spacing="3">
+                            @ActionsSummarySection
                             @ActionsSection
                             @BonusActionsSection
                             @ReactionsSection
+                            @StepperNavSection
                         </MudStack>
                     </MudStep>
                     <MudStep Title="Review">
                         <MudStack Spacing="3">
+                            @ReviewSummarySection
                             @NotesOwnershipSection
                             @ReviewSection
                             @SaveActionsSection
@@ -143,6 +168,50 @@
 </MudStack>
 
 @code {
+    private RenderFragment IdentitySummarySection => @<text>
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+            @IdentityStepSummary()
+        </MudAlert>
+    </text>;
+
+    private RenderFragment StatsSummarySection => @<text>
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+            @StatsStepSummary()
+        </MudAlert>
+    </text>;
+
+    private RenderFragment SensesSummarySection => @<text>
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+            @SensesStepSummary()
+        </MudAlert>
+    </text>;
+
+    private RenderFragment FeaturesSummarySection => @<text>
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+            @FeaturesStepSummary()
+        </MudAlert>
+    </text>;
+
+    private RenderFragment ActionsSummarySection => @<text>
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+            @ActionsStepSummary()
+        </MudAlert>
+    </text>;
+
+    private RenderFragment ReviewSummarySection => @<text>
+        <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Dense="true">
+            Review everything before saving. You can still jump back to any step from the chips above.
+        </MudAlert>
+    </text>;
+
+    private RenderFragment StepperNavSection => @<text>
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mt-2">
+            <MudButton Variant="Variant.Text" Disabled="@(activeStepIndex <= 0)" StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="GoPreviousStep">Previous</MudButton>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">Step @(activeStepIndex + 1) of @StepTitles.Length</MudText>
+            <MudButton Variant="Variant.Text" Disabled="@(activeStepIndex >= StepTitles.Length - 1)" EndIcon="@Icons.Material.Filled.ArrowForward" OnClick="GoNextStep">Next</MudButton>
+        </MudStack>
+    </text>;
+
     private RenderFragment IdentitySection => @<text>
         <MudStack Spacing="2">
             <MudText Typo="Typo.subtitle2">Identity</MudText>
@@ -390,15 +459,30 @@
     </text>;
 
     private RenderFragment ReviewSection => @<text>
-        <MudPaper Class="pa-3" Outlined="true" Elevation="0">
-            <MudStack Spacing="1">
-                <MudText Typo="Typo.subtitle2">Review</MudText>
-                <MudText Typo="Typo.body2"><strong>Name:</strong> @(string.IsNullOrWhiteSpace(form.Name) ? "—" : form.Name)</MudText>
-                <MudText Typo="Typo.body2"><strong>Identity:</strong> @ReviewIdentitySummary()</MudText>
-                <MudText Typo="Typo.body2"><strong>Combat:</strong> AC @(form.ArmorClass?.ToString() ?? "—"), HP @(form.HitPoints?.ToString() ?? "—"), CR @(form.ChallengeRating ?? "—")</MudText>
-                <MudText Typo="Typo.body2"><strong>Entries:</strong> @($"{form.Traits.Count} traits, {form.Actions.Count} actions, {form.BonusActions.Count} bonus actions, {form.Reactions.Count} reactions")</MudText>
-            </MudStack>
-        </MudPaper>
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-3" Outlined="true" Elevation="0">
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.subtitle2">Identity</MudText>
+                        <MudText Typo="Typo.body2"><strong>Name:</strong> @(string.IsNullOrWhiteSpace(form.Name) ? "—" : form.Name)</MudText>
+                        <MudText Typo="Typo.body2"><strong>Summary:</strong> @ReviewIdentitySummary()</MudText>
+                        <MudText Typo="Typo.body2"><strong>Languages:</strong> @LanguagesSummary()</MudText>
+                        <MudText Typo="Typo.body2"><strong>Owner:</strong> @(selectedOwnerOption?.Username ?? "—")</MudText>
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-3" Outlined="true" Elevation="0">
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.subtitle2">Combat & Senses</MudText>
+                        <MudText Typo="Typo.body2"><strong>Combat:</strong> AC @(form.ArmorClass?.ToString() ?? "—"), HP @(form.HitPoints?.ToString() ?? "—"), CR @(form.ChallengeRating ?? "—")</MudText>
+                        <MudText Typo="Typo.body2"><strong>Movement:</strong> @MovementSummary()</MudText>
+                        <MudText Typo="Typo.body2"><strong>Senses:</strong> @SensesSummary()</MudText>
+                        <MudText Typo="Typo.body2"><strong>Entries:</strong> @($"{form.Traits.Count} traits, {form.Actions.Count} actions, {form.BonusActions.Count} bonus actions, {form.Reactions.Count} reactions")</MudText>
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
     </text>;
 
     private RenderFragment SaveActionsSection => @<text>
@@ -411,6 +495,8 @@
 
 
     [Parameter] public int? CreatureId { get; set; }
+
+    private static readonly string[] StepTitles = ["Identity", "Stats", "Senses", "Features", "Actions", "Review"];
 
     private string? error;
     private CreatureEditorLayout editorLayout = CreatureEditorLayout.Flat;
@@ -574,6 +660,23 @@
 
     private void OnLayoutToggleChanged(bool toggled) => editorLayout = toggled ? CreatureEditorLayout.Stepper : CreatureEditorLayout.Flat;
 
+    private void GoToStep(int stepIndex)
+    {
+        if (stepIndex < 0) stepIndex = 0;
+        if (stepIndex >= StepTitles.Length) stepIndex = StepTitles.Length - 1;
+        activeStepIndex = stepIndex;
+    }
+
+    private void GoPreviousStep()
+    {
+        if (activeStepIndex > 0) activeStepIndex--;
+    }
+
+    private void GoNextStep()
+    {
+        if (activeStepIndex < StepTitles.Length - 1) activeStepIndex++;
+    }
+
     private string ReviewIdentitySummary()
     {
         var parts = new List<string>();
@@ -645,6 +748,44 @@
 
         return names.Count == 0 ? "None" : string.Join(", ", names);
     }
+
+    private string IdentityStepSummary() => string.IsNullOrWhiteSpace(form.Name)
+        ? "Start with the creature identity: name, size, type, subtype, alignment, CR, and XP."
+        : $"Building {form.Name} — {ReviewIdentitySummary()}";
+
+    private string StatsStepSummary() => $"Combat snapshot: AC {(form.ArmorClass?.ToString() ?? "—")}, HP {(form.HitPoints?.ToString() ?? "—")}, initiative {(form.InitiativeModifier?.ToString() ?? ModLabel(form.Dexterity))}, movement {MovementSummary()}";
+
+    private string SensesStepSummary() => $"Current senses: {SensesSummary()}";
+
+    private string FeaturesStepSummary() => form.Traits.Count == 0
+        ? "Add passive traits and special creature abilities here."
+        : $"{form.Traits.Count} trait{(form.Traits.Count == 1 ? string.Empty : "s")} configured.";
+
+    private string ActionsStepSummary() => $"{form.Actions.Count} action{(form.Actions.Count == 1 ? string.Empty : "s")}, {form.BonusActions.Count} bonus action{(form.BonusActions.Count == 1 ? string.Empty : "s")}, {form.Reactions.Count} reaction{(form.Reactions.Count == 1 ? string.Empty : "s")}.";
+
+    private string MovementSummary()
+    {
+        var parts = new List<string>();
+        if (form.WalkSpeed.HasValue) parts.Add($"walk {form.WalkSpeed} ft");
+        if (form.FlySpeed.HasValue) parts.Add($"fly {form.FlySpeed} ft");
+        if (form.SwimSpeed.HasValue) parts.Add($"swim {form.SwimSpeed} ft");
+        if (form.ClimbSpeed.HasValue) parts.Add($"climb {form.ClimbSpeed} ft");
+        if (form.BurrowSpeed.HasValue) parts.Add($"burrow {form.BurrowSpeed} ft");
+        return parts.Count == 0 ? "none set" : string.Join(", ", parts);
+    }
+
+    private string SensesSummary()
+    {
+        var parts = new List<string>();
+        if (form.BlindsightRange.HasValue) parts.Add($"blindsight {form.BlindsightRange} ft");
+        if (form.DarkvisionRange.HasValue) parts.Add($"darkvision {form.DarkvisionRange} ft");
+        if (form.TremorsenseRange.HasValue) parts.Add($"tremorsense {form.TremorsenseRange} ft");
+        if (form.TruesightRange.HasValue) parts.Add($"truesight {form.TruesightRange} ft");
+        if (!string.IsNullOrWhiteSpace(form.OtherSenses)) parts.Add(form.OtherSenses.Trim());
+        return parts.Count == 0 ? "none set" : string.Join(", ", parts);
+    }
+
+    private string LanguagesSummary() => selectedLanguages.Count == 0 ? "None" : string.Join(", ", selectedLanguages.OrderBy(x => x));
 
     private void AddTrait() => form.Traits.Add(new CreatureEntryForm { SortOrder = form.Traits.Count });
     private void RemoveTrait(int index)
